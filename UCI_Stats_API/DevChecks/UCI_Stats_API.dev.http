@@ -1,0 +1,200 @@
+@baseUrl = http://localhost:5117
+@adminSecret = replace-with-local-admin-secret
+@roundId = replace-with-round-id
+@sessionId = replace-with-session-id
+@resultId = replace-with-result-id
+@riderId = replace-with-rider-id
+@trackId = replace-with-track-id
+@conditionId = replace-with-condition-id
+
+### Public search
+GET {{baseUrl}}/api/v1/search?q=final&type=all&limit=10
+
+### Rounds: season/category filter, sort, pagination
+GET {{baseUrl}}/api/v1/rounds?season_year=2026&category_code=EM&sort=round_number&order=asc&page=1&limit=30
+
+### Round sessions
+GET {{baseUrl}}/api/v1/rounds/{{roundId}}/sessions?category_code=EM&type=FINAL&sort=start_date&order=asc
+
+### Session results: sectors mode
+GET {{baseUrl}}/api/v1/sessions/{{sessionId}}/results?sort=position&order=asc&page=1&limit=30&timing_mode=sectors
+
+### Session results: splits mode
+GET {{baseUrl}}/api/v1/sessions/{{sessionId}}/results?sort=position&order=asc&page=1&limit=30&timing_mode=splits
+
+### Result detail with splits and metrics stubs
+GET {{baseUrl}}/api/v1/results/{{resultId}}?include=rider,session,round,track,splits,metrics
+
+### Rider metrics: pace and consistency from all matching sessions
+GET {{baseUrl}}/api/v1/riders/{{riderId}}/metrics?season_year=2026&category_code=EM&track_id={{trackId}}&condition_id={{conditionId}}
+
+### Rider results
+GET {{baseUrl}}/api/v1/riders/{{riderId}}/results?season_year=2026&category_code=EM&sort=date&order=desc&page=1&limit=30
+
+### Ranking: sums result_points
+GET {{baseUrl}}/api/v1/ranking?season_year=2026&category_code=EM&sort=points&order=desc&page=1&limit=30
+
+### Ranking: minimum session and final starts
+GET {{baseUrl}}/api/v1/ranking?season_year=2026&category_code=EM&min_starts=10&min_final_starts=5&sort=final_starts&order=desc&page=1&limit=30
+
+### Ranking: pace for selected track and conditions
+GET {{baseUrl}}/api/v1/ranking?season_year=2026&category_code=EM&track_id={{trackId}}&condition_id={{conditionId}}&sort=pace&order=desc&page=1&limit=30
+
+### Ranking: filter results by country, venue and unique track name
+GET {{baseUrl}}/api/v1/ranking?season_year=2026&category_code=EM&country_code=AUT&venue=Leogang&track_name=Example%20Downhill%20Track&sort=pace&order=desc&page=1&limit=30
+
+### Ranking: consistency for selected track and conditions
+GET {{baseUrl}}/api/v1/ranking?season_year=2026&category_code=EM&track_id={{trackId}}&condition_id={{conditionId}}&sort=consistency&order=desc&page=1&limit=30
+
+### Ranking: rating = 70% pace + 30% consistency
+GET {{baseUrl}}/api/v1/ranking?season_year=2026&category_code=EM&track_id={{trackId}}&condition_id={{conditionId}}&sort=rating&order=desc&page=1&limit=30
+
+### Tracks
+GET {{baseUrl}}/api/v1/tracks?q=Leogang&sort=venue&order=asc&page=1&limit=30
+
+### Track records
+GET {{baseUrl}}/api/v1/tracks/{{trackId}}/records?category_code=EM&session_type=FINAL&sort=race_time_ms&order=asc&page=1&limit=30
+
+### Live sessions
+GET {{baseUrl}}/api/v1/live/sessions?season_year=2026&status=live&sort=start_date&order=asc
+
+### Live leaderboard
+GET {{baseUrl}}/api/v1/live/sessions/{{sessionId}}/leaderboard?sort=position&order=asc&page=1&limit=30
+
+### Admin: recalculate points for one session
+POST {{baseUrl}}/api/admin/points/recalculate
+Authorization: Bearer {{adminSecret}}
+Content-Type: application/json
+
+{
+  "session_id": "{{sessionId}}",
+  "scope": "world_cup_overall"
+}
+
+### Admin: import one ChronoRace session
+POST {{baseUrl}}/api/admin/import/chronorace/session
+Authorization: Bearer {{adminSecret}}
+Content-Type: application/json
+
+{
+  "round": {
+    "context_name": "20260619_mtb",
+    "season_year": 2026,
+    "round_number": 1,
+    "start_date": "2026-06-19T00:00:00Z",
+    "end_date": "2026-06-21T00:00:00Z"
+  },
+  "track": {
+    "name": "Example Downhill Track",
+    "venue": "Example Gravity Park",
+    "country_code": "AUT",
+    "length_m": 2400,
+    "avg_slope": 18.5
+  },
+  "competition_class": {
+    "code": "world_cup",
+    "name": "UCI Downhill World Cup",
+    "priority": 2
+  },
+  "condition": {
+    "name": "Dry",
+    "is_dry": true
+  },
+  "category_code": "EM",
+  "session": {
+    "name": "Final",
+    "session_type": "FINAL",
+    "start_date": "2026-06-21T12:00:00Z",
+    "end_date": "2026-06-21T15:00:00Z",
+    "status": "completed"
+  },
+  "chronorace_json": {
+    "ContextName": "20260619_mtb",
+    "DisplayName": "Final",
+    "Riders": {
+      "1099": {
+        "RaceNr": 12,
+        "UciRiderId": "100000001",
+        "UciCode": "POL20000101",
+        "FamilyName": "Example",
+        "GivenName": "Rider",
+        "Nation": "POL",
+        "BirthDate": "2000-01-01",
+        "Protected": false,
+        "Injury": false
+      }
+    },
+    "Results": [
+      {
+        "RaceNr": 1099,
+        "Position": 1,
+        "RaceTime": 185432,
+        "CompletedDistance": 2400,
+        "Status": "OK",
+        "Speed": 61.2,
+        "InResult": true,
+        "Times": [
+          { "RaceTime": 45210, "Speed": 52.1, "Position": 1, "TimeGap": 0 },
+          { "RaceTime": 112900, "Speed": 58.9, "Position": 1, "TimeGap": 0 },
+          { "RaceTime": 185432, "Speed": 61.2, "Position": 1, "TimeGap": 0 }
+        ]
+      }
+    ],
+    "OnTrack": [],
+    "LastFinisher": null,
+    "NextToStart": null
+  }
+}
+
+### Admin: import round form with ChronoRace links
+POST {{baseUrl}}/api/admin/import/chronorace/round-form
+Authorization: Bearer {{adminSecret}}
+Content-Type: application/json
+
+{
+  "round": {
+    "context_name": "20260619_mtb",
+    "season_year": 2026,
+    "round_number": 1,
+    "start_date": "2026-06-19T00:00:00Z",
+    "end_date": "2026-06-21T00:00:00Z"
+  },
+  "track": {
+    "name": "Example Downhill Track",
+    "venue": "Example Gravity Park",
+    "country_code": "AUT",
+    "length_m": 2400,
+    "avg_slope": 18.5
+  },
+  "competition_class": {
+    "code": "world_cup",
+    "name": "UCI Downhill World Cup",
+    "priority": 2
+  },
+  "condition": {
+    "name": "Dry",
+    "is_dry": true
+  },
+  "image": {
+    "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "file_name": "example-round.png",
+    "alt_text": "Example Gravity Park downhill course",
+    "width_px": 1,
+    "height_px": 1
+  },
+  "sessions": [
+    {
+      "name": "Final",
+      "session_type": "FINAL",
+      "start_date": "2026-06-21T12:00:00Z",
+      "end_date": "2026-06-21T15:00:00Z",
+      "status": "completed",
+      "categories": [
+        {
+          "category_code": "EM",
+          "chronorace_url": "https://prod.chronorace.be/angular/results.html#/uci/event/20260619_mtb/DHI/CG1/dh/3/res?ll=178389027912"
+        }
+      ]
+    }
+  ]
+}
