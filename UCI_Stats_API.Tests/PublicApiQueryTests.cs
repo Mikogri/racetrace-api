@@ -73,7 +73,7 @@ public sealed class PublicApiQueryTests
     }
 
     [Fact]
-    public void DnfWithTimingParticipatesOnlyInSectorSorting()
+    public void DnfWithTimingIsTreatedAsSlowestInSectorAndSplitSorting()
     {
         JsonObject Row(string id, string status, int timingPosition) => new()
         {
@@ -96,12 +96,20 @@ public sealed class PublicApiQueryTests
         var finished = Row("finished", "Finished", 2);
 
         Assert.Equal(
-            ["dnf", "finished"],
+            ["finished", "dnf"],
             ResultsService.SortByTimingPosition([finished, dnf], "sectors", 1, true)
                 .Select(row => row.String("id")));
         Assert.Equal(
             ["finished", "dnf"],
             ResultsService.SortByTimingPosition([finished, dnf], "splits", 1, true)
+                .Select(row => row.String("id")));
+        Assert.Equal(
+            ["dnf", "finished"],
+            ResultsService.SortByTimingPosition([finished, dnf], "sectors", 1, false)
+                .Select(row => row.String("id")));
+        Assert.Equal(
+            ["dnf", "finished"],
+            ResultsService.SortByTimingPosition([finished, dnf], "splits", 1, false)
                 .Select(row => row.String("id")));
     }
 

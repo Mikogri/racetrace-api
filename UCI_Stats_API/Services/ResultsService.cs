@@ -208,13 +208,15 @@ public sealed class ResultsService
         var page = _validator.Page(queryString);
         var pageResults = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
         DecorateMissingResultTeamsFromEmbeddedHistory(pageResults);
+        var timingSortIndex = TimingSortIndex(queryString);
+        var canonicalPositions = BuildDisplayedPositions(filtered, timeView, timingSortIndex);
 
         var round = session.Object("rounds");
         var trackLengthM = round?.Object("tracks")?.Decimal("length_m");
         var regularItems = pageResults.Select(result => ToPublicResult(
             result,
             timeView,
-            result.Int("position"),
+            canonicalPositions.GetValueOrDefault(result.String("id") ?? string.Empty),
             trackLengthM)).ToArray();
         var perfectRun = BuildPerfectRun(
             response.Data,
@@ -484,9 +486,12 @@ public sealed class ResultsService
         var references = BuildTimingReferences(
             eligibleTimings,
             timing => timingMode == TimingModeSectors ? timing.SectorTimeMs : timing.RaceTimeMs);
+        var statusOrders = results
+            .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
+            .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
         var positions = timingMode == TimingModeSectors
-            ? BuildSectorPositions(allTimings)
-            : BuildSplitPositions(allTimings);
+            ? BuildSectorPositions(allTimings, statusOrders)
+            : BuildSplitPositions(allTimings, statusOrders);
 
         foreach (var result in results)
         {
@@ -539,6 +544,9 @@ public sealed class ResultsService
         };
     }
 
+    private static bool HasInvalidStatus(JsonObject result) =>
+        result.String("status")?.Trim().ToUpperInvariant() is "DNF" or "DNS" or "DSQ";
+
     private string TimingMode(IQueryCollection queryString)
     {
         var mode = (_validator.StringAny(queryString, "timeView", "time_view", "timing_mode") ?? TimingModeSectors).ToLowerInvariant();
@@ -578,20 +586,18 @@ public sealed class ResultsService
             .FirstOrDefault(time => time.Int("split_index") == timingIndex)?
             .Int(positionProperty);
 
-        var withPosition = rows.Where(row =>
-            Position(row) is > 0 &&
-            (timingMode == TimingModeSectors || ResultStatusOrder(row) == 0));
+        var withPosition = rows.Where(row => Position(row) is > 0 && !HasInvalidStatus(row));
         var ordered = descending
             ? withPosition.OrderBy(row => Position(row))
             : withPosition.OrderByDescending(row => Position(row));
 
-        return ordered
-            .Concat(rows
-                .Where(row =>
-                    Position(row) is null or <= 0 ||
-                    (timingMode != TimingModeSectors && ResultStatusOrder(row) != 0))
-                .OrderBy(ResultStatusOrder)
-                .ThenBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+        var slowest = rows
+            .Where(row => Position(row) is null or <= 0 || HasInvalidStatus(row))
+            .OrderBy(ResultStatusOrder)
+            .ThenByDescending(row => Position(row) ?? int.MaxValue)
+            .ThenBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+
+        return (descending ? ordered.Concat(slowest) : slowest.Concat(ordered))
             .ToArray();
     }
 
@@ -599,17 +605,54 @@ public sealed class ResultsService
         IReadOnlyList<JsonObject> rows,
         bool descending)
     {
-        var withTime = rows.Where(row => row.Int("race_time_ms") is > 0);
+        var withTime = rows.Where(row => row.Int("race_time_ms") is > 0 && !HasInvalidStatus(row));
         var ordered = descending
             ? withTime.OrderBy(row => row.Int("race_time_ms"))
             : withTime.OrderByDescending(row => row.Int("race_time_ms"));
 
-        return ordered
-            .Concat(rows
-                .Where(row => row.Int("race_time_ms") is null or <= 0)
-                .OrderBy(ResultStatusOrder)
-                .ThenBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+        var withoutTime = rows
+            .Where(row => row.Int("race_time_ms") is null or <= 0 || HasInvalidStatus(row))
+            .OrderBy(ResultStatusOrder)
+            .ThenByDescending(row => row.Int("race_time_ms") ?? int.MaxValue)
+            .ThenBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+
+        return (descending ? ordered.Concat(withoutTime) : withoutTime.Concat(ordered))
             .ToArray();
+    }
+
+    private static IReadOnlyDictionary<string, int> BuildDisplayedPositions(
+        IReadOnlyList<JsonObject> rows,
+        string timingMode,
+        int? timingSortIndex)
+    {
+        var canonical = timingSortIndex is not null
+            ? SortByTimingPosition(rows, timingMode, timingSortIndex.Value, descending: true)
+            : SortByResultPosition(rows, descending: true);
+        var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < canonical.Count; index++)
+        {
+            var result = canonical[index];
+            var id = result.String("id");
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                continue;
+            }
+
+            if (timingSortIndex is not null)
+            {
+                var positionProperty = timingMode == TimingModeSectors ? "sector_position" : "split_position";
+                var timingPosition = result.Array(timingMode)?.OfType<JsonObject>()
+                    .FirstOrDefault(time => time.Int("split_index") == timingSortIndex.Value)?
+                    .Int(positionProperty);
+                positions[id] = timingPosition is > 0 ? timingPosition.Value : index + 1;
+            }
+            else
+            {
+                positions[id] = result.Int("position") is > 0 ? result.Int("position")!.Value : index + 1;
+            }
+        }
+
+        return positions;
     }
 
     private async Task DecorateSessionTimingAsync(string sessionId, IReadOnlyList<JsonObject> pageResults, string timingMode, CancellationToken cancellationToken)
@@ -674,7 +717,11 @@ public sealed class ResultsService
         var sectorReferences = BuildTimingReferences(
             eligibleSectors,
             sector => sector.SectorTimeMs);
-        var sectorPositions = BuildSectorPositions(eligibleSectors);
+        var statusOrders = sessionResults.Data
+            .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
+            .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
+        var allSectors = sectorsByResultId.Values.SelectMany(value => value).ToArray();
+        var sectorPositions = BuildSectorPositions(allSectors, statusOrders);
 
         foreach (var result in pageResults)
         {
@@ -742,7 +789,11 @@ public sealed class ResultsService
         var splitReferences = BuildTimingReferences(
             eligibleSplits,
             split => split.RaceTimeMs);
-        var splitPositions = BuildSplitPositions(eligibleSplits);
+        var statusOrders = sessionResults.Data
+            .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
+            .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
+        var allSplits = splitsByResultId.Values.SelectMany(value => value).ToArray();
+        var splitPositions = BuildSplitPositions(allSplits, statusOrders);
 
         foreach (var result in pageResults)
         {
@@ -805,23 +856,29 @@ public sealed class ResultsService
         return sectors;
     }
 
-    private static Dictionary<(int SplitIndex, string ResultId), int> BuildSectorPositions(IEnumerable<SectorCalculation> sectors)
+    private static Dictionary<(int SplitIndex, string ResultId), int> BuildSectorPositions(
+        IEnumerable<SectorCalculation> sectors,
+        IReadOnlyDictionary<string, int>? statusOrders = null)
     {
         var positions = new Dictionary<(int SplitIndex, string ResultId), int>();
         foreach (var group in sectors
             .Where(sector => sector.SectorTimeMs is > 0)
             .GroupBy(sector => sector.SplitIndex))
         {
-            int? previousSectorTimeMs = null;
+            (int StatusGroup, int TimeMs)? previousRankKey = null;
             var position = 0;
             var rowNumber = 0;
-            foreach (var sector in group.OrderBy(item => item.SectorTimeMs).ThenBy(item => item.ResultId))
+            foreach (var sector in group
+                .OrderBy(item => TimingStatusGroup(item.ResultId, statusOrders))
+                .ThenBy(item => item.SectorTimeMs)
+                .ThenBy(item => item.ResultId))
             {
                 rowNumber++;
-                if (sector.SectorTimeMs != previousSectorTimeMs)
+                var rankKey = (TimingStatusGroup(sector.ResultId, statusOrders), sector.SectorTimeMs!.Value);
+                if (rankKey != previousRankKey)
                 {
                     position = rowNumber;
-                    previousSectorTimeMs = sector.SectorTimeMs;
+                    previousRankKey = rankKey;
                 }
 
                 positions[(sector.SplitIndex, sector.ResultId)] = position;
@@ -883,21 +940,27 @@ public sealed class ResultsService
         };
     }
 
-    private static Dictionary<(int SplitIndex, string ResultId), int> BuildSplitPositions(IEnumerable<SectorCalculation> splits)
+    private static Dictionary<(int SplitIndex, string ResultId), int> BuildSplitPositions(
+        IEnumerable<SectorCalculation> splits,
+        IReadOnlyDictionary<string, int>? statusOrders = null)
     {
         var positions = new Dictionary<(int SplitIndex, string ResultId), int>();
         foreach (var group in splits.Where(split => split.RaceTimeMs is > 0).GroupBy(split => split.SplitIndex))
         {
-            int? previousSplitTimeMs = null;
+            (int StatusGroup, int TimeMs)? previousRankKey = null;
             var position = 0;
             var rowNumber = 0;
-            foreach (var split in group.OrderBy(item => item.RaceTimeMs).ThenBy(item => item.ResultId, StringComparer.Ordinal))
+            foreach (var split in group
+                .OrderBy(item => TimingStatusGroup(item.ResultId, statusOrders))
+                .ThenBy(item => item.RaceTimeMs)
+                .ThenBy(item => item.ResultId, StringComparer.Ordinal))
             {
                 rowNumber++;
-                if (split.RaceTimeMs != previousSplitTimeMs)
+                var rankKey = (TimingStatusGroup(split.ResultId, statusOrders), split.RaceTimeMs!.Value);
+                if (rankKey != previousRankKey)
                 {
                     position = rowNumber;
-                    previousSplitTimeMs = split.RaceTimeMs;
+                    previousRankKey = rankKey;
                 }
 
                 positions[(split.SplitIndex, split.ResultId)] = position;
@@ -906,6 +969,11 @@ public sealed class ResultsService
 
         return positions;
     }
+
+    private static int TimingStatusGroup(
+        string resultId,
+        IReadOnlyDictionary<string, int>? statusOrders) =>
+        statusOrders is not null && statusOrders.GetValueOrDefault(resultId) > 0 ? 1 : 0;
 
     private static Dictionary<int, TimingReference> BuildTimingReferences(
         IEnumerable<SectorCalculation> timings,
