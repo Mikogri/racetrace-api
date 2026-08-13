@@ -55,8 +55,7 @@ public sealed class RoundsController : ControllerBase
     [HttpGet("{roundId}/results")]
     public async Task<IActionResult> Results(string roundId, CancellationToken cancellationToken)
     {
-        var sessionId = await _rounds.ResolveResultsSessionIdAsync(roundId, Request.Query, cancellationToken);
         return Ok(await (_results ?? throw new InvalidOperationException("ResultsService is unavailable."))
-            .ListPublicSessionResultsAsync(sessionId, Request.Query, cancellationToken));
+            .ListPublicRoundResultsAsync(roundId, Request.Query, cancellationToken));
     }
 }

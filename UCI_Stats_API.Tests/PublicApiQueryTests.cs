@@ -11,6 +11,116 @@ namespace UCI_Stats_API.Tests;
 public sealed class PublicApiQueryTests
 {
     [Fact]
+    public void SessionResultsPutUnclassifiedStatusesAfterPositionsInRequiredOrder()
+    {
+        JsonObject Row(string id, int? position, string status) => new()
+        {
+            ["id"] = id,
+            ["position"] = position,
+            ["status"] = status
+        };
+
+        var rows = new[]
+        {
+            Row("5", null, "DSQ"),
+            Row("2", 2, "Finished"),
+            Row("4", null, "DNS"),
+            Row("1", 1, "Finished"),
+            Row("3", null, "DNF")
+        };
+
+        var sorted = ResultsService.SortByResultPosition(rows, descending: true);
+
+        Assert.Equal(["1", "2", "3", "4", "5"], sorted.Select(row => row.String("id")));
+    }
+
+    [Fact]
+    public void DescendingPositionStillKeepsUnclassifiedStatusesAtTheEnd()
+    {
+        var rows = new[]
+        {
+            new JsonObject { ["id"] = "1", ["position"] = 1, ["status"] = "Finished" },
+            new JsonObject { ["id"] = "3", ["position"] = null, ["status"] = "DNF" },
+            new JsonObject { ["id"] = "2", ["position"] = 2, ["status"] = "Finished" }
+        };
+
+        var sorted = ResultsService.SortByResultPosition(rows, descending: true);
+
+        Assert.Equal(["1", "2", "3"], sorted.Select(row => row.String("id")));
+    }
+
+    [Fact]
+    public void DescendingTimingSortUsesBestSectorPositionFirst()
+    {
+        JsonObject Row(string id, int? sectorPosition) => new()
+        {
+            ["id"] = id,
+            ["status"] = "Finished",
+            ["sectors"] = new JsonArray(new JsonObject
+            {
+                ["split_index"] = 2,
+                ["sector_position"] = sectorPosition
+            })
+        };
+
+        var sorted = ResultsService.SortByTimingPosition(
+            [Row("slow", 8), Row("missing", null), Row("fast", 1)],
+            "sectors",
+            2,
+            descending: true);
+
+        Assert.Equal(["fast", "slow", "missing"], sorted.Select(row => row.String("id")));
+    }
+
+    [Fact]
+    public void DnfWithTimingParticipatesOnlyInSectorSorting()
+    {
+        JsonObject Row(string id, string status, int timingPosition) => new()
+        {
+            ["id"] = id,
+            ["status"] = status,
+            ["position"] = status == "Finished" ? 2 : null,
+            ["sectors"] = new JsonArray(new JsonObject
+            {
+                ["split_index"] = 1,
+                ["sector_position"] = timingPosition
+            }),
+            ["splits"] = new JsonArray(new JsonObject
+            {
+                ["split_index"] = 1,
+                ["split_position"] = timingPosition
+            })
+        };
+
+        var dnf = Row("dnf", "DNF", 1);
+        var finished = Row("finished", "Finished", 2);
+
+        Assert.Equal(
+            ["dnf", "finished"],
+            ResultsService.SortByTimingPosition([finished, dnf], "sectors", 1, true)
+                .Select(row => row.String("id")));
+        Assert.Equal(
+            ["finished", "dnf"],
+            ResultsService.SortByTimingPosition([finished, dnf], "splits", 1, true)
+                .Select(row => row.String("id")));
+    }
+
+    [Fact]
+    public void DescendingRaceTimeSortUsesLowestTimeFirst()
+    {
+        var rows = new[]
+        {
+            new JsonObject { ["id"] = "slow", ["race_time_ms"] = 70_000, ["status"] = "Finished" },
+            new JsonObject { ["id"] = "dnf", ["race_time_ms"] = null, ["status"] = "DNF" },
+            new JsonObject { ["id"] = "fast", ["race_time_ms"] = 60_000, ["status"] = "Finished" }
+        };
+
+        var sorted = ResultsService.SortByRaceTime(rows, descending: true);
+
+        Assert.Equal(["fast", "slow", "dnf"], sorted.Select(row => row.String("id")));
+    }
+
+    [Fact]
     public void ParsesCamelCaseMultiValueFilters()
     {
         var query = Query(new Dictionary<string, StringValues>

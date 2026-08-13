@@ -8,6 +8,11 @@ public sealed class ResultsService
 {
     private const string TimingModeSectors = "sectors";
     private const string TimingModeSplits = "splits";
+    private const string PublicResultSelect =
+        "*,riders(*,rider_team_history(rider_id,valid_from,valid_to,teams(id,code,name))),teams(*)," +
+        "result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id)," +
+        "time_splits(id,result_id,split_index,race_time,speed)," +
+        "sessions!inner(*,round_categories!inner(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories!inner(*)))";
 
     private static readonly Dictionary<string, string> ResultSorts = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -56,9 +61,19 @@ public sealed class ResultsService
     public async Task<ListResponse<JsonObject>> ListSessionResultsAsync(string sessionId, IQueryCollection queryString, CancellationToken cancellationToken)
     {
         var page = _validator.Page(queryString);
-        var requestedSort = _validator.Sort(queryString, ResultSorts, "position", "asc");
-        var sort = new SortRequest(ResultSorts[requestedSort.Sort], requestedSort.Order);
         var timingMode = TimingMode(queryString);
+        var timingSortIndex = TimingSortIndex(queryString);
+        var requestedSort = timingSortIndex is null
+            ? _validator.Sort(queryString, ResultSorts, "position", "desc")
+            : new SortRequest($"time:{timingSortIndex.Value}",
+                (_validator.StringAny(queryString, "sortDirection", "sort_direction", "order") ?? "desc").ToLowerInvariant());
+        if (requestedSort.Order is not ("asc" or "desc"))
+        {
+            throw _validator.BadQuery("sortDirection must be asc or desc.");
+        }
+        var sort = new SortRequest(
+            timingSortIndex is null ? ResultSorts[requestedSort.Sort] : requestedSort.Sort,
+            requestedSort.Order);
         var minGapMs = _validator.Int(queryString, "min_gap_ms");
         var maxGapMs = _validator.Int(queryString, "max_gap_ms");
         var query = new SupabaseQuery("results")
@@ -80,15 +95,28 @@ public sealed class ResultsService
             query.In("rider_id", riderIds);
         }
 
-        if (sort.Sort is "rider_name" or "rider_nation" or "gap_ms" || minGapMs is not null || maxGapMs is not null)
+        if (timingSortIndex is not null || sort.Sort is "position" or "race_time_ms" or "rider_name" or "rider_nation" or "gap_ms" || minGapMs is not null || maxGapMs is not null)
         {
             var all = await _supabase.GetAsync(query, count: true, cancellationToken: cancellationToken);
             DomainQueryService.NormalizeResultEmbeds(all.Data);
             await _domainQueries.DecorateGapMsAsync(all.Data, cancellationToken: cancellationToken);
             var filtered = FilterByGap(all.Data, minGapMs, maxGapMs);
-            var sorted = JsonSorting.Sort(filtered, InMemoryResultSort(sort.Sort), sort.Descending);
+            if (timingSortIndex is not null)
+            {
+                await DecorateSessionTimingAsync(sessionId, filtered, timingMode, cancellationToken);
+            }
+            var sorted = timingSortIndex is not null
+                ? SortByTimingPosition(filtered, timingMode, timingSortIndex.Value, sort.Descending)
+                : sort.Sort == "position"
+                    ? SortByResultPosition(filtered, sort.Descending)
+                    : sort.Sort == "race_time_ms"
+                        ? SortByRaceTime(filtered, sort.Descending)
+                    : JsonSorting.Sort(filtered, InMemoryResultSort(sort.Sort), sort.Descending);
             var pageData = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
-            await DecorateSessionTimingAsync(sessionId, pageData, timingMode, cancellationToken);
+            if (timingSortIndex is null)
+            {
+                await DecorateSessionTimingAsync(sessionId, pageData, timingMode, cancellationToken);
+            }
             await _domainQueries.DecorateMissingResultTeamsFromHistoryAsync(
                 pageData,
                 cancellationToken);
@@ -114,68 +142,92 @@ public sealed class ResultsService
         IQueryCollection queryString,
         CancellationToken cancellationToken)
     {
-        var session = await _domainQueries.FindByIdAsync(
-            "sessions",
-            sessionId,
-            DomainQueryService.SessionSelect,
-            cancellationToken: cancellationToken);
-        if (session is null)
+        var query = new SupabaseQuery("results")
+            .Select(PublicResultSelect)
+            .Filter("session_id", "eq", sessionId)
+            .Order("id", false)
+            .Limit(5000);
+        return await BuildPublicResultsResponseAsync(query, queryString, cancellationToken);
+    }
+
+    public async Task<SessionResultsResponseDto> ListPublicRoundResultsAsync(
+        string roundId,
+        IQueryCollection queryString,
+        CancellationToken cancellationToken)
+    {
+        var categoryValue = _validator.StringAny(queryString, "category", "categoryCode", "category_code")
+            ?? throw _validator.BadQuery("category is required for round results.");
+        var sessionTypeValue = _validator.StringAny(queryString, "sessionType", "session_type")
+            ?? throw _validator.BadQuery("sessionType is required for round results.");
+        string categoryCode;
+        string sessionType;
+        try
         {
-            throw new ApiException(StatusCodes.Status404NotFound, "SESSION_NOT_FOUND", "Session was not found.");
+            categoryCode = PublicApiCodes.ToDatabaseCategory(categoryValue);
+            sessionType = PublicApiCodes.ToDatabaseSessionType(sessionTypeValue);
         }
+        catch (ArgumentException exception)
+        {
+            throw _validator.BadQuery(exception.Message);
+        }
+
+        var query = new SupabaseQuery("results")
+            .Select(PublicResultSelect)
+            .Filter("sessions.round_id", "eq", roundId)
+            .Filter("sessions.session_type", "eq", sessionType)
+            .Filter("sessions.round_categories.categories.code", "eq", categoryCode)
+            .Order("id", false)
+            .Limit(5000);
+        return await BuildPublicResultsResponseAsync(query, queryString, cancellationToken);
+    }
+
+    private async Task<SessionResultsResponseDto> BuildPublicResultsResponseAsync(
+        SupabaseQuery query,
+        IQueryCollection queryString,
+        CancellationToken cancellationToken)
+    {
+        var response = await _supabase.GetAsync(query, cancellationToken: cancellationToken);
+        if (response.Data.Count == 0)
+        {
+            throw new ApiException(StatusCodes.Status404NotFound, "SESSION_RESULTS_NOT_FOUND", "No results match the requested session.");
+        }
+
+        DomainQueryService.NormalizeResultEmbeds(response.Data);
+        var session = response.Data[0].Object("sessions")
+            ?? throw new ApiException(StatusCodes.Status502BadGateway, "SESSION_DATA_MISSING", "Session data is missing from the results package.");
 
         DomainQueryService.NormalizeSessionEmbed(session);
         ValidateSessionFilters(session, queryString);
         var timeView = TimingMode(queryString);
-        var pageResult = await ListSessionResultsAsync(sessionId, queryString, cancellationToken);
+        var allSplits = ExtractEmbeddedSplits(response.Data);
+        DecorateGapMs(response.Data);
+        DecorateLoadedTiming(response.Data, allSplits, timeView);
 
-        var allResultsResponse = await _supabase.GetAsync(
-            new SupabaseQuery("results")
-                .Select(DomainQueryService.ResultSelect)
-                .Filter("session_id", "eq", sessionId)
-                .Order("id", false)
-                .Limit(5000),
-            cancellationToken: cancellationToken);
-        DomainQueryService.NormalizeResultEmbeds(allResultsResponse.Data);
-        await _domainQueries.DecorateGapMsAsync(allResultsResponse.Data, cancellationToken: cancellationToken);
+        var filtered = ApplyPublicResultFilters(response.Data, queryString);
+        var sorted = SortPublicResults(filtered, queryString, timeView);
+        var page = _validator.Page(queryString);
+        var pageResults = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
+        DecorateMissingResultTeamsFromEmbeddedHistory(pageResults);
 
-        var allResultIds = allResultsResponse.Data
-            .Select(result => result.String("id"))
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id!)
-            .ToArray();
-        var allSplits = allResultIds.Length == 0
-            ? new SupabaseQueryResult([], 0)
-            : await _supabase.GetAsync(
-                new SupabaseQuery("time_splits")
-                    .Select("id,result_id,split_index,race_time,speed")
-                    .In("result_id", allResultIds)
-                    .Order("split_index", false)
-                    .Limit(5000),
-                cancellationToken: cancellationToken);
-
-        var requestedSort = _validator.Sort(queryString, ResultSorts, "position", "asc");
-        var sortColumn = ResultSorts[requestedSort.Sort];
-        var positions = BuildCanonicalResultPositions(allResultsResponse.Data, sortColumn);
         var round = session.Object("rounds");
         var trackLengthM = round?.Object("tracks")?.Decimal("length_m");
-        var regularItems = pageResult.Data.Select(result => ToPublicResult(
+        var regularItems = pageResults.Select(result => ToPublicResult(
             result,
             timeView,
-            positions.GetValueOrDefault(result.String("id") ?? string.Empty),
+            result.Int("position"),
             trackLengthM)).ToArray();
         var perfectRun = BuildPerfectRun(
-            allResultsResponse.Data,
-            allSplits.Data,
+            response.Data,
+            allSplits,
             timeView,
             trackLengthM);
-        var items = perfectRun is null
+        var items = perfectRun is null || page.Page > 1
             ? regularItems
             : new[] { perfectRun }.Concat(regularItems).ToArray();
 
         var condition = session.Object("conditions") ?? round?.Object("conditions");
         var category = session.Object("categories");
-        var distinctSplitCount = allSplits.Data
+        var distinctSplitCount = allSplits
             .Select(split => split.Int("split_index"))
             .Where(index => index is not null)
             .Distinct()
@@ -186,8 +238,8 @@ public sealed class ResultsService
             PublicApiCodes.ToPublicSessionType(session.String("session_type")),
             PublicApiCodes.ToPublicCategory(category?.String("code")),
             ToCondition(condition),
-            allResultsResponse.Data.Count(IsCompletedResult),
-            allResultsResponse.Data.Count,
+            response.Data.Count(IsCompletedResult),
+            response.Data.Count,
             distinctSplitCount,
             distinctSplitCount,
             timeView);
@@ -195,12 +247,12 @@ public sealed class ResultsService
         return new SessionResultsResponseDto(
             summary,
             items,
-            pageResult.Pagination.Page,
-            pageResult.Pagination.Limit,
-            pageResult.Pagination.Total,
-            pageResult.Pagination.TotalPages,
-            pageResult.Pagination.Page > 1,
-            pageResult.Pagination.Page < pageResult.Pagination.TotalPages);
+            page.Page,
+            page.Limit,
+            sorted.Count,
+            sorted.Count == 0 ? 0 : (int)Math.Ceiling(sorted.Count / (double)page.Limit),
+            page.Page > 1,
+            page.Offset + page.Limit < sorted.Count);
     }
 
     public async Task<JsonObject> GetResultAsync(string resultId, string[] include, CancellationToken cancellationToken)
@@ -284,9 +336,207 @@ public sealed class ResultsService
             .ToArray();
     }
 
+    private IReadOnlyList<JsonObject> ApplyPublicResultFilters(
+        IReadOnlyList<JsonObject> rows,
+        IQueryCollection queryString)
+    {
+        var status = _validator.String(queryString, "status");
+        var minRaceTime = _validator.Int(queryString, "min_race_time_ms");
+        var maxRaceTime = _validator.Int(queryString, "max_race_time_ms");
+        var minSpeed = _validator.Decimal(queryString, "min_top_speed");
+        var maxSpeed = _validator.Decimal(queryString, "max_top_speed");
+        var minGap = _validator.Int(queryString, "min_gap_ms");
+        var maxGap = _validator.Int(queryString, "max_gap_ms");
+        var search = _validator.StringAny(queryString, "search", "q");
+        var nation = _validator.StringAny(queryString, "countryCode", "country_code", "nation");
+
+        return rows.Where(result =>
+        {
+            var rider = result.Object("riders");
+            var raceTime = result.Int("race_time_ms");
+            var speed = result.Decimal("top_speed");
+            var gap = result.Int("gap_ms");
+            return (string.IsNullOrWhiteSpace(status) || string.Equals(result.String("status"), status, StringComparison.OrdinalIgnoreCase)) &&
+                (minRaceTime is null || raceTime >= minRaceTime) &&
+                (maxRaceTime is null || raceTime <= maxRaceTime) &&
+                (minSpeed is null || speed >= minSpeed) &&
+                (maxSpeed is null || speed <= maxSpeed) &&
+                (minGap is null || gap >= minGap) &&
+                (maxGap is null || gap <= maxGap) &&
+                (string.IsNullOrWhiteSpace(nation) || string.Equals(rider?.String("nation"), nation, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(search) || new[]
+                {
+                    rider?.String("first_name"), rider?.String("last_name"), rider?.String("uci_id"),
+                    rider?.String("uci_code"), rider?.DisplayName()
+                }.Any(value => value?.Contains(search, StringComparison.OrdinalIgnoreCase) == true));
+        }).ToArray();
+    }
+
+    private IReadOnlyList<JsonObject> SortPublicResults(
+        IReadOnlyList<JsonObject> rows,
+        IQueryCollection queryString,
+        string timingMode)
+    {
+        var timingIndex = TimingSortIndex(queryString);
+        if (timingIndex is not null)
+        {
+            var direction = (_validator.StringAny(queryString, "sortDirection", "sort_direction", "order") ?? "desc").ToLowerInvariant();
+            if (direction is not ("asc" or "desc"))
+            {
+                throw _validator.BadQuery("sortDirection must be asc or desc.");
+            }
+
+            return SortByTimingPosition(rows, timingMode, timingIndex.Value, direction == "desc");
+        }
+
+        var requested = _validator.Sort(queryString, ResultSorts, "position", "desc");
+        var sort = ResultSorts[requested.Sort];
+        var regular = rows.Where(result => ResultStatusOrder(result) == 0).ToArray();
+        IReadOnlyList<JsonObject> sortedRegular = sort switch
+        {
+            "position" => SortByResultPosition(regular, requested.Descending),
+            "race_time_ms" => SortByRaceTime(regular, requested.Descending),
+            _ => JsonSorting.Sort(regular, InMemoryResultSort(sort), requested.Descending)
+        };
+
+        return sortedRegular.Concat(rows
+            .Where(result => ResultStatusOrder(result) > 0)
+            .OrderBy(ResultStatusOrder)
+            .ThenBy(result => result.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<JsonObject> ExtractEmbeddedSplits(IReadOnlyList<JsonObject> results)
+    {
+        return results.SelectMany(result =>
+        {
+            var resultId = result.String("id");
+            var splits = result.Array("time_splits")?.OfType<JsonObject>().ToArray() ?? [];
+            foreach (var split in splits)
+            {
+                split["result_id"] ??= resultId;
+            }
+            return splits;
+        }).ToArray();
+    }
+
+    private static void DecorateMissingResultTeamsFromEmbeddedHistory(
+        IReadOnlyList<JsonObject> results)
+    {
+        foreach (var result in results.Where(result => result.Object("teams") is null))
+        {
+            var rider = result.Object("riders");
+            var riderId = result.String("rider_id") ?? rider?.String("id");
+            var resultDate = PublicDtoMapping.Date(
+                result.Object("sessions")?.String("session_date") ??
+                result.Object("sessions")?.Object("rounds")?.String("start_date"));
+            if (rider is null || string.IsNullOrWhiteSpace(riderId) || resultDate is null)
+            {
+                continue;
+            }
+
+            var history = rider.Array("rider_team_history")?.OfType<JsonObject>() ?? [];
+            var team = DomainQueryService.FindTeamPeriod(history, riderId, resultDate.Value)?
+                .Object("teams");
+            if (team is null)
+            {
+                continue;
+            }
+
+            result["team_id"] = team["id"]?.DeepClone();
+            result["teams"] = team.DeepClone();
+        }
+    }
+
+    private static void DecorateGapMs(IReadOnlyList<JsonObject> results)
+    {
+        var bestTime = results
+            .Where(IsCompletedResult)
+            .Select(result => result.Int("race_time_ms"))
+            .Where(time => time is > 0)
+            .DefaultIfEmpty()
+            .Min();
+        foreach (var result in results)
+        {
+            var raceTime = result.Int("race_time_ms");
+            result["gap_ms"] = bestTime is > 0 && raceTime is > 0 && IsCompletedResult(result)
+                ? raceTime.Value - bestTime.Value
+                : null;
+        }
+    }
+
+    private static void DecorateLoadedTiming(
+        IReadOnlyList<JsonObject> results,
+        IReadOnlyList<JsonObject> splits,
+        string timingMode)
+    {
+        var timingsByResult = BuildSectorsByResultId(splits);
+        var allTimings = timingsByResult.Values.SelectMany(value => value).ToArray();
+        var eligibleIds = results
+            .Where(IsEligiblePerfectRunResult)
+            .Select(result => result.String("id"))
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var eligibleTimings = timingsByResult
+            .Where(pair => eligibleIds.Contains(pair.Key))
+            .SelectMany(pair => pair.Value)
+            .ToArray();
+        var references = BuildTimingReferences(
+            eligibleTimings,
+            timing => timingMode == TimingModeSectors ? timing.SectorTimeMs : timing.RaceTimeMs);
+        var positions = timingMode == TimingModeSectors
+            ? BuildSectorPositions(allTimings)
+            : BuildSplitPositions(allTimings);
+
+        foreach (var result in results)
+        {
+            if (!timingsByResult.TryGetValue(result.String("id") ?? string.Empty, out var timings))
+            {
+                result[timingMode] = new JsonArray();
+                continue;
+            }
+
+            result[timingMode] = new JsonArray(timings.Select(timing =>
+                timingMode == TimingModeSectors
+                    ? ToSectorJson(timing, references, positions)
+                    : ToSplitJson(timing, references, positions)).ToArray());
+        }
+    }
+
     private static string InMemoryResultSort(string sort)
     {
         return sort;
+    }
+
+    internal static IReadOnlyList<JsonObject> SortByResultPosition(
+        IReadOnlyList<JsonObject> rows,
+        bool descending)
+    {
+        var classified = rows
+            .Where(row => ResultStatusOrder(row) == 0);
+        var orderedClassified = descending
+            ? classified.OrderBy(row => row.Int("position") ?? int.MaxValue)
+            : classified.OrderByDescending(row => row.Int("position") ?? int.MinValue);
+
+        return orderedClassified
+            .Concat(rows
+                .Where(row => ResultStatusOrder(row) > 0)
+                .OrderBy(ResultStatusOrder)
+                .ThenBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(row => ParseLong(row.String("id"))))
+            .ToArray();
+    }
+
+    private static int ResultStatusOrder(JsonObject result)
+    {
+        return result.String("status")?.Trim().ToUpperInvariant() switch
+        {
+            "DNF" => 1,
+            "DNS" => 2,
+            "DSQ" => 3,
+            _ when result.Int("position") is > 0 => 0,
+            _ => 4
+        };
     }
 
     private string TimingMode(IQueryCollection queryString)
@@ -298,6 +548,68 @@ public sealed class ResultsService
             "split" or TimingModeSplits => TimingModeSplits,
             _ => throw _validator.BadQuery("timeView must be sectors or splits.")
         };
+    }
+
+    private int? TimingSortIndex(IQueryCollection queryString)
+    {
+        var value = _validator.StringAny(queryString, "sortBy", "sort_by", "sort");
+        if (string.IsNullOrWhiteSpace(value) ||
+            !value.StartsWith("time:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return int.TryParse(value[5..], out var index) && index > 0
+            ? index
+            : throw _validator.BadQuery("Timing sort must use time:{positiveIndex}.");
+    }
+
+    internal static IReadOnlyList<JsonObject> SortByTimingPosition(
+        IReadOnlyList<JsonObject> rows,
+        string timingMode,
+        int timingIndex,
+        bool descending)
+    {
+        var positionProperty = timingMode == TimingModeSectors
+            ? "sector_position"
+            : "split_position";
+        int? Position(JsonObject row) => row.Array(timingMode)?
+            .OfType<JsonObject>()
+            .FirstOrDefault(time => time.Int("split_index") == timingIndex)?
+            .Int(positionProperty);
+
+        var withPosition = rows.Where(row =>
+            Position(row) is > 0 &&
+            (timingMode == TimingModeSectors || ResultStatusOrder(row) == 0));
+        var ordered = descending
+            ? withPosition.OrderBy(row => Position(row))
+            : withPosition.OrderByDescending(row => Position(row));
+
+        return ordered
+            .Concat(rows
+                .Where(row =>
+                    Position(row) is null or <= 0 ||
+                    (timingMode != TimingModeSectors && ResultStatusOrder(row) != 0))
+                .OrderBy(ResultStatusOrder)
+                .ThenBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    internal static IReadOnlyList<JsonObject> SortByRaceTime(
+        IReadOnlyList<JsonObject> rows,
+        bool descending)
+    {
+        var withTime = rows.Where(row => row.Int("race_time_ms") is > 0);
+        var ordered = descending
+            ? withTime.OrderBy(row => row.Int("race_time_ms"))
+            : withTime.OrderByDescending(row => row.Int("race_time_ms"));
+
+        return ordered
+            .Concat(rows
+                .Where(row => row.Int("race_time_ms") is null or <= 0)
+                .OrderBy(ResultStatusOrder)
+                .ThenBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
     }
 
     private async Task DecorateSessionTimingAsync(string sessionId, IReadOnlyList<JsonObject> pageResults, string timingMode, CancellationToken cancellationToken)
@@ -782,41 +1094,10 @@ public sealed class ResultsService
         }
     }
 
-    private static IReadOnlyDictionary<string, int> BuildCanonicalResultPositions(
-        IReadOnlyList<JsonObject> rows,
-        string sortColumn)
-    {
-        var bestDescending = sortColumn == "top_speed";
-        IOrderedEnumerable<JsonObject> ordered;
-        if (sortColumn is "position" or "race_nr" or "race_time_ms" or "gap_ms" or "top_speed" or "completed_distance")
-        {
-            ordered = bestDescending
-                ? rows.OrderByDescending(row => row.Decimal(sortColumn) ?? decimal.MinValue)
-                : rows.OrderBy(row => row.Decimal(sortColumn) ?? decimal.MaxValue);
-        }
-        else if (sortColumn is "rider_name" or "rider_nation")
-        {
-            ordered = sortColumn == "rider_nation"
-                ? rows.OrderBy(row => row.Object("riders")?.String("nation") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-                : rows.OrderBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
-        }
-        else
-        {
-            ordered = rows.OrderBy(row => row.String(sortColumn) ?? string.Empty, StringComparer.OrdinalIgnoreCase);
-        }
-
-        return ordered
-            .ThenBy(row => row.Object("riders")?.DisplayName() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => ParseLong(row.String("id")))
-            .Select((row, index) => new { Id = row.String("id") ?? string.Empty, Position = index + 1 })
-            .Where(item => item.Id.Length > 0)
-            .ToDictionary(item => item.Id, item => item.Position, StringComparer.OrdinalIgnoreCase);
-    }
-
     internal static SessionResultDto ToPublicResult(
         JsonObject result,
         string timeView,
-        int rankingPosition,
+        int? rankingPosition,
         decimal? trackLengthM = null)
     {
         var rider = result.Object("riders") ?? new JsonObject();
