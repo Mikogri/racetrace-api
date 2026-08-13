@@ -183,8 +183,7 @@ selected_results as materialized (
     ) as is_valid_classification
   from public.results re
   join filtered_sessions fs on fs.id = re.session_id
-  where p_rider_id is not null
-    and re.rider_id = p_rider_id
+  where (p_rider_id is null or re.rider_id = p_rider_id)
     and (p_status is null or re.status = p_status)
 ),
 relevant_sessions as materialized (
@@ -323,7 +322,7 @@ sector_ranked as materialized (
 target_sector_ranked as materialized (
   select ranked.*
   from sector_ranked ranked
-  where ranked.rider_id = p_rider_id
+  where p_rider_id is null or ranked.rider_id = p_rider_id
 ),
 timing_sector_ranked as materialized (
   select
@@ -338,7 +337,7 @@ timing_sector_ranked as materialized (
 target_timing_sector_ranked as materialized (
   select ranked.*
   from timing_sector_ranked ranked
-  where ranked.rider_id = p_rider_id
+  where p_rider_id is null or ranked.rider_id = p_rider_id
 ),
 sector_groups as materialized (
   select
@@ -517,7 +516,7 @@ speed_ranked as materialized (
 target_speed_ranked as materialized (
   select ranked.*
   from speed_ranked ranked
-  where ranked.rider_id = p_rider_id
+  where p_rider_id is null or ranked.rider_id = p_rider_id
 ),
 speed_groups as materialized (
   select
@@ -578,7 +577,7 @@ split_ranked as materialized (
 target_split_ranked as materialized (
   select ranked.*
   from split_ranked ranked
-  where ranked.rider_id = p_rider_id
+  where p_rider_id is null or ranked.rider_id = p_rider_id
 ),
 points_by_result as materialized (
   select rp.result_id, sum(rp.points_awarded) as points
@@ -648,7 +647,7 @@ rider_data as materialized (
   from public.riders ri
   left join selected_team_data selected_team on selected_team.rider_id = ri.id
   left join historical_team_data historical_team on historical_team.rider_id = ri.id
-  where ri.id = p_rider_id
+  where p_rider_id is null or ri.id = p_rider_id
 ),
 team_data as materialized (
   select distinct te.id, te.name, te.code

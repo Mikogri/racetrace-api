@@ -193,23 +193,52 @@ public sealed class RankingService
                 riderBundle.PaceSessions);
         }
 
-        var bundle = await _domainQueries.GetRankingDataAsync(
+        var matchingSessions = resolvedSessions ?? await _domainQueries.GetMatchingSessionsAsync(
             context,
-            riderQuery: riderQuery,
-            nation: nation,
-            cancellationToken: cancellationToken,
-            resolvedSessionIds: resolvedSessions?
-                .Select(session => session.String("id") ?? string.Empty));
-        var matchingSessions = bundle.Sessions;
+            cancellationToken: cancellationToken);
+        var preaggregated = await _domainQueries.GetRankingPreaggregatesAsync(
+            matchingSessions,
+            riderQuery,
+            nation,
+            cancellationToken: cancellationToken);
+
+        RankingDataBundle bundle;
+        IReadOnlyList<PacePrecomputedSessionData>? precomputedSessions;
+        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId;
+        if (preaggregated is not null)
+        {
+            bundle = preaggregated.Data;
+            precomputedSessions = null;
+            performanceByRiderId = await _metrics.CalculatePerformanceByRiderAsync(
+                bundle.Results,
+                context,
+                cancellationToken,
+                resultsContainFullField: true,
+                availableSessions: matchingSessions,
+                suppliedSplits: bundle.Splits,
+                suppliedFieldResults: bundle.Results);
+        }
+        else
+        {
+            bundle = await _domainQueries.GetRankingDataAsync(
+                context,
+                riderQuery: riderQuery,
+                nation: nation,
+                cancellationToken: cancellationToken,
+                resolvedSessionIds: matchingSessions
+                    .Select(session => session.String("id") ?? string.Empty));
+            matchingSessions = bundle.Sessions;
+            precomputedSessions = null;
+            performanceByRiderId = await _metrics.CalculatePerformanceByRiderAsync(
+                bundle.Results,
+                context,
+                cancellationToken,
+                resultsContainFullField: true,
+                availableSessions: matchingSessions,
+                suppliedSplits: bundle.Splits,
+                suppliedFieldResults: bundle.FieldResults);
+        }
         var results = bundle.Results;
-        var performanceByRiderId = await _metrics.CalculatePerformanceByRiderAsync(
-            results,
-            context,
-            cancellationToken,
-            resultsContainFullField: true,
-            availableSessions: matchingSessions,
-            suppliedSplits: bundle.Splits,
-            suppliedFieldResults: bundle.FieldResults);
         var rows = results
             .GroupBy(result => result.String("rider_id") ?? string.Empty)
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
@@ -226,7 +255,7 @@ public sealed class RankingService
             bundle.FieldResults,
             bundle.Splits,
             matchingSessions,
-            null);
+            precomputedSessions);
     }
 
     internal static string BuildSingleFlightKey(

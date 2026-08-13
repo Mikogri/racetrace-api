@@ -215,6 +215,11 @@ public sealed class ChronoRaceImportService
 
         var pointsRecalculated = await TryRecalculatePointsAsync(session.String("id")!, warnings, cancellationToken);
 
+        await RefreshRankingPreaggregateAsync(
+            session.String("id")!,
+            warnings,
+            cancellationToken);
+
         return new ChronoRaceImportResponse(
             round.String("id")!,
             session.String("id")!,
@@ -1087,6 +1092,33 @@ public sealed class ChronoRaceImportService
             },
             SupabaseRole.Service,
             cancellationToken);
+    }
+
+    private async Task RefreshRankingPreaggregateAsync(
+        string sessionId,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        if (!long.TryParse(sessionId, out var parsedSessionId))
+        {
+            warnings.Add("Ranking preaggregation was skipped because the session id is invalid.");
+            return;
+        }
+
+        try
+        {
+            await _supabase.RpcAsync(
+                "refresh_ranking_session_preaggregate",
+                new JsonObject { ["p_session_id"] = parsedSessionId },
+                SupabaseRole.Service,
+                cancellationToken);
+        }
+        catch (SupabaseApiException)
+        {
+            warnings.Add(
+                "Could not refresh ranking preaggregation for this session. " +
+                "Import finished successfully and ranking will use the compatibility path.");
+        }
     }
 
     internal static JsonObject BuildResultPayload(

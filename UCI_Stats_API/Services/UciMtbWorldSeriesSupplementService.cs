@@ -144,6 +144,10 @@ public sealed class UciMtbWorldSeriesSupplementService
 
         var pointsRecalculated = updated > 0 &&
             await TryRecalculatePointsAsync(sessionId, warnings, cancellationToken);
+        if (updated > 0)
+        {
+            await TryRefreshRankingPreaggregateAsync(sessionId, warnings, cancellationToken);
+        }
 
         return new UciMtbWorldSeriesSupplementResponse(
             sessionId,
@@ -186,6 +190,27 @@ public sealed class UciMtbWorldSeriesSupplementService
 
         milliseconds = (int)total;
         return true;
+    }
+
+    private async Task TryRefreshRankingPreaggregateAsync(
+        string sessionId,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _supabase.RpcAsync(
+                "refresh_ranking_session_preaggregate",
+                new JsonObject { ["p_session_id"] = long.Parse(sessionId, CultureInfo.InvariantCulture) },
+                SupabaseRole.Service,
+                cancellationToken);
+        }
+        catch (SupabaseApiException)
+        {
+            warnings.Add(
+                "Could not refresh ranking preaggregation for this session. " +
+                "Supplement finished successfully and ranking will use the compatibility path.");
+        }
     }
 
     private static int FindFinishSplitIndex(JsonArray sourceArray)

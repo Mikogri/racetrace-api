@@ -115,6 +115,11 @@ public sealed class PointsService
     private async Task TryRecalculateSessionAsync(string sessionId, JsonArray recalculated, CancellationToken cancellationToken)
     {
         var result = await _pointAwards.RecalculateSessionAsync(sessionId, cancellationToken);
+        await _supabase.RpcAsync(
+            "refresh_ranking_session_preaggregate",
+            new JsonObject { ["p_session_id"] = long.Parse(sessionId) },
+            SupabaseRole.Service,
+            cancellationToken);
         recalculated.Add(new JsonObject
         {
             ["session_id"] = sessionId,

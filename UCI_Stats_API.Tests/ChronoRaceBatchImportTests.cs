@@ -61,7 +61,7 @@ public sealed class ChronoRaceBatchImportTests
         Assert.Equal(2, supabase.PostedRows["results"].Count);
         Assert.Equal(2, supabase.PostedRows["time_splits"].Count);
         Assert.Equal(
-            ["refresh_rider_team_history"],
+            ["refresh_rider_team_history", "refresh_ranking_session_preaggregate"],
             supabase.RpcCalls);
         Assert.All(supabase.PostedRows["time_splits"], row =>
             Assert.Equal("401", row.String("result_id")));
@@ -91,7 +91,7 @@ public sealed class ChronoRaceBatchImportTests
         Assert.Equal([1, 2], supabase.PostedRows["time_splits"]
             .Where(row => row.String("result_id") == "401")
             .Select(row => row.Int("split_index")));
-        Assert.Empty(supabase.RpcCalls);
+        Assert.Equal(["refresh_ranking_session_preaggregate"], supabase.RpcCalls);
     }
 
     [Fact]
@@ -372,7 +372,12 @@ public sealed class ChronoRaceBatchImportTests
             RpcCalls.Add(functionName);
             Assert.Contains(
                 functionName,
-                new[] { "refresh_rider_team_history", "recalculate_session_points" });
+                new[]
+                {
+                    "refresh_rider_team_history",
+                    "refresh_ranking_session_preaggregate",
+                    "recalculate_session_points"
+                });
             Assert.Equal(SupabaseRole.Service, role);
             return Task.FromResult<JsonNode?>(null);
         }

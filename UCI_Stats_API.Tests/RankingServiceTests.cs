@@ -239,6 +239,40 @@ public sealed class RankingServiceTests
     }
 
     [Fact]
+    public void CompactSharedStatisticsKeepAllRidersInOneSession()
+    {
+        var response = new JsonObject
+        {
+            ["s"] = new JsonArray(new JsonArray(
+                10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025,
+                "2025-05-30", 2, "EM")),
+            ["d"] = new JsonArray(
+                new JsonArray(50, 100050, "First", "Rider", "FRA", null, null, null, null, null, false, null),
+                new JsonArray(51, 100051, "Second", "Rider", "GBR", null, null, null, null, null, false, null)),
+            ["r"] = new JsonArray(
+                new JsonArray(70, 50, 10, 40_000, 60, 1, true, "Finished", 0),
+                new JsonArray(71, 51, 10, 41_000, 59, 2, true, "Finished", 0)),
+            ["a"] = new JsonArray(
+                new JsonArray(70, 10, 20, 1),
+                new JsonArray(71, 10, 20, 2)),
+            ["q"] = new JsonArray(
+                new JsonArray(70, 0, 40, 1),
+                new JsonArray(71, 0, 41, 2)),
+            ["g"] = new JsonArray(new JsonArray(
+                10, 0, 20, 40.5, Math.Log(40.5), 0.1, 1, 40, 41,
+                20, 40.5, Math.Log(40.5), 0.1, 1, 40, 41)),
+            ["h"] = new JsonArray()
+        };
+
+        var parsed = DomainQueryService.ParseRiderDetailDataBundle(response);
+
+        Assert.Equal(2, parsed.PaceSessions.Count);
+        Assert.Equal(
+            ["50", "51"],
+            parsed.PaceSessions.Select(session => session.Run.RiderId).Order().ToArray());
+    }
+
+    [Fact]
     public void RiderDetailRunPreservesMiddleSectorGap()
     {
         var log40 = Math.Log(40);

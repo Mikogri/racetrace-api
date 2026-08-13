@@ -11,6 +11,7 @@ public sealed class DomainQueryService
     private const int MaximumConcurrentResultPageQueries = 3;
     private const int RiderFilterBatchSize = 100;
     private const int ResultFilterBatchSize = 300;
+    private const int RankingPreaggregateBatchSize = 100;
 
     private readonly ISupabaseRestClient _supabase;
 
@@ -375,6 +376,120 @@ public sealed class DomainQueryService
             role,
             cancellationToken);
         return ParseRankingDataBundle(response);
+    }
+
+    internal async Task<RiderDetailDataBundle?> GetRankingPreaggregatesAsync(
+        IReadOnlyList<JsonObject> sessions,
+        string? riderQuery = null,
+        string? nation = null,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default)
+    {
+        var sessionIds = sessions
+            .Select(session => session.String("id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (sessionIds.Length == 0)
+        {
+            return new RiderDetailDataBundle(
+                new RankingDataBundle([], [], [], [], new Dictionary<string, decimal>()),
+                []);
+        }
+
+        var cacheRows = new List<JsonObject>(sessionIds.Length);
+        foreach (var batch in sessionIds.Chunk(RankingPreaggregateBatchSize))
+        {
+            var response = await _supabase.GetAsync(
+                new SupabaseQuery("ranking_session_preaggregates")
+                    .Select("session_id,payload")
+                    .In("session_id", batch),
+                role: role,
+                cancellationToken: cancellationToken);
+            cacheRows.AddRange(response.Data);
+        }
+
+        var cachedSessionIds = cacheRows
+            .Select(row => row.String("session_id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (sessionIds.Any(id => !cachedSessionIds.Contains(id)))
+        {
+            return null;
+        }
+
+        var merged = MergeCompactPackages(cacheRows
+            .Select(row => row["payload"])
+            .OfType<JsonObject>());
+        var parsed = ParseRiderDetailDataBundle(merged);
+        if (string.IsNullOrWhiteSpace(riderQuery) && string.IsNullOrWhiteSpace(nation))
+        {
+            return parsed;
+        }
+
+        var filteredResults = parsed.Data.Results
+            .Where(result => MatchesRankingRider(result.Object("riders"), riderQuery, nation))
+            .ToArray();
+        var riderIds = filteredResults
+            .Select(result => result.String("rider_id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return new RiderDetailDataBundle(
+            parsed.Data with { Results = filteredResults },
+            parsed.PaceSessions
+                .Where(session => riderIds.Contains(session.Run.RiderId))
+                .ToArray());
+    }
+
+    private static JsonObject MergeCompactPackages(IEnumerable<JsonObject> packages)
+    {
+        var merged = new JsonObject { ["v"] = 2 };
+        foreach (var property in new[] { "s", "r", "f", "x", "d", "t", "a", "q", "g", "h" })
+        {
+            merged[property] = new JsonArray();
+        }
+
+        foreach (var package in packages)
+        {
+            foreach (var property in new[] { "s", "r", "f", "x", "d", "t", "a", "q", "g", "h" })
+            {
+                var target = merged[property]!.AsArray();
+                foreach (var item in package[property]?.AsArray() ?? [])
+                {
+                    target.Add(item?.DeepClone());
+                }
+            }
+        }
+
+        return merged;
+    }
+
+    private static bool MatchesRankingRider(JsonObject? rider, string? riderQuery, string? nation)
+    {
+        if (rider is null)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(nation) &&
+            !string.Equals(rider.String("nation"), nation.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(riderQuery))
+        {
+            return true;
+        }
+
+        var query = riderQuery.Trim();
+        return new[]
+            {
+                rider.String("first_name"), rider.String("last_name"), rider.String("uci_id"),
+                rider.String("uci_code"), rider.DisplayName()
+            }
+            .Any(value => value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true);
     }
 
     internal async Task<RiderDetailDataBundle> GetRiderDetailDataAsync(
@@ -1579,12 +1694,9 @@ public sealed class DomainQueryService
 
         var sessions = new List<PacePrecomputedSessionData>();
         foreach (var aggregateRow in CompactRows(root, "a")
-            .Where(row => !string.IsNullOrWhiteSpace(CompactString(row, 0)))
-            .GroupBy(row => CompactString(row, 1) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-            .Select(group => group
-                .OrderByDescending(row => CompactLong(row, 0) ?? 0)
-                .First()))
+            .Where(row =>
+                !string.IsNullOrWhiteSpace(CompactString(row, 0)) &&
+                !string.IsNullOrWhiteSpace(CompactString(row, 1))))
         {
             var resultId = CompactString(aggregateRow, 0)!;
             if (!resultsById.TryGetValue(resultId, out var result) ||

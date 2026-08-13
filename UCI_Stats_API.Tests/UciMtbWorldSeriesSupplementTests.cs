@@ -241,8 +241,13 @@ public sealed class UciMtbWorldSeriesSupplementTests
             CancellationToken cancellationToken = default)
         {
             Roles.Add(role);
-            Assert.Equal("recalculate_session_points", functionName);
-            PointsRecalculated = true;
+            Assert.Contains(
+                functionName,
+                new[] { "recalculate_session_points", "refresh_ranking_session_preaggregate" });
+            if (functionName == "recalculate_session_points")
+            {
+                PointsRecalculated = true;
+            }
             return Task.FromResult<JsonNode?>(null);
         }
     }
