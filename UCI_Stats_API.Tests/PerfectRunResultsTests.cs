@@ -6,6 +6,33 @@ namespace UCI_Stats_API.Tests;
 public sealed class PerfectRunResultsTests
 {
     [Fact]
+    public void PerfectRunIncludesFinishExtensionWithoutAddingFifthSector()
+    {
+        var results = new[]
+        {
+            Result(1, 180_000),
+            Result(2, 182_000)
+        };
+        var splits = new[]
+        {
+            Split(1, 1, 30_000),
+            Split(1, 2, 70_000),
+            Split(1, 3, 110_000),
+            Split(1, 4, 150_000),
+            Split(2, 1, 29_000),
+            Split(2, 2, 71_000),
+            Split(2, 3, 112_000),
+            Split(2, 4, 151_000)
+        };
+
+        var perfect = ResultsService.BuildPerfectRun(results, splits, "sectors");
+
+        Assert.NotNull(perfect);
+        Assert.Equal(4, perfect.Times.Count);
+        Assert.Equal(178m, perfect.FinalTime);
+    }
+
+    [Fact]
     public void BuildsPerfectRunFromFastestSectorsWithNegativeWinningGaps()
     {
         var perfect = ResultsService.BuildPerfectRun(
@@ -96,5 +123,14 @@ public sealed class PerfectRunResultsTests
         ["result_id"] = resultId,
         ["split_index"] = index,
         ["race_time"] = timeMs
+    };
+
+    private static JsonObject Result(int resultId, int finishTimeMs) => new()
+    {
+        ["id"] = resultId,
+        ["race_time_ms"] = finishTimeMs,
+        ["position"] = resultId,
+        ["is_classified"] = true,
+        ["status"] = "Finished"
     };
 }

@@ -1076,6 +1076,27 @@ public sealed class ResultsService
                 1));
         }
 
+        var fastestFinishExtensionMs = results
+            .Where(IsCompletedResult)
+            .Select(result =>
+            {
+                var resultId = result.String("id") ?? string.Empty;
+                var finishTimeMs = result.Int("race_time_ms");
+                var lastSplitTimeMs = sectorsByResultId.GetValueOrDefault(resultId)?
+                    .Where(sector => sector.RaceTimeMs is > 0)
+                    .OrderByDescending(sector => sector.SplitIndex)
+                    .Select(sector => sector.RaceTimeMs)
+                    .FirstOrDefault();
+                return finishTimeMs is > 0 && lastSplitTimeMs is > 0 && finishTimeMs > lastSplitTimeMs
+                    ? finishTimeMs.Value - lastSplitTimeMs.Value
+                    : (int?)null;
+            })
+            .Where(extension => extension is > 0)
+            .Select(extension => extension!.Value)
+            .DefaultIfEmpty(0)
+            .Min();
+        perfectTimeMs += fastestFinishExtensionMs;
+
         var bestFinishTimeMs = results
             .Where(IsCompletedResult)
             .Select(result => result.Int("race_time_ms"))
