@@ -514,7 +514,8 @@ public sealed class PaceService
         splitsByResultId.TryGetValue(resultId, out var resultSplits);
         var sectorTimes = BuildSectorTimes(
             resultSplits ?? [],
-            splitLayout.MaximumSplitIndex);
+            splitLayout.MaximumSplitIndex,
+            result.Int("race_time_ms"));
         var finishTimeMs = result.Int("race_time_ms");
 
         return new PaceRiderRun(
@@ -572,7 +573,8 @@ public sealed class PaceService
                         paceResult.Sectors);
                 var sectors = BuildSectorTimes(
                         resultSplits ?? [],
-                        splitLayout?.MaximumSplitIndex ?? 0)
+                        splitLayout?.MaximumSplitIndex ?? 0,
+                        result.Int("race_time_ms"))
                     .Select((time, index) => new ConsistencySectorTimeInput(
                         $"sector:{index}",
                         time,
@@ -609,7 +611,8 @@ public sealed class PaceService
 
     internal static IReadOnlyList<double?> BuildSectorTimes(
         IReadOnlyList<JsonObject> splits,
-        int maximumSplitIndex)
+        int maximumSplitIndex,
+        int? finishTimeMs = null)
     {
         var latestSplitsByIndex = splits
             .Where(split => split.Int("split_index") is > 0)
@@ -645,6 +648,13 @@ public sealed class PaceService
             previousTimeMs = cumulativeTimeMs is > 0
                 ? cumulativeTimeMs.Value
                 : null;
+        }
+
+        if (finishTimeMs is > 0 &&
+            previousTimeMs is > 0 &&
+            finishTimeMs.Value > previousTimeMs.Value)
+        {
+            sectors.Add((finishTimeMs.Value - previousTimeMs.Value) / 1000.0);
         }
 
         return sectors;

@@ -173,7 +173,15 @@ public sealed class CompareService
             .Select(id => id!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var wonSplits = CountTimingWins(source.Snapshot.Splits, resultIds, "split_rank");
-        var wonSectors = CountTimingWins(source.Snapshot.Splits, resultIds, "sector_rank");
+        var wonSectors = source.Snapshot.PrecomputedSessions is not null
+            ? source.Snapshot.PrecomputedSessions
+                .Where(session => string.Equals(
+                    session.Run.RiderId,
+                    source.RiderId,
+                    StringComparison.OrdinalIgnoreCase))
+                .SelectMany(session => session.Sectors)
+                .Count(sector => sector.Rank == 1)
+            : CountTimingWins(source.Snapshot.Splits, resultIds, "sector_rank");
         var team = source.Rider.Array("teams")?.OfType<JsonObject>().FirstOrDefault() ??
             results
                 .OrderByDescending(ResultDate)
@@ -321,7 +329,7 @@ public sealed class CompareService
                             ? 1 + selectedTimes.Count(candidate => candidate < sector.TimeSeconds!.Value)
                             : (int?)null;
                         var isFinishSector = IsValidTime(precomputed?.Run.FinishTimeSeconds) &&
-                            sector.SectorIndex == splitCount;
+                            sector.SectorIndex >= splitCount;
                         return new CompareSectorResultDto(
                             sector.SectorIndex + 1,
                             isFinishSector,

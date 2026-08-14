@@ -311,6 +311,25 @@ public sealed class PublicApiQueryTests
     }
 
     [Fact]
+    public void RiderSectorStatisticsIncludeTheFinishSector()
+    {
+        var sectors = RidersService.BuildSectorRows(
+        [
+            new JsonObject { ["result_id"] = "1", ["split_index"] = 1, ["race_time"] = 40_000 },
+            new JsonObject { ["result_id"] = "1", ["split_index"] = 2, ["race_time"] = 80_000 },
+            new JsonObject { ["result_id"] = "1", ["split_index"] = 3, ["race_time"] = 120_000 },
+            new JsonObject { ["result_id"] = "1", ["split_index"] = 4, ["race_time"] = 160_000 }
+        ],
+        [
+            new JsonObject { ["id"] = "1", ["session_id"] = "10", ["race_time_ms"] = 205_000 }
+        ]);
+
+        Assert.Equal(5, sectors.Count);
+        Assert.Equal(5, sectors[^1].Int("split_index"));
+        Assert.Equal(45_000, sectors[^1].Int("sector_time_ms"));
+    }
+
+    [Fact]
     public void CompletedResultExcludesDnfAndRequiresFinalTime()
     {
         Assert.True(ResultsService.IsCompletedResult(new JsonObject

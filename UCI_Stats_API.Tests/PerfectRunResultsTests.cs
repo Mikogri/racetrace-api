@@ -6,7 +6,7 @@ namespace UCI_Stats_API.Tests;
 public sealed class PerfectRunResultsTests
 {
     [Fact]
-    public void PerfectRunIncludesFinishExtensionWithoutAddingFifthSector()
+    public void PerfectRunIncludesTheFifthFinishSector()
     {
         var results = new[]
         {
@@ -28,8 +28,15 @@ public sealed class PerfectRunResultsTests
         var perfect = ResultsService.BuildPerfectRun(results, splits, "sectors");
 
         Assert.NotNull(perfect);
-        Assert.Equal(4, perfect.Times.Count);
+        Assert.Equal(5, perfect.Times.Count);
         Assert.Equal(178m, perfect.FinalTime);
+        Assert.Equal(5, perfect.Times[^1].Index);
+        Assert.Equal(30m, perfect.Times[^1].Time);
+
+        var splitView = ResultsService.BuildPerfectRun(results, splits, "splits");
+        Assert.NotNull(splitView);
+        Assert.Equal(4, splitView.Times.Count);
+        Assert.Equal(178m, splitView.FinalTime);
     }
 
     [Fact]

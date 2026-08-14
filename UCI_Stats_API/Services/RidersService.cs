@@ -328,7 +328,7 @@ public sealed class RidersService
             .Select(id => id!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var splits = snapshot.Splits;
-        var sectorRows = BuildSectorRows(splits);
+        var sectorRows = BuildSectorRows(splits, allResults);
         var splitWins = CountTimingWins(splits, allResults, targetResultIds, useSectorTimes: false);
         var sectorWins = CountTimingWins(sectorRows, allResults, targetResultIds, useSectorTimes: true);
         var targetSectorRows = sectorRows
@@ -785,7 +785,9 @@ public sealed class RidersService
         return rows;
     }
 
-    internal static IReadOnlyList<JsonObject> BuildSectorRows(IReadOnlyList<JsonObject> splits)
+    internal static IReadOnlyList<JsonObject> BuildSectorRows(
+        IReadOnlyList<JsonObject> splits,
+        IReadOnlyList<JsonObject>? results = null)
     {
         var rows = new List<JsonObject>(splits.Count);
         foreach (var group in splits.GroupBy(split => split.String("result_id") ?? string.Empty, StringComparer.OrdinalIgnoreCase))
@@ -802,6 +804,56 @@ public sealed class RidersService
                 rows.Add(row);
                 previous = cumulative;
             }
+        }
+
+        if (results is null)
+        {
+            return rows;
+        }
+
+        var resultsById = results
+            .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
+            .ToDictionary(result => result.String("id")!, StringComparer.OrdinalIgnoreCase);
+        var resultSessionIds = resultsById.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.String("session_id") ?? pair.Value.Object("sessions")?.String("id") ?? string.Empty,
+            StringComparer.OrdinalIgnoreCase);
+        var maximumSplitBySession = splits
+            .Where(split => resultSessionIds.ContainsKey(split.String("result_id") ?? string.Empty))
+            .GroupBy(split => resultSessionIds.GetValueOrDefault(split.String("result_id") ?? string.Empty))
+            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
+            .ToDictionary(
+                group => group.Key!,
+                group => group.Max(split => split.Int("split_index") ?? 0),
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var resultGroup in rows
+            .GroupBy(row => row.String("result_id") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToArray())
+        {
+            if (!resultsById.TryGetValue(resultGroup.Key, out var result) ||
+                !maximumSplitBySession.TryGetValue(resultSessionIds[resultGroup.Key], out var maximumSplitIndex))
+            {
+                continue;
+            }
+
+            var tail = resultGroup.FirstOrDefault(row => row.Int("split_index") == maximumSplitIndex);
+            var tailTimeMs = tail?.Int("race_time");
+            var finishTimeMs = result.Int("race_time_ms");
+            if (tailTimeMs is not > 0 || finishTimeMs is not > 0 || finishTimeMs <= tailTimeMs)
+            {
+                continue;
+            }
+
+            rows.Add(new JsonObject
+            {
+                ["id"] = null,
+                ["result_id"] = resultGroup.Key,
+                ["split_index"] = maximumSplitIndex + 1,
+                ["race_time"] = finishTimeMs,
+                ["speed"] = null,
+                ["sector_time_ms"] = finishTimeMs.Value - tailTimeMs.Value
+            });
         }
 
         return rows;

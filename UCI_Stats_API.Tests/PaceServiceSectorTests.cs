@@ -23,7 +23,7 @@ public sealed class PaceServiceSectorTests
     }
 
     [Fact]
-    public void FinishTimeIsNotAppendedAsAnAdditionalSector()
+    public void FinishTimeCreatesTheSectorAfterTheLastSplit()
     {
         var splits = new JsonObject[]
         {
@@ -34,9 +34,10 @@ public sealed class PaceServiceSectorTests
 
         var sectors = PaceService.BuildSectorTimes(
             splits,
-            maximumSplitIndex: 4);
+            maximumSplitIndex: 4,
+            finishTimeMs: 180_000);
 
-        Assert.Equal([40d, null, null, 30d], sectors);
+        Assert.Equal([40d, null, null, 30d, 50d], sectors);
     }
 
     private static JsonObject Split(int index, int raceTime)

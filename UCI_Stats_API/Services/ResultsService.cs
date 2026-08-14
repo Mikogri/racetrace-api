@@ -243,7 +243,7 @@ public sealed class ResultsService
             response.Data.Count(IsCompletedResult),
             response.Data.Count,
             distinctSplitCount,
-            distinctSplitCount,
+            CountSessionSectors(response.Data, allSplits),
             timeView);
 
         return new SessionResultsResponseDto(
@@ -476,7 +476,10 @@ public sealed class ResultsService
         IReadOnlyList<JsonObject> splits,
         string timingMode)
     {
-        var timingsByResult = BuildSectorsByResultId(splits);
+        var timingsByResult = BuildSectorsByResultId(
+            splits,
+            results,
+            includeFinishSector: timingMode == TimingModeSectors);
         var allTimings = timingsByResult.Values.SelectMany(value => value).ToArray();
         var eligibleIds = results
             .Where(IsEligiblePerfectRunResult)
@@ -707,7 +710,10 @@ public sealed class ResultsService
                 .Limit(5000),
             cancellationToken: cancellationToken);
 
-        var sectorsByResultId = BuildSectorsByResultId(splits.Data);
+        var sectorsByResultId = BuildSectorsByResultId(
+            splits.Data,
+            sessionResults.Data,
+            includeFinishSector: true);
         var eligibleResultIds = sessionResults.Data
             .Where(IsEligiblePerfectRunResult)
             .Select(result => result.String("id"))
@@ -814,15 +820,84 @@ public sealed class ResultsService
         }
     }
 
-    private static Dictionary<string, IReadOnlyList<SectorCalculation>> BuildSectorsByResultId(IReadOnlyList<JsonObject> splits)
+    private static Dictionary<string, IReadOnlyList<SectorCalculation>> BuildSectorsByResultId(
+        IReadOnlyList<JsonObject> splits,
+        IReadOnlyList<JsonObject>? results = null,
+        bool includeFinishSector = false)
     {
-        return splits
+        var sectorsByResultId = splits
             .GroupBy(split => split.String("result_id") ?? string.Empty)
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
             .ToDictionary(
                 group => group.Key,
                 group => (IReadOnlyList<SectorCalculation>)BuildResultSectors(group.ToArray()),
                 StringComparer.OrdinalIgnoreCase);
+
+        if (!includeFinishSector || results is null)
+        {
+            return sectorsByResultId;
+        }
+
+        var maximumSplitIndex = splits
+            .Select(split => split.Int("split_index") ?? 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (maximumSplitIndex <= 0)
+        {
+            return sectorsByResultId;
+        }
+
+        foreach (var result in results)
+        {
+            var resultId = result.String("id");
+            if (string.IsNullOrWhiteSpace(resultId) ||
+                !sectorsByResultId.TryGetValue(resultId, out var resultSectors))
+            {
+                continue;
+            }
+
+            var tail = resultSectors.FirstOrDefault(sector => sector.SplitIndex == maximumSplitIndex);
+            var finishTimeMs = result.Int("race_time_ms");
+            if (tail?.RaceTimeMs is not > 0 ||
+                finishTimeMs is not > 0 ||
+                finishTimeMs.Value <= tail.RaceTimeMs.Value)
+            {
+                continue;
+            }
+
+            sectorsByResultId[resultId] = resultSectors
+                .Append(new SectorCalculation(
+                    resultId,
+                    null,
+                    maximumSplitIndex + 1,
+                    finishTimeMs,
+                    finishTimeMs.Value - tail.RaceTimeMs.Value,
+                    null))
+                .ToArray();
+        }
+
+        return sectorsByResultId;
+    }
+
+    private static int CountSessionSectors(
+        IReadOnlyList<JsonObject> results,
+        IReadOnlyList<JsonObject> splits)
+    {
+        var splitCount = splits
+            .Select(split => split.Int("split_index") ?? 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (splitCount == 0)
+        {
+            return 0;
+        }
+
+        return BuildSectorsByResultId(splits, results, includeFinishSector: true)
+            .Values
+            .SelectMany(value => value)
+            .Select(sector => sector.SplitIndex)
+            .DefaultIfEmpty(0)
+            .Max();
     }
 
     private static IReadOnlyList<SectorCalculation> BuildResultSectors(IReadOnlyList<JsonObject> splits)
@@ -1040,10 +1115,31 @@ public sealed class ResultsService
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var sectorsByResultId = BuildSectorsByResultId(splits
+        var eligibleResults = results
+            .Where(result => eligibleResultIds.Contains(result.String("id") ?? string.Empty))
+            .ToArray();
+        var eligibleSplits = splits
             .Where(split => eligibleResultIds.Contains(split.String("result_id") ?? string.Empty))
-            .ToArray());
-        var allSectors = sectorsByResultId.Values.SelectMany(sectors => sectors).ToArray();
+            .ToArray();
+        var maximumSplitIndex = eligibleSplits
+            .Select(split => split.Int("split_index") ?? 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        var sectorsByResultId = BuildSectorsByResultId(
+            eligibleSplits,
+            eligibleResults,
+            includeFinishSector: true);
+        var completedResultIds = eligibleResults
+            .Where(IsCompletedResult)
+            .Select(result => result.String("id"))
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var allSectors = sectorsByResultId.Values
+            .SelectMany(sectors => sectors)
+            .Where(sector =>
+                sector.SplitIndex <= maximumSplitIndex ||
+                completedResultIds.Contains(sector.ResultId))
+            .ToArray();
         var sectorReferences = BuildTimingReferences(
             allSectors,
             sector => sector.SectorTimeMs);
@@ -1053,13 +1149,19 @@ public sealed class ResultsService
         }
 
         var splitReferences = BuildTimingReferences(
-            allSectors,
+            allSectors.Where(sector => sector.SplitIndex <= maximumSplitIndex),
             split => split.RaceTimeMs);
         var perfectTimeMs = 0;
-        var times = new List<ResultTimeDto>(sectorReferences.Count);
+        var times = new List<ResultTimeDto>(
+            timeView == TimingModeSectors ? sectorReferences.Count : maximumSplitIndex);
         foreach (var (index, sectorReference) in sectorReferences.OrderBy(pair => pair.Key))
         {
             perfectTimeMs += sectorReference.BestTimeMs;
+            if (timeView == TimingModeSplits && index > maximumSplitIndex)
+            {
+                continue;
+            }
+
             var displayedTimeMs = timeView == TimingModeSectors
                 ? sectorReference.BestTimeMs
                 : perfectTimeMs;
@@ -1075,27 +1177,6 @@ public sealed class ResultsService
                 Seconds(gapMs),
                 1));
         }
-
-        var fastestFinishExtensionMs = results
-            .Where(IsCompletedResult)
-            .Select(result =>
-            {
-                var resultId = result.String("id") ?? string.Empty;
-                var finishTimeMs = result.Int("race_time_ms");
-                var lastSplitTimeMs = sectorsByResultId.GetValueOrDefault(resultId)?
-                    .Where(sector => sector.RaceTimeMs is > 0)
-                    .OrderByDescending(sector => sector.SplitIndex)
-                    .Select(sector => sector.RaceTimeMs)
-                    .FirstOrDefault();
-                return finishTimeMs is > 0 && lastSplitTimeMs is > 0 && finishTimeMs > lastSplitTimeMs
-                    ? finishTimeMs.Value - lastSplitTimeMs.Value
-                    : (int?)null;
-            })
-            .Where(extension => extension is > 0)
-            .Select(extension => extension!.Value)
-            .DefaultIfEmpty(0)
-            .Min();
-        perfectTimeMs += fastestFinishExtensionMs;
 
         var bestFinishTimeMs = results
             .Where(IsCompletedResult)
