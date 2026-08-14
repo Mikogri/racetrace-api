@@ -393,11 +393,15 @@ public sealed class ResultsService
 
         var requested = _validator.Sort(queryString, ResultSorts, "position", "desc");
         var sort = ResultSorts[requested.Sort];
+        if (sort == "race_time_ms")
+        {
+            return SortByRaceTime(rows, requested.Descending);
+        }
+
         var regular = rows.Where(result => ResultStatusOrder(result) == 0).ToArray();
         IReadOnlyList<JsonObject> sortedRegular = sort switch
         {
             "position" => SortByResultPosition(regular, requested.Descending),
-            "race_time_ms" => SortByRaceTime(regular, requested.Descending),
             _ => JsonSorting.Sort(regular, InMemoryResultSort(sort), requested.Descending)
         };
 

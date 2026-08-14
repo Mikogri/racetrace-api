@@ -129,6 +129,23 @@ public sealed class PublicApiQueryTests
     }
 
     [Fact]
+    public void AscendingRaceTimeSortPutsUnclassifiedStatusesBeforeSlowestFinishedTime()
+    {
+        var rows = new[]
+        {
+            new JsonObject { ["id"] = "fast", ["race_time_ms"] = 60_000, ["status"] = "Finished" },
+            new JsonObject { ["id"] = "dns", ["race_time_ms"] = null, ["status"] = "DNS" },
+            new JsonObject { ["id"] = "slow", ["race_time_ms"] = 70_000, ["status"] = "Finished" },
+            new JsonObject { ["id"] = "dnf", ["race_time_ms"] = 90_000, ["status"] = "DNF" },
+            new JsonObject { ["id"] = "dsq", ["race_time_ms"] = 65_000, ["status"] = "DSQ" }
+        };
+
+        var sorted = ResultsService.SortByRaceTime(rows, descending: false);
+
+        Assert.Equal(["dnf", "dns", "dsq", "slow", "fast"], sorted.Select(row => row.String("id")));
+    }
+
+    [Fact]
     public void ParsesCamelCaseMultiValueFilters()
     {
         var query = Query(new Dictionary<string, StringValues>
