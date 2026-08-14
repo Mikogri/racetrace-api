@@ -8,7 +8,6 @@ public sealed class PaceServiceSectorTests
     [Fact]
     public void MissingSplitKeepsItsSectorIndexAndDoesNotMergeAdjacentTimes()
     {
-        var result = new JsonObject { ["race_time_ms"] = 150_000 };
         var splits = new JsonObject[]
         {
             Split(1, 40_000),
@@ -17,18 +16,15 @@ public sealed class PaceServiceSectorTests
         };
 
         var sectors = PaceService.BuildSectorTimes(
-            result,
             splits,
-            maximumSplitIndex: 4,
-            finishIsTimingSplit: true);
+            maximumSplitIndex: 4);
 
         Assert.Equal([40d, null, null, 50d], sectors);
     }
 
     [Fact]
-    public void ChronoRaceFinishIsAppendedAfterTheConfiguredSplitLayout()
+    public void FinishTimeIsNotAppendedAsAnAdditionalSector()
     {
-        var result = new JsonObject { ["race_time_ms"] = 180_000 };
         var splits = new JsonObject[]
         {
             Split(1, 40_000),
@@ -37,12 +33,10 @@ public sealed class PaceServiceSectorTests
         };
 
         var sectors = PaceService.BuildSectorTimes(
-            result,
             splits,
-            maximumSplitIndex: 4,
-            finishIsTimingSplit: false);
+            maximumSplitIndex: 4);
 
-        Assert.Equal([40d, null, null, 30d, 50d], sectors);
+        Assert.Equal([40d, null, null, 30d], sectors);
     }
 
     private static JsonObject Split(int index, int raceTime)

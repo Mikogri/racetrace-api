@@ -50,6 +50,32 @@ public sealed class TimeSplitImportTests
         Assert.Equal(65_000, rows[1]!["race_time"]!.GetValue<int>());
     }
 
+    [Fact]
+    public async Task ChronoRaceFinishTimingPointIsNotStoredAsFifthSplit()
+    {
+        var supabase = new TimeSplitSupabaseClient();
+        var service = new ChronoRaceImportService(supabase, null!, new TestPointAwardService());
+        var times = new JsonArray
+        {
+            new JsonObject { ["RaceTime"] = 40_000 },
+            new JsonObject { ["RaceTime"] = 80_000 },
+            new JsonObject { ["RaceTime"] = 120_000 },
+            new JsonObject { ["RaceTime"] = 150_000 },
+            new JsonObject { ["RaceTime"] = 180_000 }
+        };
+
+        var imported = await service.ReplaceTimeSplitsAsync(
+            "result-1",
+            times,
+            CancellationToken.None,
+            finishTimeMs: 180_000);
+
+        Assert.Equal(4, imported);
+        var rows = Assert.IsType<JsonArray>(supabase.PostedPayload);
+        Assert.Equal([1, 2, 3, 4], rows.OfType<JsonObject>().Select(row => row.Int("split_index")));
+        Assert.DoesNotContain(rows.OfType<JsonObject>(), row => row.Int("race_time") == 180_000);
+    }
+
     private sealed class TimeSplitSupabaseClient : ISupabaseRestClient
     {
         public int DeleteCount { get; private set; }

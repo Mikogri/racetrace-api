@@ -44,8 +44,8 @@ public sealed class UciMtbWorldSeriesSupplementTests
             .Where(row => row["result_id"]!.GetValue<string>() == "12")
             .OrderBy(row => row["split_index"]!.GetValue<int>())
             .ToArray();
-        Assert.Equal([1, 5], tillSplits.Select(row => row["split_index"]!.GetValue<int>()));
-        Assert.Equal(206_000, tillSplits[1]["race_time"]!.GetValue<int>());
+        Assert.Equal([1], tillSplits.Select(row => row["split_index"]!.GetValue<int>()));
+        Assert.Equal(41_000, tillSplits[0]["race_time"]!.GetValue<int>());
         Assert.Equal(["25"], pointAwards.RecalculatedSessionIds);
         Assert.All(supabase.Roles, role => Assert.Equal(SupabaseRole.Service, role));
     }

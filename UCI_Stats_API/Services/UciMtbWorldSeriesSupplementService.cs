@@ -76,8 +76,7 @@ public sealed class UciMtbWorldSeriesSupplementService
         }
 
         var warnings = new List<string>();
-        var finishSplitIndex = FindFinishSplitIndex(sourceArray);
-        var sourceResults = ParseSourceResults(sourceArray, finishSplitIndex, warnings);
+        var sourceResults = ParseSourceResults(sourceArray, warnings);
         if (sourceResults.Count == 0)
         {
             throw Invalid("NO_VALID_UCI_RESULTS", "The JSON body does not contain any valid results with cumulative times.");
@@ -213,23 +212,8 @@ public sealed class UciMtbWorldSeriesSupplementService
         }
     }
 
-    private static int FindFinishSplitIndex(JsonArray sourceArray)
-    {
-        var maximum = sourceArray
-            .OfType<JsonObject>()
-            .SelectMany(result => result.Array("apiRaceStageResults")?.OfType<JsonObject>() ?? [])
-            .Select(stage => ParseSplitIndex(stage.String("SplitStage")))
-            .Where(index => index is > 0)
-            .Select(index => index!.Value)
-            .DefaultIfEmpty(0)
-            .Max();
-
-        return maximum + 1;
-    }
-
     private static IReadOnlyList<SourceResult> ParseSourceResults(
         JsonArray sourceArray,
-        int finishSplitIndex,
         List<string> warnings)
     {
         var results = new List<SourceResult>();
@@ -256,7 +240,7 @@ public sealed class UciMtbWorldSeriesSupplementService
                 continue;
             }
 
-            var splits = ParseSplits(source, sourceKey, finishSplitIndex, finishTimeMs, warnings);
+            var splits = ParseSplits(source, sourceKey, finishTimeMs, warnings);
             if (splits is null || splits.Count == 0)
             {
                 continue;
@@ -284,7 +268,6 @@ public sealed class UciMtbWorldSeriesSupplementService
     private static IReadOnlyList<SourceSplit>? ParseSplits(
         JsonObject source,
         string sourceKey,
-        int finishSplitIndex,
         int finishTimeMs,
         List<string> warnings)
     {
@@ -294,9 +277,19 @@ public sealed class UciMtbWorldSeriesSupplementService
         foreach (var stage in stages.OfType<JsonObject>())
         {
             var stageName = stage.String("SplitStage")?.Trim();
-            var splitIndex = string.Equals(stageName, "Finish", StringComparison.OrdinalIgnoreCase)
-                ? finishSplitIndex
-                : ParseSplitIndex(stageName);
+            if (string.Equals(stageName, "Finish", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseDurationMilliseconds(stage.String("Time"), out var finishStageTimeMs) ||
+                    finishStageTimeMs != finishTimeMs)
+                {
+                    warnings.Add($"Source result '{sourceKey}' was skipped because Finish time differs from resultTime.");
+                    return null;
+                }
+
+                continue;
+            }
+
+            var splitIndex = ParseSplitIndex(stageName);
             if (splitIndex is null or <= 0)
             {
                 warnings.Add($"Source result '{sourceKey}' contains unsupported stage '{stageName ?? "<missing>"}', which was ignored.");
@@ -314,20 +307,6 @@ public sealed class UciMtbWorldSeriesSupplementService
                 warnings.Add($"Source result '{sourceKey}' was skipped because stage '{stageName}' is duplicated.");
                 return null;
             }
-        }
-
-        if (splits.TryGetValue(finishSplitIndex, out var finish))
-        {
-            if (finish.RaceTimeMs != finishTimeMs)
-            {
-                warnings.Add($"Source result '{sourceKey}' was skipped because Finish time differs from resultTime.");
-                return null;
-            }
-        }
-        else
-        {
-            splits[finishSplitIndex] = new SourceSplit(finishSplitIndex, finishTimeMs);
-            warnings.Add($"Source result '{sourceKey}' had no Finish stage; resultTime was added as split {finishSplitIndex}.");
         }
 
         var ordered = splits.Values.OrderBy(split => split.Index).ToArray();

@@ -1028,7 +1028,9 @@ public sealed class ChronoRaceImportService
             }
 
             var resultId = saved.String("id")!;
-            var times = pending.Times.OfType<JsonObject>().ToArray();
+            var times = TimingSplitsWithoutFinish(
+                pending.Times,
+                pending.Source.Int("RaceTime"));
             if (times.Length == 0)
             {
                 if (IsFinishedResultWithoutSplits(pending.Source, pending.Times))
@@ -1150,10 +1152,13 @@ public sealed class ChronoRaceImportService
         return position is > 0 ? position : null;
     }
 
-    internal async Task<int> ReplaceTimeSplitsAsync(string resultId, JsonArray times, CancellationToken cancellationToken)
+    internal async Task<int> ReplaceTimeSplitsAsync(
+        string resultId,
+        JsonArray times,
+        CancellationToken cancellationToken,
+        int? finishTimeMs = null)
     {
-        var rows = times
-            .OfType<JsonObject>()
+        var rows = TimingSplitsWithoutFinish(times, finishTimeMs)
             .Select((time, index) => new JsonObject
             {
                 ["result_id"] = resultId,
@@ -1171,6 +1176,21 @@ public sealed class ChronoRaceImportService
         await _supabase.DeleteAsync("time_splits", new SupabaseQuery("time_splits").Filter("result_id", "eq", resultId), SupabaseRole.Service, cancellationToken);
         await _supabase.PostAsync("time_splits", new JsonArray(rows), SupabaseRole.Service, cancellationToken: cancellationToken);
         return rows.Length;
+    }
+
+    internal static JsonObject[] TimingSplitsWithoutFinish(
+        JsonArray times,
+        int? finishTimeMs)
+    {
+        var timingRows = times.OfType<JsonObject>().ToArray();
+        if (finishTimeMs is not > 0)
+        {
+            return timingRows;
+        }
+
+        return timingRows
+            .Where(time => time.Int("RaceTime") != finishTimeMs)
+            .ToArray();
     }
 
     private static bool IsFinishedResultWithoutSplits(JsonObject result, JsonArray times)
