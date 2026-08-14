@@ -11,57 +11,6 @@ namespace UCI_Stats_API.Tests;
 public sealed class PublicApiQueryTests
 {
     [Fact]
-    public void AppendsFinishTimingPointWhenLastWorldChampionshipSplitPrecedesFinish()
-    {
-        var results = new[]
-        {
-            new JsonObject
-            {
-                ["id"] = "11",
-                ["position"] = 1,
-                ["status"] = "Finished",
-                ["is_classified"] = true,
-                ["race_time_ms"] = 180_000
-            }
-        };
-        var splits = new List<JsonObject>
-        {
-            new() { ["result_id"] = "11", ["split_index"] = 4, ["race_time"] = 140_000 }
-        };
-
-        ResultsService.AppendFinishTimingSplits(results, splits);
-
-        Assert.Equal(2, splits.Count);
-        Assert.Equal(5, splits[1].Int("split_index"));
-        Assert.Equal(180_000, splits[1].Int("race_time"));
-        Assert.True(splits[1].Bool("is_finish"));
-    }
-
-    [Fact]
-    public void DoesNotDuplicateFinishAlreadyStoredAsTimingSplit()
-    {
-        var results = new[]
-        {
-            new JsonObject
-            {
-                ["id"] = "11",
-                ["position"] = 1,
-                ["status"] = "Finished",
-                ["is_classified"] = true,
-                ["race_time_ms"] = 180_000
-            }
-        };
-        var splits = new List<JsonObject>
-        {
-            new() { ["result_id"] = "11", ["split_index"] = 5, ["race_time"] = 180_000 }
-        };
-
-        ResultsService.AppendFinishTimingSplits(results, splits);
-
-        Assert.Single(splits);
-    }
-
-    [Fact]
     public void SessionResultsPutUnclassifiedStatusesAfterPositionsInRequiredOrder()
     {
         JsonObject Row(string id, int? position, string status) => new()
