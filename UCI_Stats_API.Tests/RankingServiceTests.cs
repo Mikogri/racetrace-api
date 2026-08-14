@@ -333,7 +333,7 @@ public sealed class RankingServiceTests
     }
 
     [Fact]
-    public void ParticipationMetricsCountFinalStartsAndExcludeDnsStarts()
+    public void ParticipationMetricsCountDnsFinalAsQualifiedButExcludeDnsQualifyingRound()
     {
         var results = new[]
         {
@@ -345,8 +345,25 @@ public sealed class RankingServiceTests
 
         var rates = RankingService.CalculateParticipationRates(results);
 
-        Assert.Equal(1, rates.FinalsCount);
+        Assert.Equal(2, rates.FinalsCount);
         Assert.Equal(50m, rates.QualifyingRate);
+    }
+
+    [Fact]
+    public void EveryFinalStatusCountsAsQualified()
+    {
+        var results = new[]
+        {
+            Result("10", "2024-05-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "Finished"),
+            Result("10", "2024-06-01", sessionId: "102", roundId: "2", sessionType: "FINAL", status: "DNF"),
+            Result("10", "2024-07-01", sessionId: "103", roundId: "3", sessionType: "FINAL", status: "DNS"),
+            Result("10", "2024-08-01", sessionId: "104", roundId: "4", sessionType: "FINAL", status: "DSQ")
+        };
+
+        var rates = RankingService.CalculateParticipationRates(results);
+
+        Assert.Equal(4, rates.FinalsCount);
+        Assert.Equal(100m, rates.QualifyingRate);
     }
 
     [Fact]

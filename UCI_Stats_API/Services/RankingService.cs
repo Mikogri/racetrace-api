@@ -444,28 +444,29 @@ public sealed class RankingService
         IReadOnlyList<JsonObject> results)
     {
         var startedResults = results.Where(HasStarted).ToArray();
-        var startedFinalResults = startedResults
+        var qualifiedFinalResults = results
             .Where(DomainQueryService.IsFinalResult)
             .ToArray();
-        var startedFinalSessions = startedFinalResults
+        var qualifiedFinalSessions = qualifiedFinalResults
             .Select(ResultSessionId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count();
-        var startedRounds = startedResults
+        var participatedRoundIds = startedResults
             .Select(ResultRoundId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
-        var roundsWithFinalStart = startedFinalResults
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var qualifiedRoundIds = qualifiedFinalResults
             .Select(ResultRoundId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        participatedRoundIds.UnionWith(qualifiedRoundIds);
 
         return new RankingParticipationRates(
-            startedFinalSessions,
-            Percentage(roundsWithFinalStart, startedRounds));
+            qualifiedFinalSessions,
+            Percentage(qualifiedRoundIds.Count, participatedRoundIds.Count));
     }
 
     internal static IReadOnlyDictionary<string, JsonArray> BuildFallbackTeamHistories(
