@@ -414,16 +414,68 @@ public sealed class ResultsService
 
     private static IReadOnlyList<JsonObject> ExtractEmbeddedSplits(IReadOnlyList<JsonObject> results)
     {
-        return results.SelectMany(result =>
+        var splits = results.SelectMany(result =>
         {
             var resultId = result.String("id");
-            var splits = result.Array("time_splits")?.OfType<JsonObject>().ToArray() ?? [];
-            foreach (var split in splits)
+            var resultSplits = result.Array("time_splits")?.OfType<JsonObject>().ToArray() ?? [];
+            foreach (var split in resultSplits)
             {
                 split["result_id"] ??= resultId;
             }
-            return splits;
-        }).ToArray();
+            return resultSplits;
+        }).ToList();
+
+        AppendFinishTimingSplits(results, splits);
+        return splits;
+    }
+
+    internal static void AppendFinishTimingSplits(
+        IReadOnlyList<JsonObject> results,
+        ICollection<JsonObject> splits)
+    {
+        var splitsByResultId = splits
+            .Where(split => !string.IsNullOrWhiteSpace(split.String("result_id")))
+            .GroupBy(split => split.String("result_id")!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        var finishSplitIndex = splits
+            .Select(split => split.Int("split_index") ?? 0)
+            .DefaultIfEmpty(0)
+            .Max() + 1;
+
+        foreach (var result in results.Where(IsCompletedResult))
+        {
+            var resultId = result.String("id");
+            var finishTimeMs = result.Int("race_time_ms");
+            if (string.IsNullOrWhiteSpace(resultId) || finishTimeMs is not > 0)
+            {
+                continue;
+            }
+
+            var resultSplits = splitsByResultId.GetValueOrDefault(resultId) ?? [];
+            if (resultSplits.Any(split => split.Int("race_time") == finishTimeMs))
+            {
+                continue;
+            }
+
+            var lastSplit = resultSplits
+                .Where(split => split.Int("race_time") is > 0)
+                .OrderByDescending(split => split.Int("split_index") ?? 0)
+                .FirstOrDefault();
+            if (lastSplit?.Int("race_time") is not > 0 || lastSplit.Int("race_time") >= finishTimeMs)
+            {
+                continue;
+            }
+
+            splits.Add(new JsonObject
+            {
+                ["id"] = null,
+                ["result_id"] = resultId,
+                ["split_index"] = finishSplitIndex,
+                ["race_time"] = finishTimeMs,
+                ["speed"] = null,
+                ["is_finish"] = true
+            });
+        }
     }
 
     private static void DecorateMissingResultTeamsFromEmbeddedHistory(
