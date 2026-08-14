@@ -40,7 +40,7 @@ public sealed class PerfectRunResultsTests
     }
 
     [Fact]
-    public void BuildsPerfectRunFromFastestSectorsWithNegativeWinningGaps()
+    public void BuildsPerfectRunFromFastestSectorsWithGapsToSessionLeader()
     {
         var perfect = ResultsService.BuildPerfectRun(
             Results(),
@@ -68,7 +68,7 @@ public sealed class PerfectRunResultsTests
             second =>
             {
                 Assert.Equal(18m, second.Time);
-                Assert.Equal(-2m, second.GapToBest);
+                Assert.Equal(0m, second.GapToBest);
                 Assert.Equal(1, second.Position);
             });
     }

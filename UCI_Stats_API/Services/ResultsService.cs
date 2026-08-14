@@ -493,6 +493,10 @@ public sealed class ResultsService
         var references = BuildTimingReferences(
             eligibleTimings,
             timing => timingMode == TimingModeSectors ? timing.SectorTimeMs : timing.RaceTimeMs);
+        var leaderTimes = BuildLeaderTimes(
+            results,
+            allTimings,
+            timing => timingMode == TimingModeSectors ? timing.SectorTimeMs : timing.RaceTimeMs);
         var statusOrders = results
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
             .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
@@ -510,8 +514,8 @@ public sealed class ResultsService
 
             result[timingMode] = new JsonArray(timings.Select(timing =>
                 timingMode == TimingModeSectors
-                    ? ToSectorJson(timing, references, positions)
-                    : ToSplitJson(timing, references, positions)).ToArray());
+                    ? ToSectorJson(timing, references, leaderTimes, positions)
+                    : ToSplitJson(timing, references, leaderTimes, positions)).ToArray());
         }
     }
 
@@ -727,10 +731,14 @@ public sealed class ResultsService
         var sectorReferences = BuildTimingReferences(
             eligibleSectors,
             sector => sector.SectorTimeMs);
+        var allSectors = sectorsByResultId.Values.SelectMany(value => value).ToArray();
+        var leaderSectorTimes = BuildLeaderTimes(
+            sessionResults.Data,
+            allSectors,
+            sector => sector.SectorTimeMs);
         var statusOrders = sessionResults.Data
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
             .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
-        var allSectors = sectorsByResultId.Values.SelectMany(value => value).ToArray();
         var sectorPositions = BuildSectorPositions(allSectors, statusOrders);
 
         foreach (var result in pageResults)
@@ -743,7 +751,11 @@ public sealed class ResultsService
             }
 
             result["sectors"] = new JsonArray(sectors
-                .Select(sector => ToSectorJson(sector, sectorReferences, sectorPositions))
+                .Select(sector => ToSectorJson(
+                    sector,
+                    sectorReferences,
+                    leaderSectorTimes,
+                    sectorPositions))
                 .ToArray());
         }
     }
@@ -799,10 +811,14 @@ public sealed class ResultsService
         var splitReferences = BuildTimingReferences(
             eligibleSplits,
             split => split.RaceTimeMs);
+        var allSplits = splitsByResultId.Values.SelectMany(value => value).ToArray();
+        var leaderSplitTimes = BuildLeaderTimes(
+            sessionResults.Data,
+            allSplits,
+            split => split.RaceTimeMs);
         var statusOrders = sessionResults.Data
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
             .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
-        var allSplits = splitsByResultId.Values.SelectMany(value => value).ToArray();
         var splitPositions = BuildSplitPositions(allSplits, statusOrders);
 
         foreach (var result in pageResults)
@@ -815,7 +831,11 @@ public sealed class ResultsService
             }
 
             result["splits"] = new JsonArray(resultSplits
-                .Select(split => ToSplitJson(split, splitReferences, splitPositions))
+                .Select(split => ToSplitJson(
+                    split,
+                    splitReferences,
+                    leaderSplitTimes,
+                    splitPositions))
                 .ToArray());
         }
     }
@@ -970,11 +990,13 @@ public sealed class ResultsService
     private static JsonObject ToSectorJson(
         SectorCalculation sector,
         IReadOnlyDictionary<int, TimingReference> sectorReferences,
+        IReadOnlyDictionary<int, int> leaderSectorTimes,
         IReadOnlyDictionary<(int SplitIndex, string ResultId), int> sectorPositions)
     {
         var reference = sectorReferences.GetValueOrDefault(sector.SplitIndex);
         var bestSectorTimeMs = reference?.BestTimeMs;
-        var gapToBestMs = CalculateGapToBest(sector.SectorTimeMs, reference);
+        var leaderSectorTimeMs = leaderSectorTimes.GetValueOrDefault(sector.SplitIndex);
+        var gapToLeaderMs = CalculateGapToLeader(sector.SectorTimeMs, leaderSectorTimeMs);
         var sectorPosition = sectorPositions.TryGetValue((sector.SplitIndex, sector.ResultId), out var position)
             ? position
             : (int?)null;
@@ -986,9 +1008,9 @@ public sealed class ResultsService
             ["race_time_ms"] = sector.RaceTimeMs,
             ["sector_time_ms"] = sector.SectorTimeMs,
             ["best_sector_time_ms"] = bestSectorTimeMs,
-            ["sector_gap_to_best_ms"] = gapToBestMs,
-            ["leader_sector_time_ms"] = bestSectorTimeMs,
-            ["sector_gap_to_leader_ms"] = gapToBestMs,
+            ["sector_gap_to_best_ms"] = gapToLeaderMs,
+            ["leader_sector_time_ms"] = leaderSectorTimeMs is > 0 ? leaderSectorTimeMs : null,
+            ["sector_gap_to_leader_ms"] = gapToLeaderMs,
             ["sector_position"] = sectorPosition,
             ["speed"] = sector.Speed
         };
@@ -997,11 +1019,13 @@ public sealed class ResultsService
     private static JsonObject ToSplitJson(
         SectorCalculation split,
         IReadOnlyDictionary<int, TimingReference> splitReferences,
+        IReadOnlyDictionary<int, int> leaderSplitTimes,
         IReadOnlyDictionary<(int SplitIndex, string ResultId), int> splitPositions)
     {
         var reference = splitReferences.GetValueOrDefault(split.SplitIndex);
         var bestSplitTimeMs = reference?.BestTimeMs;
-        var gapToBestMs = CalculateGapToBest(split.RaceTimeMs, reference);
+        var leaderSplitTimeMs = leaderSplitTimes.GetValueOrDefault(split.SplitIndex);
+        var gapToLeaderMs = CalculateGapToLeader(split.RaceTimeMs, leaderSplitTimeMs);
 
         return new JsonObject
         {
@@ -1009,9 +1033,9 @@ public sealed class ResultsService
             ["split_index"] = split.SplitIndex,
             ["race_time_ms"] = split.RaceTimeMs,
             ["best_split_time_ms"] = bestSplitTimeMs,
-            ["split_gap_to_best_ms"] = gapToBestMs,
-            ["leader_split_time_ms"] = bestSplitTimeMs,
-            ["split_gap_to_leader_ms"] = gapToBestMs,
+            ["split_gap_to_best_ms"] = gapToLeaderMs,
+            ["leader_split_time_ms"] = leaderSplitTimeMs is > 0 ? leaderSplitTimeMs : null,
+            ["split_gap_to_leader_ms"] = gapToLeaderMs,
             ["split_position"] = splitPositions.TryGetValue((split.SplitIndex, split.ResultId), out var position)
                 ? position
                 : null,
@@ -1070,37 +1094,52 @@ public sealed class ResultsService
                 group => group.Key,
                 group =>
                 {
-                    var ordered = group
+                    var best = group
                         .Select(timing => timing.TimeMs!.Value)
-                        .OrderBy(time => time)
-                        .ToArray();
-                    var best = ordered[0];
-                    var bestCount = ordered.Count(time => time == best);
-                    var secondBest = ordered
-                        .Where(time => time > best)
-                        .Select(time => (int?)time)
-                        .FirstOrDefault();
-                    return new TimingReference(best, secondBest, bestCount);
+                        .Min();
+                    return new TimingReference(best);
                 });
     }
 
-    private static int? CalculateGapToBest(
-        int? timeMs,
-        TimingReference? reference)
+    private static Dictionary<int, int> BuildLeaderTimes(
+        IReadOnlyList<JsonObject> results,
+        IEnumerable<SectorCalculation> timings,
+        Func<SectorCalculation, int?> timeSelector)
     {
-        if (timeMs is not > 0 || reference is null)
+        var leaderResultId = results
+            .Where(IsCompletedResult)
+            .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
+            .OrderBy(result => result.Int("race_time_ms") ?? int.MaxValue)
+            .ThenBy(result => result.Int("position") ?? int.MaxValue)
+            .Select(result => result.String("id"))
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(leaderResultId))
         {
-            return null;
+            return [];
         }
 
-        if (timeMs.Value == reference.BestTimeMs)
-        {
-            return reference.BestCount == 1 && reference.SecondBestTimeMs.HasValue
-                ? reference.BestTimeMs - reference.SecondBestTimeMs.Value
-                : 0;
-        }
+        return timings
+            .Where(timing => string.Equals(
+                timing.ResultId,
+                leaderResultId,
+                StringComparison.OrdinalIgnoreCase))
+            .Select(timing => new
+            {
+                timing.SplitIndex,
+                TimeMs = timeSelector(timing)
+            })
+            .Where(timing => timing.TimeMs is > 0)
+            .GroupBy(timing => timing.SplitIndex)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Last().TimeMs!.Value);
+    }
 
-        return timeMs.Value - reference.BestTimeMs;
+    private static int? CalculateGapToLeader(int? timeMs, int leaderTimeMs)
+    {
+        return timeMs is > 0 && leaderTimeMs > 0
+            ? timeMs.Value - leaderTimeMs
+            : null;
     }
 
     internal static SessionResultDto? BuildPerfectRun(
@@ -1148,7 +1187,12 @@ public sealed class ResultsService
             return null;
         }
 
-        var splitReferences = BuildTimingReferences(
+        var leaderSectorTimes = BuildLeaderTimes(
+            results,
+            allSectors,
+            sector => sector.SectorTimeMs);
+        var leaderSplitTimes = BuildLeaderTimes(
+            results,
             allSectors.Where(sector => sector.SplitIndex <= maximumSplitIndex),
             split => split.RaceTimeMs);
         var perfectTimeMs = 0;
@@ -1166,10 +1210,12 @@ public sealed class ResultsService
                 ? sectorReference.BestTimeMs
                 : perfectTimeMs;
             var gapMs = timeView == TimingModeSectors
-                ? CalculateGapToBest(sectorReference.BestTimeMs, sectorReference)
-                : CalculateGapToBest(
+                ? CalculateGapToLeader(
+                    sectorReference.BestTimeMs,
+                    leaderSectorTimes.GetValueOrDefault(index))
+                : CalculateGapToLeader(
                     perfectTimeMs,
-                    splitReferences.GetValueOrDefault(index));
+                    leaderSplitTimes.GetValueOrDefault(index));
             times.Add(new ResultTimeDto(
                 index,
                 $"{(timeView == TimingModeSectors ? "Sector" : "Split")} {index}",
@@ -1390,8 +1436,5 @@ public sealed class ResultsService
         int? SectorTimeMs,
         decimal? Speed);
 
-    private sealed record TimingReference(
-        int BestTimeMs,
-        int? SecondBestTimeMs,
-        int BestCount);
+    private sealed record TimingReference(int BestTimeMs);
 }
