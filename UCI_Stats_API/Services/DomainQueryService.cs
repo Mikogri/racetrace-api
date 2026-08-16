@@ -11,8 +11,6 @@ public sealed class DomainQueryService
     private const int MaximumConcurrentResultPageQueries = 3;
     private const int RiderFilterBatchSize = 100;
     private const int ResultFilterBatchSize = 300;
-    private const int RankingPreaggregateBatchSize = 100;
-    private const int MaximumConcurrentRankingPreaggregateQueries = 4;
 
     private readonly ISupabaseRestClient _supabase;
 
@@ -399,30 +397,23 @@ public sealed class DomainQueryService
                 []);
         }
 
-        var batches = sessionIds.Chunk(RankingPreaggregateBatchSize).ToArray();
-        using var gate = new SemaphoreSlim(MaximumConcurrentRankingPreaggregateQueries);
-        var responses = await Task.WhenAll(batches.Select(async batch =>
+        var response = await _supabase.RpcAsync(
+            "get_ranking_preaggregate_packages",
+            new JsonObject { ["p_session_ids"] = LongArray(sessionIds) },
+            role,
+            cancellationToken);
+        var cacheRows = response is JsonArray responseRows
+            ? responseRows.OfType<JsonObject>().ToArray()
+            : [];
+        if (cacheRows.Length == 0)
         {
-            await gate.WaitAsync(cancellationToken);
-            try
-            {
-                return await _supabase.GetAsync(
-                    new SupabaseQuery("ranking_session_preaggregates")
-                        .Select("session_id,payload")
-                        .In("session_id", batch),
-                    role: role,
-                    cancellationToken: cancellationToken);
-            }
-            finally
-            {
-                gate.Release();
-            }
-        }));
-        var cacheRows = responses.SelectMany(response => response.Data).ToList();
+            return null;
+        }
 
         var cachedSessionIds = cacheRows
             .Select(row => row.String("session_id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (sessionIds.Any(id => !cachedSessionIds.Contains(id)))
         {
