@@ -374,7 +374,7 @@ public sealed class DomainQueryService
             payload,
             role,
             cancellationToken);
-        return ParseRankingDataBundle(response);
+        return RestrictToCategories(ParseRankingDataBundle(response), filters);
     }
 
     internal async Task<RiderDetailDataBundle?> GetRankingPreaggregatesAsync(
@@ -508,7 +508,107 @@ public sealed class DomainQueryService
             payload,
             role,
             cancellationToken);
-        return ParseRiderDetailDataBundle(response);
+        return RestrictToCategories(ParseRiderDetailDataBundle(response), filters);
+    }
+
+    internal static RiderDetailDataBundle RestrictToCategories(
+        RiderDetailDataBundle bundle,
+        RiderMetricsContext filters)
+    {
+        var data = RestrictToCategories(bundle.Data, filters);
+        if (ReferenceEquals(data, bundle.Data))
+        {
+            return bundle;
+        }
+
+        var sessionIds = data.Sessions
+            .Select(session => session.String("id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return new RiderDetailDataBundle(
+            data,
+            bundle.PaceSessions
+                .Where(session => sessionIds.Contains(session.SessionId))
+                .ToArray());
+    }
+
+    internal static RankingDataBundle RestrictToCategories(
+        RankingDataBundle bundle,
+        RiderMetricsContext filters)
+    {
+        var requestedCategories = RequestedCategoryCodes(filters);
+        if (requestedCategories.Count == 0)
+        {
+            return bundle;
+        }
+
+        var sessions = bundle.Sessions
+            .Where(session => requestedCategories.Contains(CanonicalCategoryCode(
+                session.Object("categories")?.String("code") ??
+                session.Object("round_categories")?.Object("categories")?.String("code"))))
+            .ToArray();
+        var sessionIds = sessions
+            .Select(session => session.String("id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var results = bundle.Results
+            .Where(result => sessionIds.Contains(ResultSessionId(result) ?? string.Empty))
+            .ToArray();
+        var fieldResults = bundle.FieldResults
+            .Where(result => sessionIds.Contains(ResultSessionId(result) ?? string.Empty))
+            .ToArray();
+        var fieldResultIds = fieldResults
+            .Concat(results)
+            .Select(result => result.String("id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var resultIds = results
+            .Select(result => result.String("id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return new RankingDataBundle(
+            sessions,
+            results,
+            fieldResults,
+            bundle.Splits
+                .Where(split => fieldResultIds.Contains(split.String("result_id") ?? string.Empty))
+                .ToArray(),
+            bundle.PointsByResultId
+                .Where(pair => resultIds.Contains(pair.Key))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static HashSet<string> RequestedCategoryCodes(RiderMetricsContext filters)
+    {
+        var values = filters.CategoryCodes.Count > 0
+            ? filters.CategoryCodes
+            : string.IsNullOrWhiteSpace(filters.CategoryCode) ? [] : [filters.CategoryCode];
+        return values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(CanonicalCategoryCode)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string CanonicalCategoryCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return PublicApiCodes.ToDatabaseCategory(value);
+        }
+        catch (ArgumentException)
+        {
+            return value.Trim().ToUpperInvariant();
+        }
     }
 
     private static JsonObject BuildMetricsRpcPayload(

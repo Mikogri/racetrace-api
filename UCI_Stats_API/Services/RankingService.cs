@@ -205,6 +205,10 @@ public sealed class RankingService
             riderQuery,
             nation,
             cancellationToken: cancellationToken);
+        if (preaggregated is not null)
+        {
+            preaggregated = DomainQueryService.RestrictToCategories(preaggregated, context);
+        }
 
         RankingDataBundle bundle;
         IReadOnlyList<PacePrecomputedSessionData>? precomputedSessions;

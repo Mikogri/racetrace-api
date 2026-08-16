@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
 using System.Text.Json.Nodes;
+using UCI_Stats_API.Models;
 
 namespace UCI_Stats_API.Tests;
 
@@ -271,6 +272,54 @@ public sealed class RankingServiceTests
             ["50", "51"],
             parsed.PaceSessions.Select(session => session.Run.RiderId).Order().ToArray());
     }
+
+    [Fact]
+    public void CategoryRestrictionRemovesOtherCategoryFromEveryCalculationInput()
+    {
+        var response = new JsonObject
+        {
+            ["s"] = new JsonArray(
+                SessionRow(10, 2026, "EM"),
+                SessionRow(20, 2025, "JM")),
+            ["d"] = new JsonArray(new JsonArray(
+                50, 100050, "Test", "Rider", "USA", null, null, null,
+                null, null, false, null)),
+            ["r"] = new JsonArray(
+                new JsonArray(70, 50, 10, 40_000, 60, 1, true, "Finished", 100),
+                new JsonArray(80, 50, 20, 39_000, 61, 1, true, "Finished", 200)),
+            ["f"] = new JsonArray(
+                new JsonArray(70, 50, 10, 40_000, 60, 1, true, "Finished"),
+                new JsonArray(80, 50, 20, 39_000, 61, 1, true, "Finished")),
+            ["x"] = new JsonArray(
+                new JsonArray(70, 0, 40_000, 60, 1, 1),
+                new JsonArray(80, 0, 39_000, 61, 1, 1)),
+            ["t"] = new JsonArray(),
+            ["a"] = new JsonArray(),
+            ["q"] = new JsonArray()
+        };
+        var parsed = DomainQueryService.ParseRiderDetailDataBundle(response);
+        var context = new RiderMetricsContext(
+            null, "EM", null, null, null, null, null, null, null, null, null)
+        {
+            SeasonYears = [2022, 2023, 2024, 2025, 2026],
+            CategoryCodes = ["EM"]
+        };
+
+        var filtered = DomainQueryService.RestrictToCategories(parsed, context);
+
+        Assert.Equal("10", Assert.Single(filtered.Data.Sessions).String("id"));
+        Assert.Equal("70", Assert.Single(filtered.Data.Results).String("id"));
+        Assert.Equal("70", Assert.Single(filtered.Data.FieldResults).String("id"));
+        Assert.Equal("70", Assert.Single(filtered.Data.Splits).String("result_id"));
+        Assert.Equal(["70"], filtered.Data.PointsByResultId.Keys);
+        Assert.DoesNotContain(filtered.Data.Results, result =>
+            result.Object("sessions")?.Object("categories")?.String("code") == "JM");
+    }
+
+    private static JsonArray SessionRow(int id, int season, string category) =>
+        new(
+            id, id + 100, id + 200, "Final", "FINAL", $"{season}-06-01", id + 300,
+            season, $"{season}-05-30", 2, category);
 
     [Fact]
     public void RiderDetailRunPreservesMiddleSectorGap()
