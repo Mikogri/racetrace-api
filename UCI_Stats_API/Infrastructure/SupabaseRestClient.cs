@@ -105,7 +105,8 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
             EnsureSuccess(response, errorContent);
         }
 
-        if (response.Content.Headers.ContentLength == 0)
+        if (response.StatusCode == System.Net.HttpStatusCode.NoContent ||
+            response.Content.Headers.ContentLength == 0)
         {
             return null;
         }

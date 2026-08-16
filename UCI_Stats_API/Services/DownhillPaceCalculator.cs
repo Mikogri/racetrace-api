@@ -459,20 +459,6 @@ internal sealed class DownhillPaceCalculator
                 .ToArray()))
             .ToArray();
 
-        var rawSectorData = new Dictionary<string, RawSectorEvaluation[]>(StringComparer.OrdinalIgnoreCase);
-        foreach (var run in session.Runs)
-        {
-            var evaluations = new RawSectorEvaluation[sectorCount];
-            for (var sectorIndex = 0; sectorIndex < sectorCount; sectorIndex++)
-            {
-                evaluations[sectorIndex] = EvaluateRawSector(
-                    GetSectorTime(run, sectorIndex),
-                    sectorStatistics[sectorIndex]);
-            }
-
-            rawSectorData[run.RiderId] = evaluations;
-        }
-
         var speedStatistics = BuildSpeedStatistics(session.Runs);
         var fullRunTimes = session.Runs
             .Where(run => run.IsClassified)
@@ -481,149 +467,36 @@ internal sealed class DownhillPaceCalculator
             .Select(time => time!.Value)
             .ToArray();
         var fullRunStatistics = BuildFieldStatistics(fullRunTimes);
-        var cumulativeTimesByCheckpoint = Enumerable.Range(1, sectorCount)
+        var cumulativeStatistics = Enumerable.Range(1, sectorCount)
             .Select(cleanSectorCount => session.Runs
                 .Select(run => GetCumulativeTime(run, cleanSectorCount))
                 .Where(IsValidTime)
                 .Select(time => time!.Value)
                 .ToArray())
+            .Select(values => ToFieldSummary(BuildFieldStatistics(values)))
             .ToArray();
-        var results = new List<RiderSessionPaceResult>();
-
-        foreach (var run in session.Runs)
-        {
-            var raw = rawSectorData[run.RiderId];
-            var incidentIndex = DetectIncident(raw);
-            var sectorResults = new List<PaceSectorResult>();
-            var validScores = new List<WeightedScore>();
-
-            for (var index = 0; index < raw.Length; index++)
-            {
-                var sector = raw[index];
-                if (sector.Time is null)
-                {
-                    sectorResults.Add(new PaceSectorResult(
+        var classifiedFieldSize = session.Runs.Count(run => run.IsClassified);
+        return session.Runs
+            .Select(run => CalculatePrecomputedSession(new PacePrecomputedSessionData(
+                SessionId: string.Empty,
+                CourseKey: string.Empty,
+                CategoryId: null,
+                SessionType: session.SessionType,
+                Run: run,
+                ClassifiedFieldSize: classifiedFieldSize,
+                Sectors: Enumerable.Range(0, sectorCount)
+                    .Select(index => new PacePrecomputedSector(
                         index,
-                        PaceSectorStatus.Missing,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null));
-                    continue;
-                }
-
-                if (incidentIndex == index)
-                {
-                    sectorResults.Add(ToSectorResult(index, sector, PaceSectorStatus.Incident, null));
-                    continue;
-                }
-
-                var status = PaceSectorStatus.Valid;
-                if (incidentIndex.HasValue && index > incidentIndex.Value)
-                {
-                    if (!_options.CountPositiveSectorsAfterIncident ||
-                        !IsRepresentativePostIncidentSector(raw, incidentIndex.Value, sector))
-                    {
-                        sectorResults.Add(ToSectorResult(index, sector, PaceSectorStatus.AfterIncident, null));
-                        continue;
-                    }
-
-                    status = PaceSectorStatus.RecoveredAfterIncident;
-                }
-
-                sectorResults.Add(ToSectorResult(index, sector, status, sector.Score));
-                if (sector.Score.HasValue)
-                {
-                    var durationWeight = Math.Sqrt(sector.Statistics?.Median ?? sector.Time.Value);
-                    validScores.Add(new WeightedScore(sector.Score.Value, durationWeight));
-                }
-            }
-
-            var sectorCoverage = sectorCount > 0
-                ? (double)validScores.Count / sectorCount
-                : 0;
-            var representative = IsRepresentativeRun(run, raw, incidentIndex);
-            if (!representative ||
-                validScores.Count < _options.MinimumValidSectorsForSessionPace)
-            {
-                results.Add(new RiderSessionPaceResult(
-                    run.RiderId,
-                    session.SessionType,
-                    Pace: null,
-                    SectorPace: null,
-                    SpeedScore: null,
-                    FullRunTimeScore: null,
-                    Confidence: 0,
-                    SessionWeight: GetSessionWeight(session.SessionType),
-                    IsRepresentative: false,
-                    IncidentSectorIndex: incidentIndex,
-                    Sectors: sectorResults,
-                    SectorCoverage: sectorCoverage,
-                    NoResultReason: representative
-                        ? "InsufficientSectorEvidence"
-                        : "NonRepresentativeRun",
-                    CompetitionClassPriority: session.CompetitionClassPriority));
-                continue;
-            }
-
-            var sectorPace = CalculateSectorPace(validScores);
-            var evidenceAdjustedSectorPace = AdjustSectorPaceForEvidence(
-                sectorPace,
-                sectorCoverage,
-                validScores.Count);
-            double? speedScore = null;
-            if (IsValidSpeed(run.TopSpeed))
-            {
-                speedScore = EvaluateFieldValue(run.TopSpeed!.Value, speedStatistics, lowerIsBetter: false);
-            }
-
-            var speedBoost = CalculatePositiveBoost(
-                speedScore,
-                evidenceAdjustedSectorPace,
-                _options.TopSpeedPositiveGain);
-            var fullRunTimeScore = CalculateEffectiveFullRunTimeScore(
-                run,
-                incidentIndex,
-                fullRunTimes,
-                cumulativeTimesByCheckpoint);
-            var sectorAndFullRunPace = CombineSectorAndFullRunPace(
-                session.SessionType,
-                evidenceAdjustedSectorPace,
-                fullRunTimeScore);
-            var dominanceBonus = run.IsClassified
-                ? CalculateDominanceBonus(
-                    run.FinishTimeSeconds,
-                    fullRunStatistics)
-                : 0;
-            var sessionPace = Clamp(
-                sectorAndFullRunPace + speedBoost + dominanceBonus,
-                0,
-                100);
-
-            results.Add(new RiderSessionPaceResult(
-                run.RiderId,
-                session.SessionType,
-                Pace: sessionPace,
-                SectorPace: sectorPace,
-                SpeedScore: speedScore,
-                FullRunTimeScore: fullRunTimeScore,
-                Confidence: CalculateSessionConfidence(
-                    sectorResults,
-                    sectorCount,
-                    sectorStatistics,
-                    representative),
-                SessionWeight: GetSessionWeight(session.SessionType),
-                IsRepresentative: true,
-                IncidentSectorIndex: incidentIndex,
-                Sectors: sectorResults,
-                SectorCoverage: sectorCoverage,
-                EvidenceAdjustedSectorPace: evidenceAdjustedSectorPace,
-                DominanceBonus: dominanceBonus,
-                CompetitionClassPriority: session.CompetitionClassPriority));
-        }
-
-        return results;
+                        GetSectorTime(run, index),
+                        CalculateRank(GetSectorTime(run, index), sectorStatistics[index]),
+                        ToFieldSummary(sectorStatistics[index])))
+                    .ToArray(),
+                SpeedStatistics: ToFieldSummary(speedStatistics),
+                SpeedRank: CalculateRank(run.TopSpeed, speedStatistics, lowerIsBetter: false),
+                FinishStatistics: ToFieldSummary(fullRunStatistics),
+                CumulativeStatistics: cumulativeStatistics,
+                CompetitionClassPriority: session.CompetitionClassPriority)))
+            .ToArray();
     }
 
     public RiderSessionPaceResult CalculatePrecomputedSession(
@@ -1647,6 +1520,33 @@ internal sealed class DownhillPaceCalculator
             summary.LinearMadScale,
             summary.BestValue,
             summary.SecondBestValue);
+    }
+
+    private static PaceFieldSummary ToFieldSummary(FieldStatistics statistics)
+    {
+        return new PaceFieldSummary(
+            statistics.Count,
+            statistics.Median,
+            statistics.LogMedian,
+            statistics.LogMadScale,
+            statistics.LinearMadScale,
+            statistics.BestValue,
+            statistics.SecondBestValue);
+    }
+
+    private static int? CalculateRank(
+        double? value,
+        FieldStatistics statistics,
+        bool lowerIsBetter = true)
+    {
+        if (!value.HasValue || !double.IsFinite(value.Value) || value.Value <= 0)
+        {
+            return null;
+        }
+
+        return 1 + statistics.Values.Count(fieldValue => lowerIsBetter
+            ? fieldValue < value.Value
+            : fieldValue > value.Value);
     }
 
     private static PaceSectorResult ToSectorResult(

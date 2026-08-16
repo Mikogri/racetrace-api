@@ -59,18 +59,19 @@ public sealed class RankingPreaggregationIntegrationTests
             availableSessions: sessions,
             suppliedSplits: raw.Splits,
             suppliedFieldResults: raw.FieldResults);
-        var aggregateMetrics = await metrics.CalculatePerformanceByRiderAsync(
+        var aggregateMetrics = metrics.CalculatePrecomputedPerformanceByRider(
             preaggregated!.Data.Results,
-            context,
-            resultsContainFullField: true,
-            availableSessions: sessions,
-            suppliedSplits: preaggregated.Data.Splits,
-            suppliedFieldResults: preaggregated.Data.Results);
+            preaggregated.PaceSessions,
+            sessions);
         _output.WriteLine($"seasons={string.Join(',', seasonYears)}, sessions={sessions.Count}, results={preaggregated.Data.Results.Count}, splits={preaggregated.Data.Splits.Count}, riders={aggregateMetrics.Count}");
         Assert.NotEmpty(preaggregated.PaceSessions);
         Assert.Equal(rawMetrics.Keys.Order(), aggregateMetrics.Keys.Order());
         foreach (var riderId in rawMetrics.Keys)
         {
+            if (rawMetrics[riderId] != aggregateMetrics[riderId])
+            {
+                _output.WriteLine($"rider={riderId}; raw={rawMetrics[riderId]}; aggregate={aggregateMetrics[riderId]}");
+            }
             Assert.Equal(rawMetrics[riderId].Rating, aggregateMetrics[riderId].Rating);
             Assert.Equal(rawMetrics[riderId].RawRating, aggregateMetrics[riderId].RawRating);
             Assert.Equal(rawMetrics[riderId].Pace, aggregateMetrics[riderId].Pace);
@@ -87,4 +88,5 @@ public sealed class RankingPreaggregationIntegrationTests
             Assert.Equal(rawMetrics[riderId].ResultScoreUsedSessions, aggregateMetrics[riderId].ResultScoreUsedSessions);
         }
     }
+
 }

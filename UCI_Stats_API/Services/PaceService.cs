@@ -294,10 +294,10 @@ public sealed class PaceService
                         pair.First.Run.RiderId + ":" + pair.First.SessionId,
                         pair.First.CourseKey,
                         pair.First.SessionType,
-                        pair.First.Run.SectorTimes
-                            .Select((time, index) => new ConsistencySectorTimeInput(
+                        pair.Second.Sectors
+                            .Select((sector, index) => new ConsistencySectorTimeInput(
                                 $"sector:{index}",
-                                time,
+                                sector.Time,
                                 outlierProfile.SectorIndexes.Contains(index)))
                             .ToArray(),
                         FinishRank: pair.First.Run.FinishRank,
@@ -571,10 +571,13 @@ public sealed class PaceService
                         null)
                     : _consistencyCalculator.AnalyzeSectors(
                         paceResult.Sectors);
-                var sectors = BuildSectorTimes(
+                var sectorTimes = paceResult is null
+                    ? BuildSectorTimes(
                         resultSplits ?? [],
                         splitLayout?.MaximumSplitIndex ?? 0,
                         result.Int("race_time_ms"))
+                    : paceResult.Sectors.Select(sector => sector.Time).ToArray();
+                var sectors = sectorTimes
                     .Select((time, index) => new ConsistencySectorTimeInput(
                         $"sector:{index}",
                         time,

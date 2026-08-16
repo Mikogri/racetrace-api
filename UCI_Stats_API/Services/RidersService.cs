@@ -311,16 +311,8 @@ public sealed class RidersService
             .ToArray();
         var allResults = snapshot.FieldResults;
         var performance = PerformanceFromRankingRow(riderRow);
-        var rankingPosition = suppliedSnapshot is not null
-            ? suppliedRankingPosition
-            : snapshot.PrecomputedSessions is not null
-                ? _ranking.TryGetCachedRatingPosition(context, riderId)
-                : snapshot.Rows
-                    .OrderByDescending(row => row.Decimal("rating") ?? decimal.MinValue)
-                    .ThenBy(row => row.String("rider_id"), StringComparer.OrdinalIgnoreCase)
-                    .Select((row, index) => new { RiderId = row.String("rider_id"), Position = index + 1 })
-                    .First(item => string.Equals(item.RiderId, riderId, StringComparison.OrdinalIgnoreCase))
-                    .Position;
+        var rankingPosition = suppliedRankingPosition ??
+            await _ranking.GetPointsPositionAsync(context, riderId, cancellationToken);
 
         var targetResultIds = riderResults
             .Select(result => result.String("id"))
@@ -434,7 +426,10 @@ public sealed class RidersService
             context,
             cancellationToken,
             riderId: riderId);
-        var rankingPosition = _ranking.TryGetCachedRatingPosition(context, riderId);
+        var rankingPosition = await _ranking.GetPointsPositionAsync(
+            context,
+            riderId,
+            cancellationToken);
         var statisticsTask = GetPublicStatisticsCoreAsync(
             riderId,
             overviewQuery,

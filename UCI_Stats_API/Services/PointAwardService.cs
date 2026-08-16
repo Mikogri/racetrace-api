@@ -40,6 +40,10 @@ public sealed class PointAwardService : IPointAwardService
                 $"Session '{sessionId}' was not found.");
         }
 
+        var competitionRankId = session
+            .Object("round_categories")?
+            .Object("rounds")?
+            .String("competition_rank_id");
         DomainQueryService.NormalizeSessionEmbed(session);
         var round = session.Object("rounds");
         var category = session.Object("categories");
@@ -47,6 +51,7 @@ public sealed class PointAwardService : IPointAwardService
         var competitionClassId = round?.String("competition_class_id");
         var categoryId = session.String("category_id") ?? category?.String("id");
         var sessionType = session.String("session_type");
+        var pointsSessionType = session.String("points_session_type_override") ?? sessionType;
         if (seasonYear is null ||
             string.IsNullOrWhiteSpace(competitionClassId) ||
             string.IsNullOrWhiteSpace(categoryId) ||
@@ -71,8 +76,7 @@ public sealed class PointAwardService : IPointAwardService
             .Select(id => id!)
             .ToArray();
 
-        var systems = await _supabase.GetAsync(
-            new SupabaseQuery("points_systems")
+        var systemsQuery = new SupabaseQuery("points_systems")
                 .Select("id,code,name")
                 .Filter("competition_level_id", "eq", competitionClassId)
                 .Filter("category_id", "eq", categoryId)
@@ -80,7 +84,14 @@ public sealed class PointAwardService : IPointAwardService
                 .Filter("valid_from_season", "lte", seasonYear.Value)
                 .Filter("valid_to_season", "gte", seasonYear.Value)
                 .Order("valid_from_season", true)
-                .Limit(2),
+                .Limit(2);
+        if (!string.IsNullOrWhiteSpace(competitionRankId))
+        {
+            systemsQuery.Filter("competition_rank_id", "eq", competitionRankId);
+        }
+
+        var systems = await _supabase.GetAsync(
+            systemsQuery,
             role: SupabaseRole.Service,
             cancellationToken: cancellationToken);
         if (systems.Data.Count == 0)
@@ -99,7 +110,7 @@ public sealed class PointAwardService : IPointAwardService
 
         var system = systems.Data[0];
         var pointSystemId = system.String("id")!;
-        var normalizedSessionType = DomainQueryService.NormalizeSessionType(sessionType);
+        var normalizedSessionType = DomainQueryService.NormalizeSessionType(pointsSessionType!);
         var stage = await _supabase.GetSingleAsync(
             new SupabaseQuery("point_system_stages")
                 .Select("id,point_system_id,session_type,awards_points,awards_points_on_season_final_round")
@@ -119,7 +130,7 @@ public sealed class PointAwardService : IPointAwardService
 
         var rulesResponse = await _supabase.GetAsync(
             new SupabaseQuery("point_rules")
-                .Select("id,point_system_stage_id,position_from,position_to,points")
+                .Select("id,point_system_stage_id,position_from,position_to,points,season_final_points")
                 .Filter("point_system_stage_id", "eq", stage.String("id"))
                 .Order("position_from", false),
             role: SupabaseRole.Service,
@@ -138,7 +149,11 @@ public sealed class PointAwardService : IPointAwardService
             var rule = awardsPoints && position is > 0
                 ? FindRule(rulesResponse.Data, position.Value)
                 : null;
-            var points = rule?.Int("points") ?? 0;
+            var points = rule is null
+                ? 0
+                : round?.Bool("is_season_final_round") == true
+                    ? rule.Int("season_final_points") ?? rule.Int("points") ?? 0
+                    : rule.Int("points") ?? 0;
             totalPoints += points;
             rows.Add(new JsonObject
             {

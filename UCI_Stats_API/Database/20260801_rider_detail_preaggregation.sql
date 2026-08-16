@@ -302,8 +302,6 @@ raw_sector_rows as materialized (
     true
   from field_results fr
   join split_tails st on st.result_id = fr.id
-  join session_split_layout layout on layout.session_id = fr.session_id
-  where not layout.finish_is_timing_split
 ),
 sector_values as materialized (
   select *

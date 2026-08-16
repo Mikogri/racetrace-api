@@ -27,6 +27,12 @@ public sealed class RoundsController : ControllerBase
         return Ok(await _rounds.ListRoundsAsync(Request.Query, cancellationToken));
     }
 
+    [HttpGet("seasons")]
+    public async Task<IActionResult> Seasons(CancellationToken cancellationToken)
+    {
+        return Ok(new { items = await _rounds.ListSeasonsAsync(cancellationToken) });
+    }
+
     [HttpGet("{roundId}")]
     public async Task<IActionResult> Get(string roundId, CancellationToken cancellationToken)
     {

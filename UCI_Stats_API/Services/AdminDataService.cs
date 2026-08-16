@@ -31,7 +31,7 @@ public sealed class AdminDataService
                     ["competition_class_id"] = "competition_level_id"
                 },
                 "context_name", "track_id", "competition_class_id", "is_season_final_round", "condition_id", "season_year", "round_number", "start_date", "end_date", "status"),
-            ["sessions"] = Definition("sessions", "name", "status", "round_id", "category_id", "condition_id", "session_type", "session_date"),
+            ["sessions"] = Definition("sessions", "name", "status", "round_id", "category_id", "condition_id", "session_type", "points_session_type_override", "session_date"),
             ["riders"] = Definition("riders", "uci_id", "uci_code", "last_name", "first_name", "nation", "birth_date", "is_protected", "has_injury", "profile_image_url", "profile_image_updated_at"),
             ["teams"] = Definition("teams", "name", "code"),
             ["results"] = Definition("results", "race_nr", "completed_distance", "status", "top_speed", "session_id", "rider_id", "position", "race_time_ms", "is_classified", "team_id"),
@@ -45,7 +45,7 @@ public sealed class AdminDataService
                 },
                 "code", "name", "competition_class_id", "discipline", "category_id", "valid_from_season", "valid_to_season", "source_url", "notes"),
             ["point-system-stages"] = Definition("point_system_stages", "point_system_id", "session_type", "awards_points", "awards_points_on_season_final_round"),
-            ["point-rules"] = Definition("point_rules", "point_system_stage_id", "position_from", "position_to", "points"),
+            ["point-rules"] = Definition("point_rules", "point_system_stage_id", "position_from", "position_to", "points", "season_final_points"),
             ["points-system-positions"] = Definition("points_system_positions", "points_system_id", "position", "points"),
             ["result-points"] = Definition("result_points", "result_id", "points_system_id", "point_system_stage_id", "point_rule_id", "position_used", "points_awarded")
         };
@@ -486,7 +486,7 @@ public sealed class AdminDataService
             "competition-classes" => new[] { "name", "code", "description" },
             "categories" => new[] { "name", "code" },
             "rounds" => new[] { "context_name", "start_date", "end_date", "status" },
-            "sessions" => new[] { "name", "status", "session_type", "session_date" },
+            "sessions" => new[] { "name", "status", "session_type", "points_session_type_override", "session_date" },
             "riders" => new[] { "uci_code", "last_name", "first_name", "nation", "birth_date", "profile_image_url", "profile_image_updated_at" },
             "teams" => new[] { "name", "code" },
             "results" => new[] { "status" },
@@ -515,6 +515,11 @@ public sealed class AdminDataService
         if (TryString(patch, "session_type", out var sessionType))
         {
             patch["session_type"] = DomainQueryService.NormalizeSessionType(sessionType);
+        }
+
+        if (TryString(patch, "points_session_type_override", out var pointsSessionTypeOverride))
+        {
+            patch["points_session_type_override"] = DomainQueryService.NormalizeSessionType(pointsSessionTypeOverride);
         }
 
         if (resourceName is "rounds" && TryString(patch, "status", out var roundStatus))
@@ -593,6 +598,11 @@ public sealed class AdminDataService
                 if (!SessionTypes.Contains(sessionType))
                 {
                     throw Invalid("INVALID_SESSION_TYPE", $"session_type must be one of: {string.Join(", ", SessionTypes.OrderBy(value => value, StringComparer.Ordinal))}.");
+                }
+                var pointsSessionTypeOverride = OptionalText(candidate, "points_session_type_override");
+                if (pointsSessionTypeOverride is not null && !SessionTypes.Contains(pointsSessionTypeOverride))
+                {
+                    throw Invalid("INVALID_SESSION_TYPE", $"points_session_type_override must be one of: {string.Join(", ", SessionTypes.OrderBy(value => value, StringComparer.Ordinal))}.");
                 }
                 ValidateOptionalDate(candidate, "session_date");
                 break;

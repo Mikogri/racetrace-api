@@ -128,6 +128,11 @@ public static class PointSystemSeedValidator
                     errors.Add($"{rulePath}.points cannot be negative.");
                 }
 
+                if (rule.SeasonFinalPoints is < 0)
+                {
+                    errors.Add($"{rulePath}.season_final_points cannot be negative.");
+                }
+
                 if (ruleIndex > 0)
                 {
                     var previous = rules[ruleIndex - 1];

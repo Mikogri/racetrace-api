@@ -49,6 +49,20 @@ begin
     p_session_ids => array[p_session_id]
   );
 
+  aggregate_payload := jsonb_set(
+    aggregate_payload,
+    '{d}',
+    coalesce((
+      select jsonb_agg(rider_row)
+      from jsonb_array_elements(aggregate_payload->'d') rider_row
+      where exists (
+        select 1
+        from jsonb_array_elements(aggregate_payload->'r') result_row
+        where result_row->>1 = rider_row->>0
+      )
+    ), '[]'::jsonb)
+  );
+
   insert into public.ranking_session_preaggregates (
     session_id,
     payload,
@@ -84,7 +98,12 @@ as $function$
 declare
   affected_session_id bigint;
 begin
-  affected_session_id := case when tg_op = 'DELETE' then old.session_id else new.session_id end;
+  affected_session_id := case
+    when tg_table_name = 'sessions' and tg_op = 'DELETE' then old.id
+    when tg_table_name = 'sessions' then new.id
+    when tg_op = 'DELETE' then old.session_id
+    else new.session_id
+  end;
   delete from public.ranking_session_preaggregates where session_id = affected_session_id;
   return case when tg_op = 'DELETE' then old else new end;
 end;

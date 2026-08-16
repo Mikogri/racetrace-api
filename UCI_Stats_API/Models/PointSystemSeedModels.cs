@@ -46,6 +46,8 @@ public sealed record PointRuleSeedDefinition
     public int? PositionTo { get; init; }
 
     public int Points { get; init; }
+
+    public int? SeasonFinalPoints { get; init; }
 }
 
 public sealed record PointSystemSeedResult(

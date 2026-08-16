@@ -39,6 +39,8 @@ public sealed class PointAwardServiceTests
         Assert.Contains(supabase.SystemQuery.Parameters, parameter =>
             parameter.Key == "competition_level_id" && parameter.Value == "eq.2");
         Assert.Contains(supabase.SystemQuery.Parameters, parameter =>
+            parameter.Key == "competition_rank_id" && parameter.Value == "eq.1");
+        Assert.Contains(supabase.SystemQuery.Parameters, parameter =>
             parameter.Key == "category_id" && parameter.Value == "eq.4");
     }
 
@@ -63,6 +65,22 @@ public sealed class PointAwardServiceTests
     }
 
     [Fact]
+    public async Task SeasonFinalRoundUsesBonusPointsWhenRuleProvidesThem()
+    {
+        var supabase = new PointAwardSupabaseClient(
+            isSeasonFinalRound: true,
+            seasonFinalPoints: [250, 200]);
+
+        var result = await new PointAwardService(supabase)
+            .RecalculateSessionAsync("25", CancellationToken.None);
+
+        Assert.Equal(450, result.TotalPoints);
+        var rows = Assert.IsType<JsonArray>(supabase.PostedPoints);
+        Assert.Equal(250, rows[0]!["points_awarded"]!.GetValue<int>());
+        Assert.Equal(200, rows[1]!["points_awarded"]!.GetValue<int>());
+    }
+
+    [Fact]
     public async Task MoreThanOneMatchingSystemIsRejected()
     {
         var supabase = new PointAwardSupabaseClient(ambiguousSystems: true);
@@ -75,12 +93,31 @@ public sealed class PointAwardServiceTests
         Assert.False(supabase.DeletedExistingPoints);
     }
 
+    [Fact]
+    public async Task PointsSessionTypeOverrideUsesFinalRulesWithoutChangingSessionType()
+    {
+        var supabase = new PointAwardSupabaseClient(
+            sessionType: "QUALI",
+            pointsSessionTypeOverride: "FINAL");
+
+        var result = await new PointAwardService(supabase)
+            .RecalculateSessionAsync("25", CancellationToken.None);
+
+        Assert.True(result.PointSystemApplied);
+        Assert.Contains(supabase.StageQuery!.Parameters, parameter =>
+            parameter.Key == "session_type" && parameter.Value == "eq.FINAL");
+    }
+
     private sealed class PointAwardSupabaseClient(
         bool isSeasonFinalRound = false,
         bool awardsPointsOnSeasonFinalRound = true,
-        bool ambiguousSystems = false) : ISupabaseRestClient
+        bool ambiguousSystems = false,
+        string sessionType = "FINAL",
+        string? pointsSessionTypeOverride = null,
+        int[]? seasonFinalPoints = null) : ISupabaseRestClient
     {
         public SupabaseQuery? SystemQuery { get; private set; }
+        public SupabaseQuery? StageQuery { get; private set; }
         public JsonNode? PostedPoints { get; private set; }
         public string? OnConflict { get; private set; }
         public bool DeletedExistingPoints { get; private set; }
@@ -102,8 +139,8 @@ public sealed class PointAwardServiceTests
                 "points_systems" => Systems(query),
                 "point_rules" =>
                 [
-                    Rule("rule-1", 1, 1, 50),
-                    Rule("rule-2", 2, 2, 25)
+                    Rule("rule-1", 1, 1, 50, seasonFinalPoints?.ElementAtOrDefault(0)),
+                    Rule("rule-2", 2, 2, 25, seasonFinalPoints?.ElementAtOrDefault(1))
                 ],
                 _ => throw new NotSupportedException($"Unexpected GET table '{query.Table}'.")
             };
@@ -120,14 +157,7 @@ public sealed class PointAwardServiceTests
             JsonObject row = query.Table switch
             {
                 "sessions" => Session(),
-                "point_system_stages" => new JsonObject
-                {
-                    ["id"] = "stage-final",
-                    ["point_system_id"] = "system-1",
-                    ["session_type"] = "FINAL",
-                    ["awards_points"] = true,
-                    ["awards_points_on_season_final_round"] = awardsPointsOnSeasonFinalRound
-                },
+                "point_system_stages" => Stage(query),
                 _ => throw new NotSupportedException($"Unexpected single GET table '{query.Table}'.")
             };
 
@@ -179,7 +209,8 @@ public sealed class PointAwardServiceTests
             {
                 ["id"] = "25",
                 ["category_id"] = "4",
-                ["session_type"] = "FINAL",
+                ["session_type"] = sessionType,
+                ["points_session_type_override"] = pointsSessionTypeOverride,
                 ["round_categories"] = new JsonObject
                 {
                     ["rounds"] = new JsonObject
@@ -187,6 +218,7 @@ public sealed class PointAwardServiceTests
                         ["id"] = "10",
                         ["season_year"] = 2026,
                         ["competition_level_id"] = "2",
+                        ["competition_rank_id"] = "1",
                         ["is_season_final_round"] = isSeasonFinalRound,
                         ["competition_levels"] = new JsonObject
                         {
@@ -201,6 +233,19 @@ public sealed class PointAwardServiceTests
                         ["code"] = "EM"
                     }
                 }
+            };
+        }
+
+        private JsonObject Stage(SupabaseQuery query)
+        {
+            StageQuery = query;
+            return new JsonObject
+            {
+                ["id"] = "stage-final",
+                ["point_system_id"] = "system-1",
+                ["session_type"] = "FINAL",
+                ["awards_points"] = true,
+                ["awards_points_on_season_final_round"] = awardsPointsOnSeasonFinalRound
             };
         }
 
@@ -226,12 +271,13 @@ public sealed class PointAwardServiceTests
             ["status"] = "Finished"
         };
 
-        private static JsonObject Rule(string id, int from, int? to, int points) => new()
+        private static JsonObject Rule(string id, int from, int? to, int points, int? seasonFinalPoints) => new()
         {
             ["id"] = id,
             ["position_from"] = from,
             ["position_to"] = to,
-            ["points"] = points
+            ["points"] = points,
+            ["season_final_points"] = seasonFinalPoints
         };
     }
 }

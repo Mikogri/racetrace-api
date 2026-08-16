@@ -81,7 +81,8 @@ public sealed class PointSystemSeeder : IPointSystemSeeder
                         ["point_system_stage_id"] = stageId,
                         ["position_from"] = rule.PositionFrom,
                         ["position_to"] = rule.PositionTo,
-                        ["points"] = rule.Points
+                        ["points"] = rule.Points,
+                        ["season_final_points"] = rule.SeasonFinalPoints
                     }).ToArray());
                     await _supabase.PostAsync(
                         "point_rules",

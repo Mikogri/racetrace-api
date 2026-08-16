@@ -95,6 +95,24 @@ public sealed class RoundsService
             response.Total ?? items.Length);
     }
 
+    public async Task<IReadOnlyList<int>> ListSeasonsAsync(CancellationToken cancellationToken)
+    {
+        var response = await _supabase.GetAsync(
+            new SupabaseQuery("rounds")
+                .Select("season_year")
+                .Order("season_year", descending: true)
+                .Limit(1000),
+            cancellationToken: cancellationToken);
+
+        return response.Data
+            .Select(row => row["season_year"]?.GetValue<int?>())
+            .Where(year => year is not null)
+            .Select(year => year!.Value)
+            .Distinct()
+            .OrderByDescending(year => year)
+            .ToArray();
+    }
+
     public async Task<RoundImageFile?> GetRoundImageAsync(
         long roundId,
         CancellationToken cancellationToken)

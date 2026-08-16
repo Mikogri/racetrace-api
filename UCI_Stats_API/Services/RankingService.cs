@@ -9,6 +9,7 @@ namespace UCI_Stats_API.Services;
 public sealed class RankingService
 {
     private static readonly TimeSpan SnapshotLifetime = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan SnapshotComputationTimeout = TimeSpan.FromSeconds(90);
 
     private static readonly Dictionary<string, string> Sorts = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -136,9 +137,12 @@ public sealed class RankingService
                     return sharedCached!;
                 }
 
+                // A shared calculation must not inherit the first waiter's disconnect token.
+                // Each waiter can still cancel its own WaitAsync in RankingSingleFlight.
+                using var computationTimeout = new CancellationTokenSource(SnapshotComputationTimeout);
                 var snapshot = await BuildSnapshotCoreAsync(
                     context,
-                    cancellationToken,
+                    computationTimeout.Token,
                     resolvedSessions,
                     riderQuery,
                     nation,
@@ -208,15 +212,11 @@ public sealed class RankingService
         if (preaggregated is not null)
         {
             bundle = preaggregated.Data;
-            precomputedSessions = null;
-            performanceByRiderId = await _metrics.CalculatePerformanceByRiderAsync(
+            precomputedSessions = preaggregated.PaceSessions;
+            performanceByRiderId = _metrics.CalculatePrecomputedPerformanceByRider(
                 bundle.Results,
-                context,
-                cancellationToken,
-                resultsContainFullField: true,
-                availableSessions: matchingSessions,
-                suppliedSplits: bundle.Splits,
-                suppliedFieldResults: bundle.Results);
+                precomputedSessions,
+                matchingSessions);
         }
         else
         {
@@ -298,17 +298,18 @@ public sealed class RankingService
         });
     }
 
-    internal int? TryGetCachedRatingPosition(RiderMetricsContext context, string riderId)
+    internal async Task<int?> GetPointsPositionAsync(
+        RiderMetricsContext context,
+        string riderId,
+        CancellationToken cancellationToken)
     {
         var key = BuildSingleFlightKey(context, null, null, null);
         if (!_cache.TryGetValue<RankingSnapshot>(key, out var snapshot) || snapshot is null)
         {
-            return null;
+            snapshot = await BuildSnapshotAsync(context, cancellationToken);
         }
 
-        return snapshot.Rows
-            .OrderByDescending(row => row.Decimal("rating") ?? decimal.MinValue)
-            .ThenBy(row => row.String("rider_id"), StringComparer.OrdinalIgnoreCase)
+        return SortRows(snapshot.Rows, "points", descending: true)
             .Select((row, index) => new { RiderId = row.String("rider_id"), Position = index + 1 })
             .FirstOrDefault(item => string.Equals(item.RiderId, riderId, StringComparison.OrdinalIgnoreCase))?
             .Position;
