@@ -780,10 +780,7 @@ public sealed class PaceService
             ? _ratingCalculator.Calculate(
                 ratingPace.Pace.Value,
                 ratingConsistency.Consistency.Value,
-                ratingResultScore.Score,
-                DownhillPaceCalculator.NormalizeConfidence(ratingPace.Confidence),
-                ratingConsistency.Confidence,
-                ratingResultScore.Confidence)
+                ratingResultScore.Score)
             : null;
         var rating = ratingResult is null
             ? (decimal?)null

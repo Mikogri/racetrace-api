@@ -668,7 +668,6 @@ internal sealed class DownhillPaceCalculator
                 string.Equals(session.RiderId, riderId, StringComparison.OrdinalIgnoreCase) &&
                 session.IsRepresentative &&
                 session.Pace.HasValue &&
-                session.Confidence > 0 &&
                 session.SectorCoverage > 0 &&
                 session.SessionType is PaceSessionType.Final or
                     PaceSessionType.SemiFinal or
@@ -806,13 +805,11 @@ internal sealed class DownhillPaceCalculator
             .Where(session =>
                 session.IsRepresentative &&
                 session.Pace.HasValue &&
-                session.Confidence > 0 &&
                 session.SectorCoverage > 0)
             .Select(session => new
             {
                 Pace = session.Pace!.Value,
-                Weight = NormalizeConfidence(session.Confidence) *
-                    Math.Pow(
+                Weight = Math.Pow(
                         Clamp(session.SectorCoverage, 0, 1),
                         _options.CoverageWeightPower) *
                     (competitionClassWeighting?.GetWeight(session.CompetitionClassPriority) ?? 1.0)

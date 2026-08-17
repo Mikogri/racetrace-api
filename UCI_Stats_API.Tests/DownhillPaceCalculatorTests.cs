@@ -1250,6 +1250,32 @@ public sealed class DownhillPaceCalculatorTests
     }
 
     [Fact]
+    public void SessionConfidenceChangesReportedConfidenceButNotPace()
+    {
+        var calculator = new DownhillPaceCalculator();
+        var highConfidence = calculator.CalculatePace(
+            "target",
+            [
+                SessionResult(94, 1.0, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final),
+                SessionResult(72, 1.0, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final)
+            ]);
+        var lowConfidence = calculator.CalculatePace(
+            "target",
+            [
+                SessionResult(94, 0.10, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final),
+                SessionResult(72, 1.0, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final)
+            ]);
+
+        Assert.True(highConfidence.Pace.HasValue);
+        Assert.True(lowConfidence.Pace.HasValue);
+        Assert.True(highConfidence.RawPace.HasValue);
+        Assert.True(lowConfidence.RawPace.HasValue);
+        Assert.Equal(highConfidence.Pace.Value, lowConfidence.Pace.Value, precision: 10);
+        Assert.Equal(highConfidence.RawPace.Value, lowConfidence.RawPace.Value, precision: 10);
+        Assert.True(highConfidence.Confidence > lowConfidence.Confidence);
+    }
+
+    [Fact]
     public void PartialFinalAddsLessFinalEvidenceThanCompleteFinal()
     {
         var calculator = new DownhillPaceCalculator();

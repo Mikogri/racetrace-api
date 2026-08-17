@@ -38,36 +38,24 @@ internal sealed class DownhillRatingCalculator
 
     public RatingResult Calculate(
         double pace,
-        double consistency,
-        double paceConfidence,
-        double consistencyConfidence)
+        double consistency)
     {
         return Calculate(
             pace,
             consistency,
-            resultScore: null,
-            paceConfidence,
-            consistencyConfidence,
-            resultScoreConfidence: 0);
+            resultScore: null);
     }
 
     public RatingResult Calculate(
         double pace,
         double consistency,
-        double? resultScore,
-        double paceConfidence,
-        double consistencyConfidence,
-        double resultScoreConfidence)
+        double? resultScore)
     {
         pace = Clamp(pace, 0, 100);
         consistency = Clamp(consistency, 0, 100);
         resultScore = resultScore.HasValue
             ? Clamp(resultScore.Value, 0, 100)
             : null;
-        paceConfidence = Clamp(paceConfidence, 0, 1);
-        consistencyConfidence = Clamp(consistencyConfidence, 0, 1);
-        resultScoreConfidence = Clamp(resultScoreConfidence, 0, 1);
-
         var activeResultWeight = resultScore.HasValue
             ? _options.ResultScoreWeight
             : 0;
@@ -83,17 +71,9 @@ internal sealed class DownhillRatingCalculator
             0,
             100);
         var contrastedRating = ApplyRatingContrast(rawRating);
-        var ratingConfidence = Clamp((
-            _options.PaceWeight * paceConfidence +
-            _options.ConsistencyWeight * consistencyConfidence +
-            activeResultWeight * resultScoreConfidence) / activeWeightSum,
-            0,
-            1);
-        var rating = rawRating +
-            (contrastedRating - rawRating) * ratingConfidence;
 
         return new RatingResult(
-            Rating: Clamp(rating, 0, 100),
+            Rating: contrastedRating,
             RawRating: rawRating,
             Pace: pace,
             Consistency: consistency,

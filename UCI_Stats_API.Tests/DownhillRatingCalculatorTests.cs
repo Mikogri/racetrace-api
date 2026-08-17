@@ -20,9 +20,7 @@ public sealed class DownhillRatingCalculatorTests
     {
         var result = new DownhillRatingCalculator().Calculate(
             pace: 94,
-            consistency: 80,
-            paceConfidence: 1,
-            consistencyConfidence: 1);
+            consistency: 80);
 
         var expectedRawRating = (0.70 * 94 + 0.15 * 80) / 0.85;
 
@@ -36,21 +34,15 @@ public sealed class DownhillRatingCalculatorTests
     public void ResultScoreChangesRawRatingWhenPositionsAreAvailable()
     {
         var calculator = new DownhillRatingCalculator();
-        var withoutResultScore = calculator.Calculate(90, 80, 1, 1);
+        var withoutResultScore = calculator.Calculate(90, 80);
         var winningResults = calculator.Calculate(
             pace: 90,
             consistency: 80,
-            resultScore: 100,
-            paceConfidence: 1,
-            consistencyConfidence: 1,
-            resultScoreConfidence: 1);
+            resultScore: 100);
         var weakResults = calculator.Calculate(
             pace: 90,
             consistency: 80,
-            resultScore: 0,
-            paceConfidence: 1,
-            consistencyConfidence: 1,
-            resultScoreConfidence: 1);
+            resultScore: 0);
 
         Assert.Equal((0.70 * 90 + 0.15 * 80) / 0.85, withoutResultScore.RawRating, precision: 10);
         Assert.Equal(90, winningResults.RawRating, precision: 10);
@@ -60,22 +52,18 @@ public sealed class DownhillRatingCalculatorTests
     }
 
     [Fact]
-    public void ResultScoreConfidenceParticipatesInRatingConfidence()
+    public void RatingAlwaysUsesFullContrast()
     {
         var calculator = new DownhillRatingCalculator();
         var result = calculator.Calculate(
             pace: 90,
             consistency: 80,
-            resultScore: 100,
-            paceConfidence: 0.5,
-            consistencyConfidence: 1,
-            resultScoreConfidence: 0.25);
-        var contrasted = calculator.ApplyRatingContrast(result.RawRating);
-        var expectedConfidence = 0.70 * 0.5 + 0.15 * 1 + 0.15 * 0.25;
-        var expectedRating = result.RawRating +
-            (contrasted - result.RawRating) * expectedConfidence;
+            resultScore: 100);
 
-        Assert.Equal(expectedRating, result.Rating, precision: 10);
+        Assert.Equal(
+            calculator.ApplyRatingContrast(result.RawRating),
+            result.Rating,
+            precision: 10);
     }
 
     [Theory]
@@ -138,51 +126,16 @@ public sealed class DownhillRatingCalculatorTests
         {
             RatingContrast = 0
         });
-        var result = calculator.Calculate(82, 62, 1, 1);
+        var result = calculator.Calculate(82, 62);
 
         Assert.Equal(result.RawRating, result.Rating, precision: 10);
     }
 
     [Fact]
-    public void LowConfidenceLimitsContrastStrength()
+    public void RatingAppliesFullContrastIndependentlyOfEvidence()
     {
         var calculator = new DownhillRatingCalculator();
-        var noContrast = calculator.Calculate(90, 90, 0, 0);
-        var halfContrast = calculator.Calculate(90, 90, 0.5, 0.5);
-        var fullContrast = calculator.Calculate(90, 90, 1, 1);
-
-        Assert.Equal(90, noContrast.Rating, precision: 10);
-        Assert.Equal(
-            90 + (fullContrast.Rating - 90) * 0.5,
-            halfContrast.Rating,
-            precision: 10);
-        Assert.InRange(halfContrast.Rating, noContrast.Rating, fullContrast.Rating);
-    }
-
-    [Fact]
-    public void WeightedConfidenceControlsOnlyFinalContrast()
-    {
-        var calculator = new DownhillRatingCalculator();
-        var result = calculator.Calculate(
-            pace: 90,
-            consistency: 70,
-            paceConfidence: 0.5,
-            consistencyConfidence: 1.0);
-        var contrasted = calculator.ApplyRatingContrast(result.RawRating);
-        var expectedRawRating = (0.70 * 90 + 0.15 * 70) / 0.85;
-        var expectedConfidence = (0.70 * 0.5 + 0.15 * 1.0) / 0.85;
-        var expectedRating = result.RawRating +
-            (contrasted - result.RawRating) * expectedConfidence;
-
-        Assert.Equal(expectedRawRating, result.RawRating, precision: 10);
-        Assert.Equal(expectedRating, result.Rating, precision: 10);
-    }
-
-    [Fact]
-    public void FullConfidenceAppliesFullContrast()
-    {
-        var calculator = new DownhillRatingCalculator();
-        var result = calculator.Calculate(80, 80, 1, 1);
+        var result = calculator.Calculate(80, 80);
 
         Assert.Equal(
             calculator.ApplyRatingContrast(result.RawRating),
@@ -200,9 +153,7 @@ public sealed class DownhillRatingCalculatorTests
     {
         var result = new DownhillRatingCalculator().Calculate(
             pace,
-            consistency,
-            paceConfidence: 1,
-            consistencyConfidence: 1);
+            consistency);
 
         Assert.InRange(result.RawRating, 0, 100);
         Assert.InRange(result.Rating, 0, 100);
@@ -229,7 +180,7 @@ public sealed class DownhillRatingCalculatorTests
     public void PaceAndConsistencyAreNotContrastedSeparately()
     {
         var calculator = new DownhillRatingCalculator();
-        var result = calculator.Calculate(90, 10, 1, 1);
+        var result = calculator.Calculate(90, 10);
         var expectedRawRating = (0.70 * 90 + 0.15 * 10) / 0.85;
         var expectedFromRawRating = calculator.ApplyRatingContrast(expectedRawRating);
         var separatelyContrasted =
@@ -241,14 +192,10 @@ public sealed class DownhillRatingCalculatorTests
         Assert.NotEqual(separatelyContrasted, result.Rating, precision: 6);
     }
 
-    private static RatingResult CalculateForRaw(
-        double rawRating,
-        double confidence = 1)
+    private static RatingResult CalculateForRaw(double rawRating)
     {
         return new DownhillRatingCalculator().Calculate(
             pace: rawRating,
-            consistency: rawRating,
-            paceConfidence: confidence,
-            consistencyConfidence: confidence);
+            consistency: rawRating);
     }
 }
