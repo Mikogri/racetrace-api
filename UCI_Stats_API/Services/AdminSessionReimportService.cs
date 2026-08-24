@@ -99,7 +99,8 @@ public sealed class AdminSessionReimportService
                 RequiredText(session, "name"),
                 RequiredText(session, "session_type"),
                 ParseDate(session.String("session_date")),
-                RequiredText(session, "status")),
+                RequiredText(session, "status"),
+                resolvedUrl ?? request.ChronoraceUrl),
             json);
 
         var imported = await _sessionImport.ImportSessionAsync(importRequest, cancellationToken);

@@ -80,10 +80,43 @@ public sealed record PodiumPredictionRiderDto(
     [property: JsonPropertyName("currentSeasonRating")] decimal? CurrentSeasonRating,
     [property: JsonPropertyName("lastTrackPace")] decimal? LastTrackPace,
     [property: JsonPropertyName("previousSeasonRating")] decimal? PreviousSeasonRating,
-    [property: JsonPropertyName("confidence")] decimal Confidence);
+    [property: JsonPropertyName("confidence")] decimal Confidence)
+{
+    [JsonPropertyName("winProbability")]
+    public decimal WinProbability { get; init; }
+
+    [JsonPropertyName("top5Probability")]
+    public decimal Top5Probability { get; init; }
+
+    [JsonPropertyName("expectedPosition")]
+    public decimal ExpectedPosition { get; init; }
+
+    [JsonPropertyName("expectedPerformance")]
+    public decimal ExpectedPerformance { get; init; }
+
+    [JsonPropertyName("performanceUncertainty")]
+    public decimal PerformanceUncertainty { get; init; }
+
+    [JsonPropertyName("incidentProbability")]
+    public decimal IncidentProbability { get; init; }
+
+    [JsonPropertyName("context")]
+    public PodiumPredictionContextDto Context { get; init; } = new(0, 0, 0, 0, 0);
+}
+
+public sealed record PodiumPredictionContextDto(
+    [property: JsonPropertyName("trackAffinity")] decimal TrackAffinity,
+    [property: JsonPropertyName("conditionsAffinity")] decimal ConditionsAffinity,
+    [property: JsonPropertyName("recentForm")] decimal RecentForm,
+    [property: JsonPropertyName("pressure")] decimal Pressure,
+    [property: JsonPropertyName("pressureResponse")] decimal PressureResponse);
 
 public sealed record PodiumPredictionResponseDto(
     [property: JsonPropertyName("season")] int Season,
     [property: JsonPropertyName("category")] string Category,
     [property: JsonPropertyName("round")] SeasonSummaryRoundDto? Round,
-    [property: JsonPropertyName("items")] IReadOnlyList<PodiumPredictionRiderDto> Items);
+    [property: JsonPropertyName("items")] IReadOnlyList<PodiumPredictionRiderDto> Items)
+{
+    [JsonPropertyName("modelVersion")]
+    public string ModelVersion { get; init; } = "ridge-monte-carlo-v1";
+}

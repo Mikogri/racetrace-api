@@ -6,20 +6,28 @@ namespace UCI_Stats_API.Services;
 
 public sealed class PodiumPredictorService
 {
+    private const string PredictionRoundSelect =
+        "id,context_name,season_year,round_number,track_id,start_date,end_date,competition_level_id," +
+        "conditions(name,is_dry),tracks(id,name,venue,country_code,length_m,avg_slope)," +
+        "competition_levels(id,code,name,priority)";
+
+    private const string PredictionResultSelect =
+        "id,rider_id,session_id,race_time_ms,top_speed,position,is_classified,status," +
+        "riders(*),teams(*),result_points(points_awarded)," +
+        "sessions(id,round_id,category_id,name,session_type,session_date,conditions(name,is_dry)," +
+        "round_categories(round_id,category_id," +
+        "rounds(id,track_id,competition_level_id,is_season_final_round,season_year,start_date," +
+        "conditions(name,is_dry),competition_levels(id,code,name,priority)),categories(id,code)))";
     private const int ResultSize = 10;
     private const int ProbabilityFieldSize = 30;
     private const decimal MinimumCandidateConfidence = 35m;
-    private const decimal CurrentSeasonRatingWeight = 0.40m;
-    private const decimal TrackPaceWeight = 0.40m;
-    private const decimal PreviousSeasonRatingWeight = 0.20m;
-    private const decimal ConfidencePenaltyPerMissingPoint = 0.12m;
-    private const double ProbabilityTemperature = 4.5;
 
     private readonly ISupabaseRestClient _supabase;
     private readonly DomainQueryService _domainQueries;
     private readonly MetricsService _metrics;
     private readonly SeasonSummaryService _seasonSummary;
     private readonly TimeProvider _timeProvider;
+    private readonly PodiumPredictionOptions _options = new();
 
     public PodiumPredictorService(
         ISupabaseRestClient supabase,
@@ -41,7 +49,19 @@ public sealed class PodiumPredictorService
     {
         var season = _seasonSummary.ReadSeason(queryString);
         var (publicCategory, categoryCode) = _seasonSummary.ReadCategory(queryString);
-        var nextRound = await LoadNextRoundAsync(season, cancellationToken);
+        if (IsJuniorCategory(categoryCode))
+        {
+            return new PodiumPredictionResponseDto(
+                season,
+                publicCategory,
+                null,
+                []);
+        }
+
+        var nextRound = await LoadTargetRoundAsync(
+            season,
+            queryString["roundId"].FirstOrDefault(),
+            cancellationToken);
         if (nextRound is null)
         {
             return new PodiumPredictionResponseDto(
@@ -63,8 +83,9 @@ public sealed class PodiumPredictorService
                 []);
         }
 
+        var historyCutoff = nextRoundDate.Value.AddDays(-1);
         var currentTask = LoadMetricsAsync(
-            SeasonContext(season, categoryCode),
+            SeasonContext(season, categoryCode) with { ToDate = historyCutoff },
             cancellationToken);
         var previousTask = LoadMetricsAsync(
             SeasonContext(season - 1, categoryCode),
@@ -75,59 +96,99 @@ public sealed class PodiumPredictorService
             trackId,
             nextRoundDate.Value,
             cancellationToken);
-        await Task.WhenAll(currentTask, previousTask, trackTask);
+        var weekendTask = LoadWeekendMetricsAsync(
+            nextRound.String("id")!,
+            categoryCode,
+            cancellationToken);
+        await Task.WhenAll(currentTask, previousTask, trackTask, weekendTask);
         var current = await currentTask;
         var previous = await previousTask;
         var track = await trackTask;
-        var candidates = BuildCandidates(current, previous, track)
-            .OrderByDescending(candidate => candidate.Score)
-            .ThenByDescending(candidate => candidate.Confidence)
-            .ThenBy(candidate => candidate.RiderId, StringComparer.OrdinalIgnoreCase)
+        var weekend = await weekendTask;
+        var historicalResults = current.Results.Concat(previous.Results).ToArray();
+        var isWorldChampionship = IsWorldChampionship(nextRound);
+        var targetCondition = TargetCondition(nextRound, weekend.Results);
+        var roundsRemaining = await CountRemainingRoundsAsync(
+            season,
+            nextRoundDate.Value,
+            cancellationToken);
+        var featureBuilder = new PodiumPredictionFeatureBuilder(_options);
+        var features = current.Metrics
+            .Where(pair => pair.Value.PaceConfidence >= MinimumCandidateConfidence)
+            .Select(pair =>
+            {
+                previous.Metrics.TryGetValue(pair.Key, out var previousMetric);
+                track.Metrics.TryGetValue(pair.Key, out var trackMetric);
+                var rider = FindLatestIdentity(pair.Key, current.Results)?.Object("riders");
+                var wasJunior = RiderCategoryResolver.WasJuniorInSeason(
+                    PublicDtoMapping.Date(rider?.String("birth_date")),
+                    season - 1);
+                return featureBuilder.Build(
+                    pair.Key,
+                    pair.Value,
+                    wasJunior ? null : previousMetric,
+                    wasJunior ? null : trackMetric,
+                    historicalResults,
+                    weekend.Results,
+                    targetCondition,
+                    isWorldChampionship,
+                    roundsRemaining,
+                    season - 1);
+            })
+            .OrderByDescending(feature => feature.Rating)
+            .ThenByDescending(feature => feature.Confidence)
             .Take(ProbabilityFieldSize)
             .ToArray();
-        var probabilities = CalculatePodiumProbabilities(
-            candidates.Select(candidate => (double)candidate.Score).ToArray());
+        var distributions = new PodiumPredictionCalibration(_options)
+            .Calculate(features, isWorldChampionship);
+        var simulations = new MonteCarloRaceSimulator(_options).Simulate(distributions);
 
-        var items = candidates
+        var items = distributions
             .Select((candidate, index) => new
             {
                 Candidate = candidate,
-                Probability = probabilities[index]
+                Simulation = simulations[index]
             })
-            .OrderByDescending(value => value.Probability)
-            .ThenByDescending(value => value.Candidate.Score)
+            .OrderByDescending(value => value.Simulation.PodiumProbability)
+            .ThenByDescending(value => value.Candidate.ExpectedPerformance)
             .Take(ResultSize)
             .Select((value, index) =>
             {
                 var identity = FindLatestIdentity(
-                    value.Candidate.RiderId,
+                    value.Candidate.Features.RiderId,
                     current.Results,
+                    weekend.Results,
                     track.Results,
                     previous.Results);
                 var rider = identity?.Object("riders") ?? new JsonObject();
                 var team = identity?.Object("teams");
                 return new PodiumPredictionRiderDto(
                     index + 1,
-                    PublicDtoMapping.Long(value.Candidate.RiderId),
+                    PublicDtoMapping.Long(value.Candidate.Features.RiderId),
                     rider.DisplayName(),
                     rider.String("nation"),
                     PublicDtoMapping.NullableLong(team?.String("id")),
                     team?.String("name"),
-                    Math.Round(
-                        (decimal)(100d * value.Probability),
-                        2,
-                        MidpointRounding.AwayFromZero),
-                    Math.Round(
-                        value.Candidate.Score,
-                        2,
-                        MidpointRounding.AwayFromZero),
-                    value.Candidate.CurrentRating,
-                    value.Candidate.TrackPace,
-                    value.Candidate.PreviousRating,
-                    Math.Round(
-                        value.Candidate.Confidence,
-                        2,
-                        MidpointRounding.AwayFromZero));
+                    Percent(value.Simulation.PodiumProbability),
+                    Rounded(value.Candidate.ExpectedPerformance),
+                    value.Candidate.Features.CurrentRating,
+                    value.Candidate.Features.TrackPace,
+                    value.Candidate.Features.PreviousRating,
+                    Rounded(value.Candidate.Features.Confidence))
+                {
+                    WinProbability = Percent(value.Simulation.WinProbability),
+                    Top5Probability = Percent(value.Simulation.Top5Probability),
+                    ExpectedPosition = Rounded(value.Simulation.ExpectedPosition),
+                    ExpectedPerformance = Rounded(value.Candidate.ExpectedPerformance),
+                    PerformanceUncertainty = Rounded(value.Candidate.PerformanceUncertainty),
+                    IncidentProbability = Percent(value.Candidate.IncidentProbability),
+                    Context = new PodiumPredictionContextDto(
+                        Rounded(value.Candidate.Features.TrackAffinity),
+                        Rounded(value.Candidate.Features.ConditionsAffinity),
+                        Rounded(value.Candidate.Features.RecentForm),
+                        Rounded(value.Candidate.Features.TitleLeverage),
+                        Rounded(value.Candidate.Features.PressureResponse))
+                };
             })
             .ToArray();
 
@@ -135,100 +196,17 @@ public sealed class PodiumPredictorService
             season,
             publicCategory,
             SeasonSummaryService.ToRoundDto(nextRound, _timeProvider.GetUtcNow()),
-            items);
+            items)
+        {
+            ModelVersion = _options.ModelVersion
+        };
     }
 
-    internal static IReadOnlyList<double> CalculatePodiumProbabilities(
-        IReadOnlyList<double> scores)
-    {
-        if (scores.Count == 0)
-        {
-            return [];
-        }
+    private static decimal Rounded(double value) =>
+        Math.Round((decimal)value, 2, MidpointRounding.AwayFromZero);
 
-        if (scores.Count <= 3)
-        {
-            return Enumerable.Repeat(1d, scores.Count).ToArray();
-        }
-
-        var maximum = scores.Max();
-        var strengths = scores
-            .Select(score => Math.Exp((score - maximum) / ProbabilityTemperature))
-            .ToArray();
-        var total = strengths.Sum();
-        var probabilities = new double[strengths.Length];
-
-        for (var rider = 0; rider < strengths.Length; rider++)
-        {
-            var riderStrength = strengths[rider];
-            var probability = riderStrength / total;
-            for (var first = 0; first < strengths.Length; first++)
-            {
-                if (first == rider)
-                {
-                    continue;
-                }
-
-                var afterFirst = total - strengths[first];
-                probability +=
-                    strengths[first] / total *
-                    riderStrength / afterFirst;
-
-                for (var second = 0; second < strengths.Length; second++)
-                {
-                    if (second == rider || second == first)
-                    {
-                        continue;
-                    }
-
-                    var afterSecond = afterFirst - strengths[second];
-                    probability +=
-                        strengths[first] / total *
-                        strengths[second] / afterFirst *
-                        riderStrength / afterSecond;
-                }
-            }
-
-            probabilities[rider] = Math.Clamp(probability, 0d, 1d);
-        }
-
-        return probabilities;
-    }
-
-    internal static decimal WeightedPredictionScore(
-        decimal? currentRating,
-        decimal? trackPace,
-        decimal? previousRating)
-    {
-        decimal weighted = 0m;
-        decimal weights = 0m;
-        Add(currentRating, CurrentSeasonRatingWeight);
-        Add(trackPace, TrackPaceWeight);
-        Add(previousRating, PreviousSeasonRatingWeight);
-        return weights == 0m ? 0m : weighted / weights;
-
-        void Add(decimal? value, decimal weight)
-        {
-            if (value is null)
-            {
-                return;
-            }
-
-            weighted += value.Value * weight;
-            weights += weight;
-        }
-    }
-
-    internal static decimal ConfidenceAdjustedScore(
-        decimal pace,
-        decimal confidence)
-    {
-        return Math.Clamp(
-            pace - ((100m - Math.Clamp(confidence, 0m, 100m)) *
-                ConfidencePenaltyPerMissingPoint),
-            0m,
-            100m);
-    }
+    private static decimal Percent(double probability) =>
+        Rounded(100 * probability);
 
     internal static IReadOnlyList<int> RecentTrackSeasons(int season)
     {
@@ -238,6 +216,10 @@ public sealed class PodiumPredictorService
             season - firstSeason + 1).ToArray();
     }
 
+    internal static bool IsJuniorCategory(string categoryCode) =>
+        string.Equals(categoryCode, "JM", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(categoryCode, "JW", StringComparison.OrdinalIgnoreCase);
+
     private async Task<JsonObject?> LoadNextRoundAsync(
         int season,
         CancellationToken cancellationToken)
@@ -245,16 +227,45 @@ public sealed class PodiumPredictorService
         var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
         var response = await _supabase.GetAsync(
             new SupabaseQuery("rounds")
-                .Select(
-                    "id,context_name,season_year,round_number,track_id,start_date,end_date,competition_level_id," +
-                    "tracks(id,name,venue,country_code,length_m,avg_slope)," +
-                    "competition_levels(id,code,name,priority)")
+                .Select(PredictionRoundSelect)
                 .Filter("season_year", "eq", season)
-                .Filter("start_date", "gte", today)
+                .Filter("end_date", "gte", today)
                 .Add("order", "start_date.asc.nullslast,id.asc")
                 .Limit(1),
             cancellationToken: cancellationToken);
         var round = response.Data.FirstOrDefault();
+        if (round is not null)
+        {
+            DomainQueryService.NormalizeRoundEmbed(round);
+        }
+
+        return round;
+    }
+
+    private async Task<JsonObject?> LoadTargetRoundAsync(
+        int season,
+        string? roundId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(roundId))
+        {
+            return await LoadNextRoundAsync(season, cancellationToken);
+        }
+
+        if (!long.TryParse(roundId, out var parsedRoundId) || parsedRoundId <= 0)
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "INVALID_QUERY",
+                "roundId must be a positive integer.");
+        }
+
+        var round = await _supabase.GetSingleAsync(
+            new SupabaseQuery("rounds")
+                .Select(PredictionRoundSelect)
+                .Filter("id", "eq", parsedRoundId)
+                .Filter("season_year", "eq", season),
+            cancellationToken: cancellationToken);
         if (round is not null)
         {
             DomainQueryService.NormalizeRoundEmbed(round);
@@ -274,7 +285,7 @@ public sealed class PodiumPredictorService
             context,
             cancellationToken: cancellationToken,
             resolvedSessions: sessions,
-            select: DomainQueryService.RankingResultSelect);
+            select: PredictionResultSelect);
         var metrics = await _metrics.CalculatePerformanceByRiderAsync(
             results,
             context,
@@ -282,6 +293,47 @@ public sealed class PodiumPredictorService
             resultsContainFullField: true,
             availableSessions: sessions);
         return new MetricDataset(results, metrics);
+    }
+
+    private async Task<MetricDataset> LoadWeekendMetricsAsync(
+        string roundId,
+        string categoryCode,
+        CancellationToken cancellationToken)
+    {
+        var context = new RiderMetricsContext(
+            null,
+            categoryCode,
+            null,
+            null,
+            roundId,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null)
+        {
+            CategoryCodes = [categoryCode]
+        };
+        var sessions = await _domainQueries.GetMatchingSessionsAsync(
+            context,
+            cancellationToken: cancellationToken);
+        var preFinalSessions = sessions
+            .Where(session => PaceService.ParseSessionType(
+                session.String("session_type"),
+                session.String("name")) != PaceSessionType.Final)
+            .ToArray();
+        if (preFinalSessions.Length == 0)
+        {
+            return new MetricDataset([], new Dictionary<string, RiderPerformanceMetricValues>());
+        }
+
+        var results = await _domainQueries.GetMatchingResultsAsync(
+            context,
+            cancellationToken: cancellationToken,
+            resolvedSessions: preFinalSessions,
+            select: PredictionResultSelect);
+        return new MetricDataset(results, new Dictionary<string, RiderPerformanceMetricValues>());
     }
 
     private async Task<MetricDataset> LoadRecentTrackMetricsAsync(
@@ -316,7 +368,7 @@ public sealed class PodiumPredictorService
             context,
             cancellationToken: cancellationToken,
             resolvedSessions: sessions,
-            select: DomainQueryService.RankingResultSelect);
+            select: PredictionResultSelect);
         var latestRoundByRider = results
             .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")))
             .GroupBy(
@@ -387,53 +439,46 @@ public sealed class PodiumPredictorService
         return new MetricDataset(selectedResults, metrics);
     }
 
-    private static IReadOnlyList<PredictionCandidate> BuildCandidates(
-        MetricDataset current,
-        MetricDataset previous,
-        MetricDataset track)
+    private async Task<int> CountRemainingRoundsAsync(
+        int season,
+        DateOnly fromDate,
+        CancellationToken cancellationToken)
     {
-        var riderIds = current.Metrics.Keys
-            .Concat(previous.Metrics.Keys)
-            .Concat(track.Metrics.Keys)
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-        var candidates = new List<PredictionCandidate>();
-        foreach (var riderId in riderIds)
-        {
-            current.Metrics.TryGetValue(riderId, out var currentMetric);
-            previous.Metrics.TryGetValue(riderId, out var previousMetric);
-            track.Metrics.TryGetValue(riderId, out var trackMetric);
-            var currentRating = currentMetric?.Rating;
-            var previousRating = previousMetric?.Rating;
-            var trackPace = trackMetric?.Pace;
-            if (currentRating is null && previousRating is null && trackPace is null)
-            {
-                continue;
-            }
+        var response = await _supabase.GetAsync(
+            new SupabaseQuery("rounds")
+                .Select("id")
+                .Filter("season_year", "eq", season)
+                .Filter("start_date", "gte", fromDate),
+            cancellationToken: cancellationToken);
+        return Math.Max(1, response.Data.Count);
+    }
 
-            var confidence = currentMetric is not null
-                ? currentMetric.PaceConfidence
-                : Math.Max(
-                    (previousMetric?.PaceConfidence ?? 0m) * 0.85m,
-                    (trackMetric?.PaceConfidence ?? 0m) * 0.80m);
-            if (confidence < MinimumCandidateConfidence)
-            {
-                continue;
-            }
+    private static bool IsWorldChampionship(JsonObject round)
+    {
+        var code = round.Object("competition_levels")?.String("code") ??
+            round.Object("competition_class")?.String("code");
+        return code is not null &&
+            (code.Contains("champ", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(code, "WCH", StringComparison.OrdinalIgnoreCase));
+    }
 
-            var predictionScore = WeightedPredictionScore(
-                currentRating,
-                trackPace,
-                previousRating);
-            candidates.Add(new PredictionCandidate(
-                riderId,
-                currentRating,
-                trackPace,
-                previousRating,
-                confidence,
-                ConfidenceAdjustedScore(predictionScore, confidence)));
-        }
-
-        return candidates;
+    private static string? TargetCondition(
+        JsonObject round,
+        IReadOnlyList<JsonObject> weekendResults)
+    {
+        var finalCondition = weekendResults
+            .Select(result => result.Object("sessions"))
+            .Where(session => session is not null &&
+                PaceService.ParseSessionType(
+                    session.String("session_type"),
+                    session.String("name")) == PaceSessionType.Final)
+            .Select(session => session!.Object("conditions")?.String("name"))
+            .FirstOrDefault(code => !string.IsNullOrWhiteSpace(code));
+        return finalCondition ??
+            weekendResults.Select(result =>
+                    result.Object("sessions")?.Object("conditions")?.String("name"))
+                .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ??
+            round.Object("conditions")?.String("name");
     }
 
     private static JsonObject? FindLatestIdentity(
@@ -496,11 +541,4 @@ public sealed class PodiumPredictorService
         IReadOnlyList<JsonObject> Results,
         IReadOnlyDictionary<string, RiderPerformanceMetricValues> Metrics);
 
-    private sealed record PredictionCandidate(
-        string RiderId,
-        decimal? CurrentRating,
-        decimal? TrackPace,
-        decimal? PreviousRating,
-        decimal Confidence,
-        decimal Score);
 }

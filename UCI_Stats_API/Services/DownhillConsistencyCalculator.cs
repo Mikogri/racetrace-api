@@ -10,7 +10,8 @@ internal sealed record ConsistencyRunInput(
     bool IsClassified = false,
     int? CompetitionClassPriority = null,
     double? ProjectedFinishPositionScore = null,
-    string? Status = null);
+    string? Status = null,
+    bool HasIncident = false);
 
 internal sealed record ConsistencySectorTimeInput(
     string SectorKey,
@@ -30,7 +31,16 @@ internal sealed record RiderConsistencyResult(
     double Confidence,
     int UsedRuns,
     int UsedSectors,
-    IReadOnlyList<SectorConsistencyResult> Sectors);
+    IReadOnlyList<SectorConsistencyResult> Sectors)
+{
+    public double? IncidentReliability { get; init; }
+
+    public double? FinalQualification { get; init; }
+
+    public double? QualificationQuality { get; init; }
+
+    public double? PositionRepeatability { get; init; }
+}
 
 internal sealed record ConsistencyOutlierProfile(
     IReadOnlySet<int> SectorIndexes,
@@ -42,21 +52,44 @@ internal sealed class ConsistencyOptions
 
     public double ConfidenceComparisonScale { get; init; } = 20.0;
 
-    // Final session results are the primary source of Consistency.
-    public double FinishPositionWeight { get; init; } = 0.90;
+    // Reliability is the primary signal: frequent incidents must dominate the score.
+    public double IncidentReliabilityWeight { get; init; } = 0.40;
 
-    // Sector-time repeatability remains a small supporting signal.
-    public double SectorConsistencyWeight { get; init; } = 0.10;
+    // Reaching the final is the second-strongest measure of sporting reliability.
+    public double FinalQualificationWeight { get; init; } = 0.35;
 
-    public int MaximumProtectedOutlierSectors { get; init; } = 4;
+    // Direct Q1 qualification is preferred, while advancing through Q2 remains positive.
+    public double QualificationQualityWeight { get; init; } = 0.05;
 
-    public double OneOutlierMaximumLoss { get; init; } = 3.0;
+    // This component measures only position variation, not whether the position was good.
+    public double PositionRepeatabilityWeight { get; init; } = 0.20;
 
-    public double TwoOutliersMaximumLoss { get; init; } = 8.0;
+    // Higher values make each incident reduce Incident Reliability more aggressively.
+    public double IncidentRateExponent { get; init; } = 1.20;
 
-    public double ThreeOutliersMaximumLoss { get; init; } = 12.0;
+    // Prevents one incident in a short sample from collapsing reliability to zero.
+    // As evidence grows, the observed incident rate increasingly drives the score.
+    public double IncidentToleranceRuns { get; init; } = 2.0;
 
-    public double FourOutliersMaximumLoss { get; init; } = 20.0;
+    // Repeated incidents are increasingly meaningful. The first incident is
+    // protected by sample tolerance; this penalty starts with the second one.
+    public double RepeatedIncidentPenalty { get; init; } = 5.0;
+
+    public double RepeatedIncidentPenaltyExponent { get; init; } = 1.30;
+
+    // Score assigned to an event where the rider reached the final through Q2.
+    public double Q2QualificationScore { get; init; } = 75.0;
+
+    // Final incidents drive sporting reliability; incidents in earlier sessions
+    // remain supporting evidence but cannot dilute repeated final crashes.
+    public double FinalIncidentReliabilityShare { get; init; } = 0.85;
+
+    // Robust normalized-position deviation that produces 50 Position Repeatability.
+    public double PositionVariationAtHalfScore { get; init; } = 0.12;
+
+    // Keeps the position signal resistant to one extreme result without hiding
+    // repeatable smaller changes around the rider's typical position.
+    public double RobustPositionDeviationWeight { get; init; } = 0.70;
 
     public double OutlierReferenceQuantile { get; init; } = 0.75;
 
@@ -68,10 +101,14 @@ internal sealed class ConsistencyOptions
 internal sealed class DownhillConsistencyCalculator
 {
     private readonly ConsistencyOptions _options;
+    private readonly SessionWeightOptions _sessionWeights;
 
-    public DownhillConsistencyCalculator(ConsistencyOptions? options = null)
+    public DownhillConsistencyCalculator(
+        ConsistencyOptions? options = null,
+        SessionWeightOptions? sessionWeights = null)
     {
         _options = options ?? new ConsistencyOptions();
+        _sessionWeights = sessionWeights ?? new SessionWeightOptions();
         if (_options.VariationAtHalfScore <= 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -79,26 +116,33 @@ internal sealed class DownhillConsistencyCalculator
                 "VariationAtHalfScore must be greater than zero.");
         }
 
-        if (_options.FinishPositionWeight < 0 ||
-            _options.SectorConsistencyWeight < 0 ||
+        if (_options.IncidentReliabilityWeight < 0 ||
+            _options.FinalQualificationWeight < 0 ||
+            _options.QualificationQualityWeight < 0 ||
+            _options.PositionRepeatabilityWeight < 0 ||
             Math.Abs(
-                _options.FinishPositionWeight +
-                _options.SectorConsistencyWeight - 1.0) > 0.000001)
+                _options.IncidentReliabilityWeight +
+                _options.FinalQualificationWeight +
+                _options.QualificationQualityWeight +
+                _options.PositionRepeatabilityWeight - 1.0) > 0.000001)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "Consistency component weights must be non-negative and sum to 1.");
         }
 
-        if (_options.MaximumProtectedOutlierSectors < 0 ||
-            _options.OneOutlierMaximumLoss < 0 ||
-            _options.TwoOutliersMaximumLoss < _options.OneOutlierMaximumLoss ||
-            _options.ThreeOutliersMaximumLoss < _options.TwoOutliersMaximumLoss ||
-            _options.FourOutliersMaximumLoss < _options.ThreeOutliersMaximumLoss)
+        if (_options.IncidentRateExponent <= 0 ||
+            _options.IncidentToleranceRuns < 0 ||
+            _options.RepeatedIncidentPenalty < 0 ||
+            _options.RepeatedIncidentPenaltyExponent <= 0 ||
+            _options.Q2QualificationScore is < 0 or > 100 ||
+            _options.FinalIncidentReliabilityShare is < 0 or > 1 ||
+            _options.PositionVariationAtHalfScore <= 0 ||
+            _options.RobustPositionDeviationWeight is < 0 or > 1)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
-                "Consistency outlier protection limits are outside their valid ranges.");
+                "Consistency reliability calibration is outside its valid range.");
         }
 
         if (_options.OutlierReferenceQuantile is <= 0 or > 1 ||
@@ -167,10 +211,11 @@ internal sealed class DownhillConsistencyCalculator
         IReadOnlyList<ConsistencyRunInput> runs,
         CompetitionClassWeighting? competitionClassWeighting = null)
     {
-        var relevantRuns = runs
-            .Where(run =>
-                GetConsistencySessionWeight(run.SessionType) > 0 &&
-                !string.Equals(run.Status, "DNS", StringComparison.OrdinalIgnoreCase))
+        var officialRuns = runs
+            .Where(run => _sessionWeights.GetWeight(run.SessionType) > 0)
+            .ToArray();
+        var relevantRuns = officialRuns
+            .Where(run => !IsIgnoredSportingStatus(run.Status))
             .ToArray();
 
         if (relevantRuns.Length < 2)
@@ -179,7 +224,6 @@ internal sealed class DownhillConsistencyCalculator
         }
 
         var sectorResults = new List<SectorConsistencyResult>();
-        var protectedSectorScores = new List<double>();
         var totalComparisonOpportunities = 0;
 
         foreach (var courseGroup in relevantRuns.GroupBy(
@@ -210,9 +254,7 @@ internal sealed class DownhillConsistencyCalculator
                                 StringComparison.OrdinalIgnoreCase));
                         return new SectorAttempt(
                             run.RunId,
-                            GetConsistencySessionWeight(run.SessionType) *
-                                (competitionClassWeighting?.GetWeight(
-                                    run.CompetitionClassPriority) ?? 1.0),
+                            _sessionWeights.GetWeight(run.SessionType),
                             sector?.TimeSeconds,
                             sector?.IsOutlier == true);
                     })
@@ -255,190 +297,183 @@ internal sealed class DownhillConsistencyCalculator
                     relativeVariation,
                     attempts.Length,
                     weightedTimes.Length));
-                protectedSectorScores.Add(CalculateProtectedSectorScore(
-                    attempts,
-                    completionRate,
-                    rawSectorScore));
 
                 totalComparisonOpportunities +=
                     attempts.Length * (attempts.Length - 1) / 2;
             }
         }
 
-        var sectorConsistency = sectorResults.Count == 0
-            ? (double?)null
-            : sectorResults.Average(sector => sector.Consistency);
-        var protectedSectorConsistency = protectedSectorScores.Count == 0
-            ? (double?)null
-            : protectedSectorScores.Average();
-        var finishPositionScore = CalculateFinishPositionScore(
-            relevantRuns,
-            competitionClassWeighting,
-            useProjectedScore: false);
-        var protectedFinishPositionScore = CalculateFinishPositionScore(
-            relevantRuns,
-            competitionClassWeighting,
-            useProjectedScore: true);
-        var rawConsistency = BlendConsistency(
-            finishPositionScore,
-            sectorConsistency);
-        var protectedConsistency = BlendConsistency(
-            protectedFinishPositionScore,
-            protectedSectorConsistency);
-        var outlierSectorCount = relevantRuns.Sum(run =>
-            run.Sectors.Count(sector => sector.IsOutlier));
-        var consistency = ApplyOutlierProtection(
-            rawConsistency,
-            protectedConsistency,
-            outlierSectorCount);
-
-        if (!consistency.HasValue)
-        {
-            return new RiderConsistencyResult(
-                Consistency: null,
-                Confidence: 0,
-                UsedRuns: relevantRuns.Length,
-                UsedSectors: 0,
-                Sectors: []);
-        }
+        var eventGroups = officialRuns
+            .GroupBy(run => run.CourseKey, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Any(run => !IsIgnoredSportingStatus(run.Status)))
+            .Select(group => group.ToArray())
+            .ToArray();
+        var incidentReliability = CalculateIncidentReliability(relevantRuns);
+        var finalQualification = CalculateFinalQualification(eventGroups);
+        var qualificationQuality = CalculateQualificationQuality(eventGroups);
+        var positionRepeatability = CalculatePositionRepeatability(relevantRuns);
+        var consistency =
+            _options.IncidentReliabilityWeight * incidentReliability +
+            _options.FinalQualificationWeight * finalQualification +
+            _options.QualificationQualityWeight * qualificationQuality +
+            _options.PositionRepeatabilityWeight * positionRepeatability;
 
         var confidence = 1.0 - Math.Exp(
-            -totalComparisonOpportunities /
+            -(totalComparisonOpportunities + relevantRuns.Length + eventGroups.Length) /
             _options.ConfidenceComparisonScale);
 
         return new RiderConsistencyResult(
-            Consistency: Clamp(consistency.Value, 0, 100),
+            Consistency: Clamp(consistency, 0, 100),
             Confidence: Clamp(confidence, 0, 1),
             UsedRuns: relevantRuns.Length,
             UsedSectors: sectorResults.Count,
-            Sectors: sectorResults);
-    }
-
-    private double? CalculateFinishPositionScore(
-        IReadOnlyCollection<ConsistencyRunInput> runs,
-        CompetitionClassWeighting? competitionClassWeighting,
-        bool useProjectedScore)
-    {
-        var scores = runs
-            .Where(run => run.FieldSize is > 0)
-            .Select(run => new WeightedFinishPosition(
-                Score: useProjectedScore &&
-                    run.Sectors.Any(sector => sector.IsOutlier) &&
-                    run.ProjectedFinishPositionScore.HasValue
-                        ? Clamp(run.ProjectedFinishPositionScore.Value, 0, 100)
-                        : CalculateRunFinishPositionScore(run),
-                Weight: GetConsistencySessionWeight(run.SessionType) *
-                    (competitionClassWeighting?.GetWeight(
-                        run.CompetitionClassPriority) ?? 1.0)))
-            .Where(result => result.Weight > 0)
-            .ToArray();
-
-        if (scores.Length == 0)
+            Sectors: sectorResults)
         {
-            return null;
-        }
-
-        var weightSum = scores.Sum(result => result.Weight);
-        return scores.Sum(result => result.Score * result.Weight) / weightSum;
-    }
-
-    private double CalculateProtectedSectorScore(
-        IReadOnlyCollection<SectorAttempt> attempts,
-        double completionRate,
-        double rawSectorScore)
-    {
-        var cleanTimes = attempts
-            .Where(attempt =>
-                !attempt.IsOutlier &&
-                attempt.TimeSeconds.HasValue &&
-                IsValidTime(attempt.TimeSeconds.Value))
-            .Select(attempt => new WeightedTime(
-                attempt.TimeSeconds!.Value,
-                attempt.Weight))
-            .ToArray();
-        if (cleanTimes.Length == 0 ||
-            !attempts.Any(attempt => attempt.IsOutlier))
-        {
-            return rawSectorScore;
-        }
-
-        var replacementTime = WeightedGeometricMean(cleanTimes);
-        var protectedTimes = attempts
-            .Where(attempt =>
-                attempt.TimeSeconds.HasValue &&
-                IsValidTime(attempt.TimeSeconds.Value))
-            .Select(attempt => new WeightedTime(
-                attempt.IsOutlier
-                    ? replacementTime
-                    : attempt.TimeSeconds!.Value,
-                attempt.Weight))
-            .ToArray();
-        var relativeVariation = CalculateWeightedRelativeVariation(protectedTimes);
-        return Clamp(
-            VariationToScore(relativeVariation) * completionRate,
-            0,
-            100);
-    }
-
-    private double? ApplyOutlierProtection(
-        double? rawConsistency,
-        double? protectedConsistency,
-        int outlierSectorCount)
-    {
-        if (!rawConsistency.HasValue ||
-            !protectedConsistency.HasValue ||
-            outlierSectorCount <= 0 ||
-            outlierSectorCount > _options.MaximumProtectedOutlierSectors ||
-            rawConsistency.Value >= protectedConsistency.Value)
-        {
-            return rawConsistency;
-        }
-
-        var maximumLoss = outlierSectorCount switch
-        {
-            1 => _options.OneOutlierMaximumLoss,
-            2 => _options.TwoOutliersMaximumLoss,
-            3 => _options.ThreeOutliersMaximumLoss,
-            _ => _options.FourOutliersMaximumLoss
+            IncidentReliability = incidentReliability,
+            FinalQualification = finalQualification,
+            QualificationQuality = qualificationQuality,
+            PositionRepeatability = positionRepeatability
         };
-        return Math.Max(
-            rawConsistency.Value,
-            protectedConsistency.Value - maximumLoss);
     }
 
-    private static double CalculateRunFinishPositionScore(
-        ConsistencyRunInput run)
+    private double CalculateIncidentReliability(
+        IReadOnlyCollection<ConsistencyRunInput> runs)
     {
-        if (!run.IsClassified ||
-            run.FinishRank is not { } rank ||
-            run.FieldSize is not { } fieldSize ||
-            rank < 1 ||
-            rank > fieldSize)
+        if (runs.Count == 0)
         {
             return 0;
         }
 
-        if (fieldSize == 1)
+        var allRunReliability = IncidentReliabilityScore(runs);
+        var finalRuns = runs
+            .Where(run => run.SessionType == PaceSessionType.Final)
+            .ToArray();
+        if (finalRuns.Length == 0)
         {
-            return rank == 1 ? 100 : 0;
+            return allRunReliability;
         }
 
-        return 100.0 * (fieldSize - rank) / (fieldSize - 1);
+        var finalReliability = IncidentReliabilityScore(finalRuns);
+        return
+            _options.FinalIncidentReliabilityShare * finalReliability +
+            (1.0 - _options.FinalIncidentReliabilityShare) * allRunReliability;
     }
 
-    private double? BlendConsistency(
-        double? finishPositionScore,
-        double? sectorConsistency)
+    private double IncidentReliabilityScore(
+        IReadOnlyCollection<ConsistencyRunInput> runs)
     {
-        if (finishPositionScore.HasValue && sectorConsistency.HasValue)
+        var incidentCount = runs.Count(IsIncidentRun);
+        var cleanRate = 1.0 - incidentCount /
+            (runs.Count + _options.IncidentToleranceRuns);
+        var baseReliability = 100.0 * Math.Pow(
+            Clamp(cleanRate, 0, 1),
+            _options.IncidentRateExponent);
+        var repeatedIncidentPenalty = incidentCount <= 1
+            ? 0
+            : _options.RepeatedIncidentPenalty * Math.Pow(
+                incidentCount - 1,
+                _options.RepeatedIncidentPenaltyExponent);
+        return Clamp(baseReliability - repeatedIncidentPenalty, 0, 100);
+    }
+
+    private static bool IsIncidentRun(ConsistencyRunInput run) =>
+        string.Equals(run.Status, "DNF", StringComparison.OrdinalIgnoreCase) ||
+        run.HasIncident;
+
+    private static double CalculateFinalQualification(
+        IReadOnlyCollection<ConsistencyRunInput[]> events)
+    {
+        if (events.Count == 0)
         {
-            return
-                _options.FinishPositionWeight * finishPositionScore.Value +
-                _options.SectorConsistencyWeight * sectorConsistency.Value;
+            return 0;
         }
 
-        return finishPositionScore ?? sectorConsistency;
+        var qualified = events.Count(runs =>
+            runs.Any(run => run.SessionType == PaceSessionType.Final));
+        return 100.0 * qualified / events.Count;
     }
+
+    private double CalculateQualificationQuality(
+        IReadOnlyCollection<ConsistencyRunInput[]> events)
+    {
+        if (events.Count == 0)
+        {
+            return 0;
+        }
+
+        return events.Average(runs =>
+        {
+            if (!runs.Any(run => run.SessionType == PaceSessionType.Final))
+            {
+                return 0;
+            }
+
+            return runs.Any(run =>
+                run.SessionType == PaceSessionType.Qualifying2 &&
+                !IsIgnoredSportingStatus(run.Status))
+                    ? _options.Q2QualificationScore
+                    : 100.0;
+        });
+    }
+
+    private double CalculatePositionRepeatability(
+        IReadOnlyCollection<ConsistencyRunInput> runs)
+    {
+        var positions = runs
+            .Where(run =>
+                run.IsClassified &&
+                run.FinishRank is > 0 &&
+                run.FieldSize is > 0 &&
+                run.FinishRank <= run.FieldSize)
+            .Select(run => new WeightedPosition(
+                run.FieldSize == 1
+                    ? 0
+                    : (run.FinishRank!.Value - 1.0) / (run.FieldSize!.Value - 1.0),
+                _sessionWeights.GetWeight(run.SessionType)))
+            .Where(position => position.Weight > 0)
+            .ToArray();
+        if (positions.Length < 2)
+        {
+            return 50.0;
+        }
+
+        var center = WeightedMedian(positions);
+        var deviations = positions
+            .Select(position => new WeightedPosition(
+                Math.Abs(position.Value - center),
+                position.Weight))
+            .ToArray();
+        var robustDeviation = 1.4826 * WeightedMedian(deviations);
+        var weightSum = deviations.Sum(value => value.Weight);
+        var meanDeviation = deviations.Sum(value => value.Value * value.Weight) / weightSum;
+        var blendedDeviation =
+            _options.RobustPositionDeviationWeight * robustDeviation +
+            (1.0 - _options.RobustPositionDeviationWeight) * meanDeviation;
+        var normalized = blendedDeviation / _options.PositionVariationAtHalfScore;
+        return 100.0 / (1.0 + normalized * normalized);
+    }
+
+    private static double WeightedMedian(
+        IReadOnlyCollection<WeightedPosition> values)
+    {
+        var ordered = values.OrderBy(value => value.Value).ToArray();
+        var halfWeight = ordered.Sum(value => value.Weight) / 2.0;
+        var accumulated = 0.0;
+        foreach (var value in ordered)
+        {
+            accumulated += value.Weight;
+            if (accumulated >= halfWeight)
+            {
+                return value.Value;
+            }
+        }
+
+        return ordered[^1].Value;
+    }
+
+    private static bool IsIgnoredSportingStatus(string? status) =>
+        string.Equals(status, "DNS", StringComparison.OrdinalIgnoreCase) ||
+        DownhillPaceCalculator.IsDisqualified(status);
 
     private static double CalculateWeightedRelativeVariation(
         IReadOnlyCollection<WeightedTime> times)
@@ -471,16 +506,6 @@ internal sealed class DownhillConsistencyCalculator
             }) / weightSum;
 
         return Math.Sqrt(Math.Exp(weightedVariance) - 1.0);
-    }
-
-    private static double WeightedGeometricMean(
-        IReadOnlyCollection<WeightedTime> times)
-    {
-        var weightSum = times.Sum(item => item.Weight);
-        return weightSum <= 0
-            ? times.Average(item => item.TimeSeconds)
-            : Math.Exp(times.Sum(item =>
-                Math.Log(item.TimeSeconds) * item.Weight) / weightSum);
     }
 
     private static double Quantile(
@@ -547,7 +572,8 @@ internal sealed class DownhillConsistencyCalculator
         double TimeSeconds,
         double Weight);
 
-    private sealed record WeightedFinishPosition(
-        double Score,
+    private sealed record WeightedPosition(
+        double Value,
         double Weight);
+
 }

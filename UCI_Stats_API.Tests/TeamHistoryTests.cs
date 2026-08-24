@@ -53,6 +53,30 @@ public sealed class TeamHistoryTests
         Assert.Equal("2026-07-01", aon["last_result_date"]!.GetValue<string>());
     }
 
+    [Fact]
+    public void MissingHistoricalPeriodUsesNearestKnownTeam()
+    {
+        var history = new[]
+        {
+            Period("10", "1", "2021-08-14", "2023-12-31"),
+            Period("10", "2", "2024-01-01", null),
+            Period("20", "3", "2020-01-01", null)
+        };
+
+        Assert.Equal("1", DomainQueryService.FindTeamPeriodOrNearest(
+            history,
+            "10",
+            new DateOnly(2021, 6, 12))?.String("team_id"));
+        Assert.Equal("2", DomainQueryService.FindTeamPeriodOrNearest(
+            history,
+            "10",
+            new DateOnly(2026, 1, 1))?.String("team_id"));
+        Assert.Null(DomainQueryService.FindTeamPeriodOrNearest(
+            history,
+            "30",
+            new DateOnly(2021, 6, 12)));
+    }
+
     private static JsonObject Result(string teamId, string code, string name, string date)
     {
         return new JsonObject

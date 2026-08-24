@@ -28,6 +28,69 @@ public sealed class SeasonSummaryService
         _timeProvider = timeProvider;
     }
 
+    public async Task<SeasonOverviewResponseDto> GetOverviewAsync(
+        int season,
+        CancellationToken cancellationToken)
+    {
+        if (season is < 1990 or > 2100)
+        {
+            throw _validator.BadQuery("season must be between 1990 and 2100.");
+        }
+
+        var rounds = await LoadRoundsAsync(season, cancellationToken);
+        var roundIds = rounds
+            .Select(round => round.String("id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToArray();
+        var sessions = await LoadSessionsAsync(roundIds, cancellationToken);
+        var finalSessionIds = sessions
+            .Where(DomainQueryService.IsFinalSession)
+            .Select(session => session.String("id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var finalWinnersTask = LoadFinalWinnerIdsAsync(finalSessionIds, cancellationToken);
+        var now = _timeProvider.GetUtcNow();
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
+        var nextRound = rounds
+            .Where(round =>
+                string.Equals(RoundsService.RoundStatus(round, now), "upcoming", StringComparison.OrdinalIgnoreCase) &&
+                PublicDtoMapping.Date(round.String("start_date")) is { } startDate &&
+                startDate >= today)
+            .OrderBy(round => PublicDtoMapping.Date(round.String("start_date")))
+            .ThenBy(round => PublicDtoMapping.Long(round.String("id")))
+            .FirstOrDefault();
+        var completedRounds = rounds
+            .Where(round => string.Equals(
+                RoundsService.RoundStatus(round, now),
+                "completed",
+                StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(round => PublicDtoMapping.Date(round.String("start_date")))
+            .ThenByDescending(round => PublicDtoMapping.Long(round.String("id")))
+            .ToArray();
+        var categoriesCount = sessions
+            .Select(session => session.String("category_id"))
+            .Concat(rounds.SelectMany(RoundCategoryIds))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        var finalWinners = await finalWinnersTask;
+
+        return new SeasonOverviewResponseDto(
+            season,
+            nextRound is null ? null : ToRoundDto(nextRound, now),
+            completedRounds.FirstOrDefault() is { } lastRound
+                ? ToRoundDto(lastRound, now)
+                : null,
+            new SeasonProgressDto(
+                rounds.Count,
+                completedRounds.Length,
+                finalWinners.Count,
+                categoriesCount));
+    }
+
     public async Task<SeasonSummaryResponseDto> GetAsync(
         IQueryCollection queryString,
         CancellationToken cancellationToken)

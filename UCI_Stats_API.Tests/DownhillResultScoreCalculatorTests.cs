@@ -69,11 +69,8 @@ public sealed class DownhillResultScoreCalculatorTests
 
         var firstScore = calculator.CalculatePositionScore(rank: 1, fieldSize: 5);
         var lastScore = calculator.CalculatePositionScore(rank: 5, fieldSize: 5);
-        var finalWeight = DownhillPaceCalculator.GetSessionWeight(PaceSessionType.Final);
-        var qualifyingWeight = DownhillPaceCalculator.GetSessionWeight(PaceSessionType.Qualifying);
         Assert.Equal(
-            (finalWeight * firstScore + qualifyingWeight * lastScore)
-            / (finalWeight + qualifyingWeight),
+            0.85 * firstScore + 0.15 * lastScore,
             strongFinal.Score!.Value,
             precision: 10);
     }
@@ -146,6 +143,28 @@ public sealed class DownhillResultScoreCalculatorTests
         Assert.Equal(1, withDns.UsedSessions);
         Assert.True(withDnf.Score < withDns.Score);
         Assert.Equal(2, withDnf.UsedSessions);
+    }
+
+    [Fact]
+    public void DsqIsIgnoredForRiderAndClassifiedPopulation()
+    {
+        var calculator = new DownhillResultScoreCalculator();
+        var baselineSession = new PaceSessionData(
+            PaceSessionType.Final,
+            [Run("winner", 1), Run("target", 2), Run("third", 3)]);
+        var sessionWithDsq = baselineSession with
+        {
+            Runs = baselineSession.Runs.Append(
+                Run("dsq", 1, status: "DSQ")).ToArray()
+        };
+
+        var baseline = calculator.Calculate("target", [baselineSession]);
+        var withDsq = calculator.Calculate("target", [sessionWithDsq]);
+        var disqualifiedRider = calculator.Calculate("dsq", [sessionWithDsq]);
+
+        Assert.Equal(baseline.Score, withDsq.Score);
+        Assert.Null(disqualifiedRider.Score);
+        Assert.Equal(0, disqualifiedRider.UsedSessions);
     }
 
     [Fact]

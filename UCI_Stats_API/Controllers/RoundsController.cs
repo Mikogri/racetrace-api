@@ -49,7 +49,12 @@ public sealed class RoundsController : ControllerBase
         }
 
         Response.Headers.CacheControl = "public, max-age=86400";
-        return File(image.Bytes, image.ContentType);
+        if (!string.IsNullOrWhiteSpace(image.StorageUrl))
+        {
+            return Redirect(image.StorageUrl);
+        }
+
+        return File(image.Bytes!, image.ContentType);
     }
 
     [HttpGet("{roundId}/sessions")]

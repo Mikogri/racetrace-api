@@ -27,6 +27,14 @@ public sealed class RidersController : ControllerBase
         return Ok(await _ranking.ListRankingAsync(Request.Query, cancellationToken));
     }
 
+    [HttpGet("resolve")]
+    public async Task<IActionResult> Resolve(CancellationToken cancellationToken)
+    {
+        return Ok(await _riders.ResolveUciIdsAsync(
+            _validator.Csv(Request.Query, "uciIds"),
+            cancellationToken));
+    }
+
     [HttpGet("{riderId}")]
     public async Task<IActionResult> Get(string riderId, CancellationToken cancellationToken)
     {

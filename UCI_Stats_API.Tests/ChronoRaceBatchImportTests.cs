@@ -273,6 +273,7 @@ public sealed class ChronoRaceBatchImportTests
                     }
                 ],
                 "teams" => [],
+                "rider_team_history" => [],
                 "results" => [],
                 "competition_ranks" =>
                 [

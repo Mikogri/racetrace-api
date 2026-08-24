@@ -109,7 +109,7 @@ Starsze aliasy są akceptowane tam, gdzie przewiduje to parser, ale frontend pow
 | `GET /api/v1/rounds/{round_id}/results` | wyniki rundy |
 | `GET /api/v1/sessions/common` | sesje wspólne dla przekazanych zawodników i filtrów |
 
-Lista rund nie zawiera obrazu base64. Zwraca lekkie informacje o jego dostępności i adres endpointu obrazu. Pozwala to przeglądarce pobierać grafiki równolegle i korzystać z cache bez powiększania głównego JSON-a.
+Lista rund nie zawiera obrazu base64. Zwraca lekkie informacje o jego dostępności i adres endpointu obrazu. Endpoint obrazu przekierowuje do publicznego obiektu w bucketcie Supabase Storage `round-images`, dzięki czemu przeglądarka pobiera PNG bezpośrednio ze Storage i może korzystać z długiego cache. Zdjęcia wspólne dla venue są przechowywane tylko raz w `venue_images` i przypisywane do tras; wszystkie rundy danej trasy korzystają z tego samego obiektu.
 
 ### Wyniki
 
@@ -174,14 +174,18 @@ Najważniejsze filtry obejmują sezony, daty, trasy, venue, kraj trasy, warunki,
 
 Można porównać od 2 do 10 riderów. Endpoint stosuje te same filtry i kalkulatory co ranking oraz zwraca:
 
+- pełną listę przefiltrowanych sesji i wyników porównywanych riderów w `sessions`;
 - wins, podiums, Top 5 i Top 10 z finałów;
 - Rating, Pace, Consistency i Confidence;
+- wiek, bieżącą kategorię, kategorie z wybranego zakresu oraz najnowszy team z kodem;
+- `pointsProgress` z punktami zdobytymi w kolejnych wynikach i sumą narastającą;
+- `roundMetrics` z Rating, Pace, Consistency i Confidence wyliczonymi osobno dla każdej rundy;
 - wygrane splity i sektory;
 - średnią pozycję finałową i przedfinałową;
 - sesje, w których wystartowali wszyscy porównywani riderzy;
 - średni gap na mecie i na sektorach względem najlepszego ridera z przekazanej listy.
 
-Wspólne sesje są zwracane raz na poziomie odpowiedzi, zamiast powielać pełną historię przy każdym riderze.
+`commonSessions` zawiera tylko sesje rozpoczęte przez wszystkich porównywanych riderów. DNF jest startem, a DNS nie jest. Średni gap na mecie jest liczony względem najszybszego sklasyfikowanego czasu z wybranej grupy. Gap sektora trafia do średniej tylko wtedy, gdy każdy porównywany rider ma prawidłowy czas tego sektora. Dzięki temu niepełny przejazd DNF może uczestniczyć w porównaniu na sektorach ukończonych przez całą grupę. Sesje są zwracane na poziomie odpowiedzi, zamiast powielać pełną historię przy każdym riderze.
 
 ### Trasy i teamy
 
@@ -199,18 +203,20 @@ Team zapisany bezpośrednio przy wyniku ma pierwszeństwo i zachowuje dokładny 
 
 | Metoda i ścieżka | Zastosowanie |
 |---|---|
-| `GET /api/v1/season-summary` | dane ekranu głównego dla sezonu wynikającego z aktualnej daty |
-| `GET /api/v1/podium-predictor` | Top 10 kandydatów do podium następnej rundy |
+| `GET /api/v1/seasons/{season}/overview` | lekki kalendarz: następna i ostatnia ukończona runda oraz postęp sezonu |
+| `GET /api/v1/analytics/round-profile` | wyniki ostatniego finału, field spread i track fingerprint; obsługuje `season`, `category` i opcjonalny `roundId` |
+| `GET /api/v1/analytics/riders/{riderId}/pressure-performance` | Pace ridera w kwalifikacjach i finałach, zestawione dla kolejnych rund |
+| `GET /api/v1/podium-predictor` | Top 10 kandydatów Elite do podium następnej rundy; opcjonalny `roundId` uruchamia predykcję historyczną as-of wskazanej rundy |
 
-`season-summary` zwraca następny event, ostatnią ukończoną rundę, Top 5 ostatniego finału, postęp sezonu, Top Rated i bieżącą klasyfikację punktową. Następna i ostatnia runda są wybierane po dacie, niezależnie od numeru rundy, kolejności importu i klasy zawodów.
+Home składa dane równolegle z `seasons/{season}/overview`, `analytics/round-profile`, dwóch lekkich widoków `ranking` oraz `podium-predictor`. Następna i ostatnia runda są wybierane po dacie, niezależnie od numeru rundy, kolejności importu i klasy zawodów. `round-profile` pobiera jedną paczkę preagregowaną i wykorzystuje ją wspólnie do wyników, prędkości, spreadu stawki i charakterystyki sektorów.
 
-Podium Predictor korzysta z:
+Podium Predictor buduje dla każdego kandydata oczekiwany performance (`expectedPerformance`), niepewność (`performanceUncertainty`) i ryzyko incydentu (`incidentProbability`). Wersjonowana kalibracja korzysta z Ratingu, Pace, ważonej czasowo formy, affinity trasy i warunków, danych bieżącego weekendu, kontekstu WCH oraz reakcji ridera na presję generalki. Confidence wykonuje shrinkage w stronę średniej stawki i razem z Consistency steruje głównie niepewnością, zamiast działać jak prosty bonus do performance.
 
-- 40% Ratingu z bieżącego sezonu;
-- 40% Pace na tej trasie z maksymalnie trzech ostatnich sezonów;
-- 20% Ratingu z poprzedniego sezonu.
+Cała stawka jest symulowana 50 000 razy rozkładem Student-t. Endpoint zachowuje dotychczasowe pola i dodatkowo zwraca `winProbability`, `top5Probability`, `expectedPosition`, `expectedPerformance`, `performanceUncertainty`, `incidentProbability`, `context` oraz `modelVersion`. Wszystkie historyczne cechy są ograniczone datą przewidywanej rundy, a dane finału będącego celem predykcji są wykluczone.
 
-Brakujący składnik jest pomijany, a pozostałe wagi są przeliczane proporcjonalnie. Niski Confidence obniża score kandydata. Następnie model siły oparty o funkcję wykładniczą wylicza prawdopodobieństwo znalezienia się w pierwszej trójce.
+Walk-forward backtest na 25 finałach Elite Men z sezonów 2023–2025 dał dla starego/nowego modelu: Podium Recall @3 `0.48/0.54`, Podium Recall @5 `0.6333/0.7067` i Brier Score `0.3274/0.1927` (niżej jest lepiej). Winner Accuracy wyniosło `0.32/0.12`, więc nowy model lepiej opisuje całe podium i kalibruje prawdopodobieństwa, ale wymaga dalszej kalibracji, jeżeli priorytetem ma być wyłącznie wskazanie zwycięzcy.
+
+Predykcja jest dostępna tylko dla `elite_men` i `elite_women`. Dla kategorii juniorskich endpoint zwraca `round: null` oraz pustą tablicę `items`. Kandydatem może zostać tylko rider mający wynik w wybranej kategorii w bieżącym sezonie; dane z poprzedniego sezonu i historii trasy wpływają na jego score, ale same nie dodają go do listy. Status juniora jest wyznaczany z daty urodzenia (`wiek < 19`), a nie z kodu kategorii. Jeżeli rider był juniorem w poprzednim sezonie, jego predykcja Elite wykorzystuje wyłącznie Rating z bieżącego sezonu i pomija historię trasy oraz Rating z poprzedniego sezonu.
 
 ### Live
 
@@ -254,16 +260,9 @@ Rider bez kluczowej sesji nie może uzyskać nieograniczenie wysokiego Pace wył
 
 ### Consistency
 
-Consistency opisuje powtarzalność wyniku, nie czystą szybkość:
+Consistency opisuje wyłącznie powtarzalność oficjalnych pozycji ridera względem jego własnego trendu. Nie korzysta z Pace, czasów sektorów, wielkości stawki ani jakości zajmowanych miejsc, dlatego stałe P1 i stałe P100 mogą otrzymać 100.
 
-- 90% wyniku pochodzi ze stabilności końcowych pozycji, ze szczególnym znaczeniem finałów;
-- 10% pochodzi z powtarzalności czasów sektorów;
-- sesje są ważone zgodnie z ich znaczeniem;
-- DNS jest ignorowany i nie obniża oceny;
-- DNF może wpływać na ocenę, ponieważ oznacza rozpoczęty, lecz nieukończony przejazd;
-- publicznie zwracane Consistency nie jest zmieniane przez klasę; na potrzeby Ratingu kalkulator tworzy jednak osobny, wewnętrzny wariant ważony klasą.
-
-Pojedynczy skrajnie słaby sektor ma ograniczony wpływ. Maksymalna strata rośnie progresywnie wraz z liczbą odstających sektorów: jeden błąd jest chroniony mocniej niż seria kilku słabych sektorów. Dzięki temu upadek na końcu bardzo dobrego przejazdu nie niszczy całej historii Consistency, ale powtarzające się problemy nadal są widoczne.
+Kalkulator bierze ostatnie 12 sklasyfikowanych wyników, stosuje centralne wagi sesji, wyznacza ważoną regresję liniową pozycji w czasie, a następnie liczy rozrzut residuali jako `0.80 * 1.4826 * weighted MAD + 0.20 * clipped RMSE`. Historyczna kalibracja 18 576 wyników i 16 172 rolling windows dała medianę spreadu `3.4`, dlatego wynik jest mapowany funkcją `100 / (1 + (spread / 6.8001)^2)`. DNS, DNF i DSQ są całkowicie ignorowane. Ilość danych nie obniża Consistency; osobne `consistency_evidence` (kompatybilne z dotychczasowym `consistency_confidence`) opisuje siłę próbki.
 
 ### Result Score
 
@@ -320,6 +319,7 @@ Endpointy administracyjne wymagają tokena administratora.
 | `POST /api/admin/import/results/session` | alias importu sesji |
 | `POST /api/admin/import/chronorace/round-form` | formularz rundy z wieloma sesjami |
 | `POST /api/admin/import/results/round-form` | alias formularza rundy |
+| `POST /api/admin/import/results/round-form/pdf` | multipart: formularz rundy oraz jeden lub kilka PDF-ów z wynikami |
 | `POST /api/admin/rounds` | utworzenie rundy, również planowanej |
 | `POST /api/admin/import/riders/profile-images` | import adresów zdjęć riderów |
 | `GET /api/admin/editable-resources` | lista zasobów dopuszczonych do edycji |
@@ -335,6 +335,12 @@ Endpointy administracyjne wymagają tokena administratora.
 Importer normalizuje różne źródła do jednego modelu: runda, trasa, kategoria, sesja, rider, team, wynik i splity. Rider jest identyfikowany przede wszystkim przez UCI ID/UCI code, a nie samo nazwisko. To chroni przed połączeniem osób o tym samym nazwisku, na przykład rodzeństwa.
 
 ChronoRace i format mistrzostw świata mogą mieć inne struktury JSON. Warstwa normalizacji mapuje je do wspólnego modelu, natomiast typ sesji może być podany jawnie w formularzu. Zapisy są wykonywane partiami i przez upsert na unikalnych kluczach. Service role pozostaje wyłącznie na serwerze.
+
+Import PDF używa `multipart/form-data`. Pole `request` zawiera JSON o strukturze formularza rundy, ale każda kategoria wskazuje `pdf_file_name`; odpowiadające pliki są przekazywane jako powtarzalne pole `files`. Parser obsługuje oficjalną tabelę Individual Results z UCI ID, numerem, pozycją, statusem, prędkością, czterema splitami i czasem końcowym, także dla Pucharu Świata i Mistrzostw Świata. Konfiguracja sesji, kategorii, warunków, klasy zawodów i kontekstu pochodzi z pola `request`, a nie z nagłówka PDF.
+
+Jeśli źródło nie zawiera teamu, import i odczyt wyników szukają go w `rider_team_history`: najpierw dla okresu obejmującego datę sesji, a następnie w najbliższym znanym okresie. Jawny team z wyniku ma zawsze pierwszeństwo. Fallback nie tworzy wpisu historii i nie zastępuje istniejącego teamu; brak jest zwracany dopiero wtedy, gdy rider nie ma żadnej znanej historii.
+
+Runda może mieć administracyjny status `live`. `POST /api/admin/rounds` przyjmuje też opcjonalny `context_name` i obraz PNG w `image`; formularz importu rundy nadal obsługuje `round.context_name`, `round.status = "live"` oraz `image`. Status wymaga migracji `20260820_live_round_status.sql`.
 
 Po imporcie wyniku zawierającego jawny team API przebudowuje okresy historii tylko dla riderów obecnych w tym imporcie. Import World Champs lub innego źródła bez teamów nie zamyka okresu, nie tworzy pustego wpisu i nie zmienia historii ridera.
 
@@ -452,7 +458,9 @@ Repozytorium zawiera skrypty wspierające obecny kontrakt i wydajność:
 - `20260803_normalize_category_names_and_codes.sql` normalizuje nazwy oraz kody kategorii;
 - `20260812_rider_team_history.sql` tworzy i uzupełnia historię teamów na podstawie istniejących wyników;
 - `20260812_rider_gender.sql` dodaje płeć ridera i uzupełnia ją na podstawie historycznych kategorii wyników;
-- `20260812_rollback_ranking_preaggregation.sql` aktualizuje ranking, aby wybierał team z historii według daty.
+- `20260812_rollback_ranking_preaggregation.sql` aktualizuje ranking, aby wybierał team z historii według daty;
+- `20260820_round_images_supabase_storage.sql` tworzy publiczny bucket obrazów, współdzielone zdjęcia venue i obsługę ścieżek Storage dla obrazów przypisanych bezpośrednio do rund;
+- `20260820_fix_2021_points_and_missing_result_teams.sql` uzupełnia bonusową punktację finału sezonu 2021 z tabeli 2022 oraz przypisuje brakujące teamy w pierwszych dwóch rundach 2021 na podstawie najbliższego wpisu historii.
 
 Skrypty SQL powinny być wdrażane świadomie w Supabase. Dla historii teamów najpierw należy uruchomić `20260812_rider_team_history.sql`, a następnie `20260812_rollback_ranking_preaggregation.sql`. Kod API zakłada istnienie funkcji RPC i indeksów opisanych przez aktualne migracje.
 

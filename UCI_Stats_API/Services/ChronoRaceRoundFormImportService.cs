@@ -10,17 +10,20 @@ public sealed class ChronoRaceRoundFormImportService
     private readonly TissotTimingJsonFetcher _tissotJsonFetcher;
     private readonly ChronoRaceImportService _sessionImport;
     private readonly ISupabaseRestClient _supabase;
+    private readonly RoundImageStorageService? _imageStorage;
 
     public ChronoRaceRoundFormImportService(
         ChronoRaceJsonFetcher jsonFetcher,
         TissotTimingJsonFetcher tissotJsonFetcher,
         ChronoRaceImportService sessionImport,
-        ISupabaseRestClient supabase)
+        ISupabaseRestClient supabase,
+        RoundImageStorageService? imageStorage = null)
     {
         _jsonFetcher = jsonFetcher;
         _tissotJsonFetcher = tissotJsonFetcher;
         _sessionImport = sessionImport;
         _supabase = supabase;
+        _imageStorage = imageStorage;
     }
 
     public async Task<ChronoRaceRoundFormImportResponse> ImportAsync(ChronoRaceRoundFormImportRequest request, CancellationToken cancellationToken)
@@ -66,13 +69,17 @@ public sealed class ChronoRaceRoundFormImportService
 
         var items = new List<ChronoRaceRoundFormImportItemResponse>();
         var allWarnings = new List<string>();
-        foreach (var pending in pendingImports)
-        {
-            var sessionPayload = new ImportSessionPayload(
-                pending.Session.Name,
-                pending.Session.SessionType,
-                pending.Session.SessionDate,
-                pending.Session.Status);
+		foreach (var pending in pendingImports)
+		{
+			var persistedChronoRaceUrl = ResolvePersistedChronoRaceUrl(
+				pending.Category.ChronoraceUrl,
+				pending.ResolvedUrl);
+			var sessionPayload = new ImportSessionPayload(
+				pending.Session.Name,
+				pending.Session.SessionType,
+				pending.Session.SessionDate,
+				pending.Session.Status,
+				persistedChronoRaceUrl);
 
             var importRequest = new ChronoRaceImportRequest(
                 request.Round,
@@ -125,6 +132,14 @@ public sealed class ChronoRaceRoundFormImportService
             imageUpserted = true;
         }
 
+        if (!string.IsNullOrWhiteSpace(roundId))
+        {
+            await RefreshRoundRankingPreaggregatesAsync(
+                roundId,
+                allWarnings,
+                cancellationToken);
+        }
+
         return new ChronoRaceRoundFormImportResponse(
             roundId,
             items.Select(item => item.SessionId).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
@@ -139,15 +154,81 @@ public sealed class ChronoRaceRoundFormImportService
             imageUpserted);
     }
 
+    private async Task RefreshRoundRankingPreaggregatesAsync(
+        string roundId,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+		warnings.RemoveAll(warning =>
+			warning.Contains("preaggregation", StringComparison.OrdinalIgnoreCase));
+        try
+        {
+            var sessions = await _supabase.GetAsync(
+                new SupabaseQuery("sessions")
+                    .Select("id")
+                    .Filter("round_id", "eq", roundId),
+                role: SupabaseRole.Service,
+                cancellationToken: cancellationToken);
+
+			var sessionIds = sessions.Data
+				.Select(session => session.String("id"))
+				.Where(id => long.TryParse(id, out _))
+				.Select(id => id!)
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToArray();
+
+            foreach (var sessionIdValue in sessionIds)
+            {
+				var sessionId = long.Parse(sessionIdValue);
+
+                await _supabase.RpcAsync(
+                    "refresh_ranking_session_preaggregate",
+                    new JsonObject { ["p_session_id"] = sessionId },
+                    SupabaseRole.Service,
+                    cancellationToken);
+            }
+
+			if (sessionIds.Length > 0)
+			{
+				var aggregates = await _supabase.GetAsync(
+					new SupabaseQuery("ranking_session_preaggregates")
+						.Select("session_id")
+						.In("session_id", sessionIds),
+					role: SupabaseRole.Service,
+					cancellationToken: cancellationToken);
+				var present = aggregates.Data
+					.Select(row => row.String("session_id"))
+					.Where(id => !string.IsNullOrWhiteSpace(id))
+					.ToHashSet(StringComparer.OrdinalIgnoreCase);
+				var missing = sessionIds.Where(id => !present.Contains(id)).ToArray();
+				if (missing.Length > 0)
+				{
+					warnings.Add(
+						$"PREAGGREGATION_NOT_CREATED: Ranking preaggregation is missing for session ids: {string.Join(", ", missing)}.");
+				}
+			}
+        }
+        catch (SupabaseApiException)
+        {
+            warnings.Add(
+				"PREAGGREGATION_NOT_CREATED: Could not create every ranking preaggregation package for this round. " +
+				"The imported sessions remain saved; use the missing-preaggregation refresh action.");
+        }
+    }
+
     private async Task UpsertRoundImageAsync(
         string roundId,
         PreparedRoundImage image,
         CancellationToken cancellationToken)
     {
+        var storagePath = _imageStorage is null
+            ? null
+            : await _imageStorage.UploadAsync(image, cancellationToken);
         var payload = new JsonObject
         {
             ["round_id"] = roundId,
-            ["image_data"] = $"\\x{Convert.ToHexString(image.Bytes)}",
+            ["image_data"] = storagePath is null ? $"\\x{Convert.ToHexString(image.Bytes)}" : null,
+            ["storage_path"] = storagePath,
             ["content_type"] = "image/png",
             ["file_name"] = image.FileName,
             ["alt_text"] = image.AltText,
@@ -249,9 +330,21 @@ public sealed class ChronoRaceRoundFormImportService
                 }
             }
         }
-    }
+	}
 
-    private sealed record PendingChronoRaceImport(
+	internal static string? ResolvePersistedChronoRaceUrl(string? chronoraceUrl, string? resolvedUrl)
+	{
+		if (string.IsNullOrWhiteSpace(chronoraceUrl))
+		{
+			return null;
+		}
+
+		return string.IsNullOrWhiteSpace(resolvedUrl)
+			? chronoraceUrl.Trim()
+			: resolvedUrl.Trim();
+	}
+
+	private sealed record PendingChronoRaceImport(
         ChronoRaceRoundFormSessionPayload Session,
         ChronoRaceRoundFormCategoryPayload Category,
         JsonObject Json,

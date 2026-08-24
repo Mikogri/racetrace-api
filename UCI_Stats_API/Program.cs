@@ -46,8 +46,11 @@ builder.Services.AddOutputCache(options =>
 		"ranking",
 		new ApiReadOutputCachePolicy(TimeSpan.FromSeconds(30)));
 	options.AddPolicy(
-		"season-summary",
+		"season-overview",
 		new ApiReadOutputCachePolicy(TimeSpan.FromSeconds(60)));
+	options.AddPolicy(
+		"analytics",
+		new ApiReadOutputCachePolicy(TimeSpan.FromMinutes(5)));
 });
 builder.Services.AddMemoryCache();
 builder.Services
@@ -69,11 +72,14 @@ builder.Services.AddScoped<PaceService>();
 builder.Services.AddScoped<MetricsService>();
 builder.Services.AddScoped<SearchService>();
 builder.Services.AddScoped<RoundsService>();
+builder.Services.AddHttpClient<RoundImageStorageService>();
 builder.Services.AddScoped<ResultsService>();
 builder.Services.AddScoped<SessionsService>();
 builder.Services.AddScoped<RidersService>();
 builder.Services.AddScoped<RankingService>();
 builder.Services.AddScoped<CompareService>();
+builder.Services.AddScoped<RiderSimilarityService>();
+builder.Services.AddScoped<AnalyticsService>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<SeasonSummaryService>();
 builder.Services.AddScoped<PodiumPredictorService>();
@@ -91,8 +97,10 @@ builder.Services.AddScoped<UciMtbWorldSeriesSupplementService>();
 builder.Services.AddScoped<ChronoRaceImportService>();
 builder.Services.AddScoped<RiderProfileImageImportService>();
 builder.Services.AddHttpClient<ChronoRaceJsonFetcher>();
+builder.Services.AddHttpClient<ChronoRaceLiveProxyService>();
 builder.Services.AddHttpClient<TissotTimingJsonFetcher>();
 builder.Services.AddScoped<ChronoRaceRoundFormImportService>();
+builder.Services.AddSingleton<UciResultsPdfParser>();
 
 var app = builder.Build();
 

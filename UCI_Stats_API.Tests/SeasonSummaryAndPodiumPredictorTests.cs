@@ -8,25 +8,67 @@ namespace UCI_Stats_API.Tests;
 public sealed class SeasonSummaryAndPodiumPredictorTests
 {
     [Fact]
-    public void PredictionScoreUsesFortyFortyTwentyWeights()
+    public void LowConsistencyIncreasesUncertaintyWithoutChangingRawSkill()
     {
-        var score = PodiumPredictorService.WeightedPredictionScore(
-            currentRating: 90m,
-            trackPace: 80m,
-            previousRating: 70m);
+        var options = new PodiumPredictionOptions();
+        var calibration = new PodiumPredictionCalibration(options);
+        var stable = Feature("stable", consistency: 95, confidence: 100);
+        var variable = Feature("variable", consistency: 40, confidence: 100);
 
-        Assert.Equal(82m, score);
+        var result = calibration.Calculate([stable, variable], false);
+
+        Assert.Equal(result[0].ExpectedPerformance, result[1].ExpectedPerformance, precision: 10);
+        Assert.True(result[0].PerformanceUncertainty < result[1].PerformanceUncertainty);
     }
 
     [Fact]
-    public void PredictionScoreRenormalizesWhenAComponentIsMissing()
+    public void LowConfidenceShrinksSkillTowardFieldAndIncreasesUncertainty()
     {
-        var score = PodiumPredictorService.WeightedPredictionScore(
-            currentRating: null,
-            trackPace: 80m,
-            previousRating: 70m);
+        var calibration = new PodiumPredictionCalibration(new PodiumPredictionOptions());
+        var reliable = Feature("reliable", rating: 95, pace: 95, confidence: 100);
+        var uncertain = Feature("uncertain", rating: 95, pace: 95, confidence: 25);
+        var field = Feature("field", rating: 70, pace: 70, confidence: 100);
 
-        Assert.Equal(76.666666666666666666666666667m, score);
+        var result = calibration.Calculate([reliable, uncertain, field], false);
+
+        Assert.True(result[1].ExpectedPerformance < result[0].ExpectedPerformance);
+        Assert.True(result[1].PerformanceUncertainty > result[0].PerformanceUncertainty);
+    }
+
+    [Fact]
+    public void WorldChampionshipIncreasesUncertainty()
+    {
+        var calibration = new PodiumPredictionCalibration(new PodiumPredictionOptions());
+        var feature = Feature("rider");
+
+        var worldCup = calibration.Calculate([feature], false)[0];
+        var worldChampionship = calibration.Calculate([feature], true)[0];
+
+        Assert.True(worldChampionship.PerformanceUncertainty > worldCup.PerformanceUncertainty);
+    }
+
+    [Fact]
+    public void MonteCarloIsDeterministicAndProducesCoherentProbabilities()
+    {
+        var options = new PodiumPredictionOptions
+        {
+            MonteCarloIterations = 2_000,
+            RandomSeed = 42
+        };
+        var distributions = new PodiumPredictionCalibration(options).Calculate(
+            Enumerable.Range(0, 8)
+                .Select(index => Feature(index.ToString(), 95 - index * 3, 95 - index * 3))
+                .ToArray(),
+            false);
+        var simulator = new MonteCarloRaceSimulator(options);
+
+        var first = simulator.Simulate(distributions);
+        var second = simulator.Simulate(distributions);
+
+        Assert.Equal(first, second);
+        Assert.InRange(first.Sum(value => value.WinProbability), 0.999999, 1.000001);
+        Assert.InRange(first.Sum(value => value.PodiumProbability), 2.999999, 3.000001);
+        Assert.InRange(first.Sum(value => value.Top5Probability), 4.999999, 5.000001);
     }
 
     [Fact]
@@ -37,43 +79,59 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
             PodiumPredictorService.RecentTrackSeasons(2026));
     }
 
-    [Fact]
-    public void LowerConfidenceReducesPredictionScore()
+    [Theory]
+    [InlineData("JM")]
+    [InlineData("JW")]
+    [InlineData("jm")]
+    public void JuniorCategoriesDoNotHavePodiumPrediction(string categoryCode)
     {
-        var highConfidence = PodiumPredictorService.ConfidenceAdjustedScore(
-            95m,
-            90m);
-        var lowConfidence = PodiumPredictorService.ConfidenceAdjustedScore(
-            95m,
-            40m);
-
-        Assert.Equal(93.8m, highConfidence);
-        Assert.Equal(87.8m, lowConfidence);
-        Assert.True(highConfidence > lowConfidence);
-    }
-
-    [Fact]
-    public void PodiumProbabilitiesFavorHigherScoresAndSumToThreePlaces()
-    {
-        var probabilities = PodiumPredictorService.CalculatePodiumProbabilities(
-            [96d, 93d, 90d, 87d, 84d]);
-
-        Assert.Equal(5, probabilities.Count);
-        Assert.True(probabilities[0] > probabilities[1]);
-        Assert.True(probabilities[1] > probabilities[2]);
-        Assert.InRange(probabilities.Sum(), 2.999999d, 3.000001d);
+        Assert.True(PodiumPredictorService.IsJuniorCategory(categoryCode));
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(3)]
-    public void EveryRiderIsOnThePodiumWhenFieldHasAtMostThreeRiders(int count)
+    [InlineData("EM")]
+    [InlineData("EW")]
+    public void EliteCategoriesHavePodiumPrediction(string categoryCode)
     {
-        var probabilities = PodiumPredictorService.CalculatePodiumProbabilities(
-            Enumerable.Repeat(90d, count).ToArray());
+        Assert.False(PodiumPredictorService.IsJuniorCategory(categoryCode));
+    }
 
-        Assert.All(probabilities, probability => Assert.Equal(1d, probability));
+    [Theory]
+    [InlineData("2007-12-31", 2025, true)]
+    [InlineData("2006-12-31", 2025, false)]
+    public void PreviousSeasonJuniorIsResolvedFromAge(
+        string birthDate,
+        int season,
+        bool expectedJunior)
+    {
+        Assert.Equal(
+            expectedJunior,
+            RiderCategoryResolver.WasJuniorInSeason(
+                DateOnly.Parse(birthDate),
+                season));
+    }
+
+    [Theory]
+    [InlineData("male", "2008-08-21", "junior_men")]
+    [InlineData("female", "2008-08-21", "junior_women")]
+    [InlineData("male", "2000-01-01", "elite_men")]
+    [InlineData("female", "2000-01-01", "elite_women")]
+    public void CurrentCategoryIsResolvedFromAgeAndGender(
+        string gender,
+        string birthDate,
+        string expectedCategory)
+    {
+        var rider = new JsonObject
+        {
+            ["gender"] = gender,
+            ["birth_date"] = birthDate
+        };
+
+        Assert.Equal(
+            expectedCategory,
+            RiderCategoryResolver.CurrentCategory(
+                rider,
+                new DateOnly(2026, 8, 20)));
     }
 
     [Fact]
@@ -150,4 +208,29 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
     {
         public override DateTimeOffset GetUtcNow() => now;
     }
+
+    private static PodiumPredictionFeatures Feature(
+        string riderId,
+        double rating = 85,
+        double pace = 85,
+        double consistency = 80,
+        double confidence = 80) =>
+        new(
+            riderId,
+            (decimal)rating,
+            null,
+            null,
+            rating,
+            pace,
+            confidence,
+            consistency,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0.08,
+            12);
 }

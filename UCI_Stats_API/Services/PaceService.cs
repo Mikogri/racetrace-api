@@ -12,14 +12,138 @@ public sealed class PaceService
     private const int MaximumConcurrentSplitQueries = 4;
 
     private readonly ISupabaseRestClient _supabase;
-    private readonly DownhillPaceCalculator _paceCalculator = new();
-    private readonly DownhillConsistencyCalculator _consistencyCalculator = new();
-    private readonly DownhillResultScoreCalculator _resultScoreCalculator = new();
+    private readonly DownhillPaceCalculator _paceCalculator;
+    private readonly DownhillConsistencyCalculator _consistencyCalculator;
+    private readonly DownhillResultScoreCalculator _resultScoreCalculator;
     private readonly DownhillRatingCalculator _ratingCalculator = new();
 
     public PaceService(ISupabaseRestClient supabase)
     {
         _supabase = supabase;
+        var paceOptions = new PaceOptions();
+        _paceCalculator = new DownhillPaceCalculator(paceOptions);
+        _consistencyCalculator = new DownhillConsistencyCalculator(
+            sessionWeights: paceOptions.SessionWeights);
+        _resultScoreCalculator = new DownhillResultScoreCalculator(
+            sessionWeights: paceOptions.SessionWeights);
+    }
+
+    internal IReadOnlyList<RiderSectorObservation> CalculateSimilarityObservations(
+        IReadOnlyList<PacePrecomputedSessionData> sessions,
+        IReadOnlyDictionary<string, string?> categoriesBySessionId)
+    {
+        return sessions
+            .Where(session =>
+                _paceCalculator.GetConfiguredSessionWeight(session.SessionType) > 0 &&
+                !string.Equals(session.Run.Status, "DNS", StringComparison.OrdinalIgnoreCase) &&
+                !DownhillPaceCalculator.IsDisqualified(session.Run.Status))
+            .Select(session => new
+            {
+                Session = session,
+                Result = _paceCalculator.CalculatePrecomputedSession(session)
+            })
+            .SelectMany(item => SimilarityObservations(
+                item.Session.SessionId,
+                item.Result,
+                categoriesBySessionId.GetValueOrDefault(item.Session.SessionId)))
+            .ToArray();
+    }
+
+    internal IReadOnlyList<RiderSectorObservation> CalculateSimilarityObservations(
+        RankingDataBundle bundle,
+        IReadOnlyDictionary<string, string?> categoriesBySessionId)
+    {
+        var sessionsById = bundle.Sessions
+            .Where(session => !string.IsNullOrWhiteSpace(session.String("id")))
+            .ToDictionary(session => session.String("id")!, StringComparer.OrdinalIgnoreCase);
+        var splitsByResultId = bundle.Splits
+            .GroupBy(split => split.String("result_id") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<JsonObject>)group.ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+        var fieldResults = bundle.FieldResults
+            .Where(result => !DownhillPaceCalculator.IsDisqualified(result.String("status")))
+            .ToArray();
+        var splitLayouts = BuildSessionSplitLayouts(fieldResults, splitsByResultId);
+        var observations = new List<RiderSectorObservation>();
+
+        foreach (var sessionGroup in fieldResults
+                     .Where(result => !string.IsNullOrWhiteSpace(result.String("session_id")))
+                     .GroupBy(result => result.String("session_id")!, StringComparer.OrdinalIgnoreCase))
+        {
+            sessionsById.TryGetValue(sessionGroup.Key, out var session);
+            splitLayouts.TryGetValue(sessionGroup.Key, out var splitLayout);
+            var runs = sessionGroup
+                .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")))
+                .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)
+                .Select(group => BuildRun(
+                    SelectRun(group),
+                    splitsByResultId,
+                    splitLayout ?? SessionSplitLayout.Empty))
+                .ToArray();
+            var paceSession = new PaceSessionData(
+                ParseSessionType(session?.String("session_type"), session?.String("name")),
+                runs,
+                CompetitionClassPriority(session));
+            if (_paceCalculator.GetConfiguredSessionWeight(paceSession.SessionType) <= 0)
+            {
+                continue;
+            }
+            foreach (var result in _paceCalculator.CalculateSession(paceSession))
+            {
+                observations.AddRange(SimilarityObservations(
+                    sessionGroup.Key,
+                    result,
+                    categoriesBySessionId.GetValueOrDefault(sessionGroup.Key)));
+            }
+        }
+
+        return observations;
+    }
+
+    internal IReadOnlyList<RiderSessionPaceObservation> CalculateSessionPaceObservations(
+        IReadOnlyList<PacePrecomputedSessionData> sessions,
+        string? riderId = null)
+    {
+        return sessions
+            .Where(session =>
+                (string.IsNullOrWhiteSpace(riderId) || string.Equals(
+                    session.Run.RiderId,
+                    riderId,
+                    StringComparison.OrdinalIgnoreCase)) &&
+                _paceCalculator.GetConfiguredSessionWeight(session.SessionType) > 0 &&
+                !string.Equals(session.Run.Status, "DNS", StringComparison.OrdinalIgnoreCase) &&
+                !DownhillPaceCalculator.IsDisqualified(session.Run.Status))
+            .Select(session => new RiderSessionPaceObservation(
+                session.SessionId,
+                session.Run.RiderId,
+                _paceCalculator.CalculatePrecomputedSession(session)))
+            .Where(observation => observation.Result.Pace.HasValue)
+            .ToArray();
+    }
+
+    internal double? CalculateStagePace(IEnumerable<RiderSessionPaceResult> sessions) =>
+        _paceCalculator.CalculateStagePace(sessions)?.Pace;
+
+    private static IEnumerable<RiderSectorObservation> SimilarityObservations(
+        string sessionId,
+        RiderSessionPaceResult result,
+        string? categoryCode)
+    {
+        var sectorCount = result.Sectors.Count;
+        return result.Sectors
+            .Where(sector =>
+                sector.Score.HasValue &&
+                sector.Status is PaceSectorStatus.Valid or PaceSectorStatus.RecoveredAfterIncident)
+            .Select(sector => new RiderSectorObservation(
+                result.RiderId,
+                sessionId,
+                categoryCode,
+                sector.SectorIndex,
+                sectorCount,
+                sector.Score!.Value));
     }
 
     public async Task<IReadOnlyDictionary<string, RiderPerformanceMetricValues>> CalculateAsync(
@@ -64,11 +188,14 @@ public sealed class PaceService
             return EmptyPace(targetRiderIds);
         }
 
-        var fieldResults = suppliedFieldResults ?? (resultsContainFullField
+        var fetchedFieldResults = suppliedFieldResults ?? (resultsContainFullField
             ? selectedResults
             : await FetchFieldResultsAsync(sessionIds, context.Status, cancellationToken));
+        var fieldResults = fetchedFieldResults
+            .Where(result => !DownhillPaceCalculator.IsDisqualified(result.String("status")))
+            .ToArray();
 
-        if (fieldResults.Count == 0)
+        if (fieldResults.Length == 0)
         {
             return EmptyPace(targetRiderIds);
         }
@@ -181,6 +308,10 @@ public sealed class PaceService
             targetRiderIds,
             selectedResultsByRiderId,
             availableSessions);
+        var nonFinalistsByRiderId = BuildNonFinalistFlags(
+            targetRiderIds,
+            selectedResultsByRiderId,
+            availableSessions);
         var competitionClassWeighting = BuildCompetitionClassWeighting(
             availableSessions,
             sessionsById.Values);
@@ -189,6 +320,7 @@ public sealed class PaceService
         {
             var riderId = targetRiderIds[riderIndex];
             availableFinalsByRiderId.TryGetValue(riderId, out var availableFinals);
+            var isNonFinalist = nonFinalistsByRiderId.GetValueOrDefault(riderId);
             var riderResults = selectedResultsByRiderId[riderId];
             var riderSessionPaceResults = sessionPaceResultsByRiderId.GetValueOrDefault(
                 riderId,
@@ -221,7 +353,8 @@ public sealed class PaceService
                 _resultScoreCalculator.Calculate(
                     riderId,
                     riderPaceSessions,
-                    competitionClassWeighting));
+                    competitionClassWeighting),
+                isNonFinalist);
         });
 
         return Enumerable.Range(0, targetRiderIds.Length).ToDictionary(
@@ -249,6 +382,7 @@ public sealed class PaceService
 
         var selectedSessionRiderKeys = selectedResults
             .Where(result =>
+                !DownhillPaceCalculator.IsDisqualified(result.String("status")) &&
                 !string.IsNullOrWhiteSpace(result.String("rider_id")) &&
                 !string.IsNullOrWhiteSpace(ResultSessionId(result)))
             .Select(result => ConsistencyPaceKey(
@@ -256,7 +390,9 @@ public sealed class PaceService
                 result.String("rider_id")!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var applicableSessions = precomputedSessions
-            .Where(session => selectedSessionRiderKeys.Contains(
+            .Where(session =>
+                !DownhillPaceCalculator.IsDisqualified(session.Run.Status) &&
+                selectedSessionRiderKeys.Contains(
                 ConsistencyPaceKey(session.SessionId, session.Run.RiderId)))
             .ToArray();
         var sessionsByRiderId = applicableSessions
@@ -266,6 +402,10 @@ public sealed class PaceService
                 group => (IReadOnlyList<PacePrecomputedSessionData>)group.ToArray(),
                 StringComparer.OrdinalIgnoreCase);
         var availableFinalsByRiderId = BuildAvailableFinalCounts(
+            resultsByRiderId.Keys.ToArray(),
+            resultsByRiderId,
+            availableSessions);
+        var nonFinalistsByRiderId = BuildNonFinalistFlags(
             resultsByRiderId.Keys.ToArray(),
             resultsByRiderId,
             availableSessions);
@@ -307,10 +447,12 @@ public sealed class PaceService
                         IsClassified: pair.First.Run.IsClassified,
                         CompetitionClassPriority: pair.First.CompetitionClassPriority,
                         ProjectedFinishPositionScore: outlierProfile.ProjectedFinishPositionScore,
-                        Status: pair.First.Run.Status);
+                        Status: pair.First.Run.Status,
+                        HasIncident: pair.Second.IncidentSectorIndex.HasValue);
                 })
                 .ToArray();
             availableFinalsByRiderId.TryGetValue(riderId, out var availableFinals);
+            var isNonFinalist = nonFinalistsByRiderId.GetValueOrDefault(riderId);
 
             output[riderId] = ToMetric(
                 _paceCalculator.CalculatePace(
@@ -329,7 +471,8 @@ public sealed class PaceService
                     competitionClassWeighting),
                 _resultScoreCalculator.Calculate(
                     riderSessions,
-                    competitionClassWeighting));
+                    competitionClassWeighting),
+                isNonFinalist);
         }
 
         return output;
@@ -401,6 +544,99 @@ public sealed class PaceService
                         categoryIds.Contains(session.String("category_id") ?? string.Empty)));
             },
             StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, bool> BuildNonFinalistFlags(
+        IReadOnlyList<string> riderIds,
+        IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> selectedResultsByRiderId,
+        IReadOnlyList<JsonObject>? availableSessions)
+    {
+        return riderIds.ToDictionary(
+            riderId => riderId,
+            riderId => IsNonFinalist(
+                selectedResultsByRiderId.GetValueOrDefault(
+                    riderId,
+                    Array.Empty<JsonObject>()),
+                availableSessions),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsNonFinalist(
+        IReadOnlyList<JsonObject> riderResults,
+        IReadOnlyList<JsonObject>? availableSessions)
+    {
+        if (availableSessions is null)
+        {
+            return false;
+        }
+
+        var roundCategoryKeys = riderResults
+            .Select(ResultRoundCategoryKey)
+            .Where(key => key is not null)
+            .Select(key => key!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (roundCategoryKeys.Length != 1)
+        {
+            return false;
+        }
+
+        var key = roundCategoryKeys[0];
+        var completedQualifying = riderResults.Any(result =>
+        {
+            var session = result.Object("sessions");
+            var sessionType = ParseSessionType(
+                session?.String("session_type"),
+                session?.String("name"));
+            var status = result.String("status")?.Trim();
+            return DownhillPaceCalculator.IsQualifyingSessionType(sessionType) &&
+                !DownhillPaceCalculator.IsDisqualified(status) &&
+                !string.Equals(status, "DNS", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(status, "DNF", StringComparison.OrdinalIgnoreCase) &&
+                result.Int("position") is > 0;
+        });
+        if (!completedQualifying)
+        {
+            return false;
+        }
+
+        // Any final row, including DNS/DNF/DSQ, confirms that the rider advanced.
+        var hasFinalEntry = riderResults.Any(result =>
+        {
+            var session = result.Object("sessions");
+            return session is not null &&
+                DomainQueryService.IsFinalSession(session) &&
+                string.Equals(ResultRoundCategoryKey(result), key, StringComparison.OrdinalIgnoreCase);
+        });
+        if (hasFinalEntry)
+        {
+            return false;
+        }
+
+        return availableSessions.Any(session =>
+            DomainQueryService.IsFinalSession(session) &&
+            string.Equals(SessionRoundCategoryKey(session), key, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string? ResultRoundCategoryKey(JsonObject result)
+    {
+        var session = result.Object("sessions");
+        return session is null ? null : SessionRoundCategoryKey(session);
+    }
+
+    private static string? SessionRoundCategoryKey(JsonObject session)
+    {
+        var roundId = session.String("round_id") ??
+            session.Object("rounds")?.String("id") ??
+            session.Object("round_categories")?.String("round_id") ??
+            session.Object("round_categories")?.Object("rounds")?.String("id");
+        var categoryId = session.String("category_id") ??
+            session.Object("categories")?.String("id") ??
+            session.Object("round_categories")?.String("category_id") ??
+            session.Object("round_categories")?.Object("categories")?.String("id");
+        return string.IsNullOrWhiteSpace(roundId) || string.IsNullOrWhiteSpace(categoryId)
+            ? null
+            : $"{roundId}\u001f{categoryId}";
     }
 
     private static string? ResultCategoryId(JsonObject result)
@@ -556,9 +792,7 @@ public sealed class PaceService
                 var resultId = result.String("id")!;
                 var sessionId = ResultSessionId(result) ?? string.Empty;
                 splitsByResultId.TryGetValue(resultId, out var resultSplits);
-                splitLayoutsBySessionId.TryGetValue(
-                    sessionId,
-                    out var splitLayout);
+                splitLayoutsBySessionId.TryGetValue(sessionId, out var splitLayout);
                 classifiedFieldSizesBySessionId.TryGetValue(
                     sessionId,
                     out var fieldSize);
@@ -566,11 +800,8 @@ public sealed class PaceService
                     ConsistencyPaceKey(sessionId, riderId),
                     out var paceResult);
                 var outlierProfile = paceResult is null
-                    ? new ConsistencyOutlierProfile(
-                        new HashSet<int>(),
-                        null)
-                    : _consistencyCalculator.AnalyzeSectors(
-                        paceResult.Sectors);
+                    ? new ConsistencyOutlierProfile(new HashSet<int>(), null)
+                    : _consistencyCalculator.AnalyzeSectors(paceResult.Sectors);
                 var sectorTimes = paceResult is null
                     ? BuildSectorTimes(
                         resultSplits ?? [],
@@ -596,9 +827,9 @@ public sealed class PaceService
                     IsClassified: IsClassifiedRun(result),
                     CompetitionClassPriority: CompetitionClassPriority(
                         result.Object("sessions")),
-                    ProjectedFinishPositionScore:
-                        outlierProfile.ProjectedFinishPositionScore,
-                    Status: result.String("status"));
+                    ProjectedFinishPositionScore: outlierProfile.ProjectedFinishPositionScore,
+                    Status: result.String("status"),
+                    HasIncident: paceResult?.IncidentSectorIndex.HasValue == true);
             })
             .ToArray();
 
@@ -710,7 +941,17 @@ public sealed class PaceService
             return PaceSessionType.Final;
         }
 
-        if (type is "Q1" or "Q2" or "QUALI" or "QUALIFYING" or "QUALIFICATION" ||
+        if (type == "Q1" || name == "Q1" || name.Contains("QUALIFYING 1", StringComparison.Ordinal))
+        {
+            return PaceSessionType.Qualifying1;
+        }
+
+        if (type == "Q2" || name == "Q2" || name.Contains("QUALIFYING 2", StringComparison.Ordinal))
+        {
+            return PaceSessionType.Qualifying2;
+        }
+
+        if (type is "QUALI" or "QUALIFYING" or "QUALIFICATION" ||
             name.Contains("QUAL", StringComparison.Ordinal))
         {
             return PaceSessionType.Qualifying;
@@ -762,7 +1003,8 @@ public sealed class PaceService
         RiderResultScore resultScore,
         RiderPaceResult ratingPace,
         RiderConsistencyResult ratingConsistency,
-        RiderResultScore ratingResultScore)
+        RiderResultScore ratingResultScore,
+        bool isNonFinalist = false)
     {
         var paceValue = pace.Pace.HasValue
             ? Math.Round((decimal)pace.Pace.Value, 2)
@@ -784,10 +1026,14 @@ public sealed class PaceService
             : null;
         var rating = ratingResult is null
             ? (decimal?)null
-            : Math.Round((decimal)ratingResult.Rating, 2);
+            : Math.Round((decimal)_paceCalculator.ApplyNonFinalistScoreCap(
+                ratingResult.Rating,
+                isNonFinalist), 2);
         var rawRating = ratingResult is null
             ? (decimal?)null
-            : Math.Round((decimal)ratingResult.RawRating, 2);
+            : Math.Round((decimal)_paceCalculator.ApplyNonFinalistScoreCap(
+                ratingResult.RawRating,
+                isNonFinalist), 2);
 
         return new RiderPerformanceMetricValues(
             rating,
@@ -824,4 +1070,5 @@ public sealed class PaceService
     {
         return result.String("session_id") ?? result.Object("sessions")?.String("id");
     }
+
 }

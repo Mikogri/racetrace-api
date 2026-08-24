@@ -61,7 +61,18 @@ public sealed class LiveService
             query.In("id", sessionIds);
         }
 
-        query.Filter("status", "eq", _validator.String(queryString, "status") ?? "live");
+        var requestedStatus = _validator.String(queryString, "status") ?? "live";
+        if (!string.Equals(requestedStatus, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(requestedStatus, "live", StringComparison.OrdinalIgnoreCase))
+            {
+                query.In("status", ["live", "active", "running"]);
+            }
+            else
+            {
+                query.Filter("status", "eq", requestedStatus);
+            }
+        }
         var response = await _supabase.GetAsync(query, count: true, cancellationToken: cancellationToken);
         DomainQueryService.NormalizeSessionEmbeds(response.Data);
         return ResponseFactory.Page(response.Data, 1, Math.Max(1, response.Data.Count), response.Total, sort.Sort, sort.Order);

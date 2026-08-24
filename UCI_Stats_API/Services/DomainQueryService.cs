@@ -14,7 +14,7 @@ public sealed class DomainQueryService
 
     private readonly ISupabaseRestClient _supabase;
 
-    public const string ResultSelect = "*,riders(*),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
+    public const string ResultSelect = "*,riders(*),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,conditions(*),round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
 
     public const string RankingResultSelect =
         "id,rider_id,session_id,race_time_ms,top_speed,position,is_classified,status," +
@@ -913,15 +913,16 @@ public sealed class DomainQueryService
             return;
         }
 
+        // Missing result teams often come from sources such as historical PDFs.
+        // Load the complete history so an older result can use the earliest known
+        // assignment when the history starts after that event.
         var history = await GetRiderTeamHistoryAsync(
             dated.Select(item => item.Result.String("rider_id")!),
-            dated.Min(item => item.Date),
-            dated.Max(item => item.Date),
             cancellationToken: cancellationToken);
         foreach (var item in dated)
         {
             var riderId = item.Result.String("rider_id")!;
-            var period = FindTeamPeriod(history, riderId, item.Date!.Value);
+            var period = FindTeamPeriodOrNearest(history, riderId, item.Date!.Value);
             if (period?.Object("teams") is not { } team)
             {
                 continue;
@@ -1004,6 +1005,57 @@ public sealed class DomainQueryService
                     validTo >= effectiveDate))
             .OrderByDescending(row => row.String("valid_from"), StringComparer.Ordinal)
             .FirstOrDefault();
+    }
+
+    internal static JsonObject? FindTeamPeriodOrNearest(
+        IEnumerable<JsonObject> history,
+        string riderId,
+        DateOnly effectiveDate)
+    {
+        var riderHistory = history
+            .Where(row => string.Equals(
+                row.String("rider_id"),
+                riderId,
+                StringComparison.OrdinalIgnoreCase))
+            .Select(row => new
+            {
+                Row = row,
+                ValidFrom = PublicDtoMapping.Date(row.String("valid_from")),
+                ValidTo = PublicDtoMapping.Date(row.String("valid_to"))
+            })
+            .Where(item => item.ValidFrom.HasValue)
+            .ToArray();
+
+        var exact = FindTeamPeriod(
+            riderHistory.Select(item => item.Row),
+            riderId,
+            effectiveDate);
+        if (exact is not null)
+        {
+            return exact;
+        }
+
+        return riderHistory
+            .OrderBy(item => DistanceFromPeriod(effectiveDate, item.ValidFrom!.Value, item.ValidTo))
+            .ThenBy(item => item.ValidFrom > effectiveDate ? 1 : 0)
+            .ThenByDescending(item => item.ValidFrom)
+            .Select(item => item.Row)
+            .FirstOrDefault();
+    }
+
+    private static int DistanceFromPeriod(
+        DateOnly effectiveDate,
+        DateOnly validFrom,
+        DateOnly? validTo)
+    {
+        if (effectiveDate < validFrom)
+        {
+            return validFrom.DayNumber - effectiveDate.DayNumber;
+        }
+
+        return validTo is { } end && effectiveDate > end
+            ? effectiveDate.DayNumber - end.DayNumber
+            : 0;
     }
 
     private static DateOnly? ResultDateOnly(JsonObject result) =>
@@ -1880,7 +1932,10 @@ public sealed class DomainQueryService
                     : ParseFieldSummary(sessionStatistics, 8),
                 CumulativeStatistics: cumulativeStatistics,
                 CompetitionClassPriority:
-                    session.Object("rounds")?.Int("competition_class_priority")));
+                    session.Object("rounds")?.Int("competition_class_priority"),
+                SessionDate: ParseTimestamp(
+                    session.String("session_date") ??
+                    session.Object("rounds")?.String("start_date"))));
         }
 
         return new RiderDetailDataBundle(data, sessions);
@@ -1911,6 +1966,15 @@ public sealed class DomainQueryService
             CompactDouble(row, offset + 5),
             CompactDouble(row, offset + 6));
     }
+
+    private static DateTimeOffset? ParseTimestamp(string? value) =>
+        DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal,
+            out var parsed)
+            ? parsed
+            : null;
 
     private static IEnumerable<JsonArray> CompactRows(JsonObject root, string property) =>
         root[property] is JsonArray rows

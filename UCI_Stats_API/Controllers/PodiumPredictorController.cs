@@ -16,7 +16,7 @@ public sealed class PodiumPredictorController : ControllerBase
     }
 
     [HttpGet]
-    [OutputCache(PolicyName = "season-summary")]
+    [OutputCache(PolicyName = "season-overview")]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
         return Ok(await _predictor.GetAsync(Request.Query, cancellationToken));

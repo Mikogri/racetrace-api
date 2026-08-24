@@ -364,6 +364,11 @@ public sealed class PublicApiQueryTests
         {
             ["end_date"] = "2026-07-19T00:00:00Z"
         }, now));
+        Assert.Equal("live", RoundsService.RoundStatus(new JsonObject
+        {
+            ["start_date"] = "2026-07-19T00:00:00+02:00",
+            ["end_date"] = "2026-07-20T00:00:00+02:00"
+        }, now));
     }
 
     [Fact]
@@ -389,7 +394,8 @@ public sealed class PublicApiQueryTests
     }
 
     [Theory]
-    [InlineData("postponed")]
+    [InlineData("live")]
+    [InlineData("confirmed")]
     [InlineData("cancelled")]
     public void ExplicitRoundStatusOverridesDates(string status)
     {
@@ -400,6 +406,17 @@ public sealed class PublicApiQueryTests
             ["start_date"] = "2026-07-21T00:00:00Z",
             ["end_date"] = "2026-07-22T00:00:00Z"
         }, now));
+    }
+
+    [Theory]
+    [InlineData("active")]
+    [InlineData("running")]
+    public void ActiveRoundStatusAliasesArePublishedAsLive(string status)
+    {
+        Assert.Equal("live", RoundsService.RoundStatus(new JsonObject
+        {
+            ["status"] = status
+        }));
     }
 
     [Fact]

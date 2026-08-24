@@ -9,6 +9,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="PdfPig" Version="0.1.15" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove=".codex-build\**\*.cs" />
   </ItemGroup>
 
 </Project>

@@ -12,7 +12,7 @@ public sealed class ResultsService
         "*,riders(*,rider_team_history(rider_id,valid_from,valid_to,teams(id,code,name))),teams(*)," +
         "result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id)," +
         "time_splits(id,result_id,split_index,race_time,speed)," +
-        "sessions!inner(*,round_categories!inner(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories!inner(*)))";
+        "sessions!inner(*,conditions(*),round_categories!inner(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories!inner(*)))";
 
     private static readonly Dictionary<string, string> ResultSorts = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -442,7 +442,7 @@ public sealed class ResultsService
             }
 
             var history = rider.Array("rider_team_history")?.OfType<JsonObject>() ?? [];
-            var team = DomainQueryService.FindTeamPeriod(history, riderId, resultDate.Value)?
+            var team = DomainQueryService.FindTeamPeriodOrNearest(history, riderId, resultDate.Value)?
                 .Object("teams");
             if (team is null)
             {

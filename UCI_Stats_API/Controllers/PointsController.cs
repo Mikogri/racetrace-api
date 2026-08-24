@@ -33,4 +33,13 @@ public sealed class PointsController : ControllerBase
     {
         return Ok(await _points.RecalculateAsync(request, cancellationToken));
     }
+
+    [HttpPost("api/admin/preaggregations/refresh")]
+    [ServiceFilter(typeof(AdminAuthorizationFilter))]
+    public async Task<IActionResult> RefreshPreaggregations(
+        [FromBody] RankingPreaggregationRefreshRequest request,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _points.RefreshRankingPreaggregationsAsync(request, cancellationToken));
+    }
 }

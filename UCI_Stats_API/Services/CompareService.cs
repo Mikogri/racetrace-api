@@ -11,15 +11,18 @@ public sealed class CompareService
 
     private readonly QueryValidationService _validator;
     private readonly DomainQueryService _domainQueries;
+    private readonly MetricsService _metrics;
     private readonly RankingService _ranking;
 
     public CompareService(
         QueryValidationService validator,
         DomainQueryService domainQueries,
+        MetricsService metrics,
         RankingService ranking)
     {
         _validator = validator;
         _domainQueries = domainQueries;
+        _metrics = metrics;
         _ranking = ranking;
     }
 
@@ -62,7 +65,11 @@ public sealed class CompareService
                 }
             }
 
-            sources.Add(new CompareRiderSource(riderId, rider, row, snapshot));
+            var source = new CompareRiderSource(riderId, rider, row, snapshot);
+            sources.Add(source with
+            {
+                RoundMetrics = await CalculateRoundMetricsAsync(source, context, cancellationToken)
+            });
         }
 
         return BuildResponse(sources);
@@ -107,21 +114,33 @@ public sealed class CompareService
 
     internal static CompareResponseDto BuildResponse(IReadOnlyList<CompareRiderSource> sources)
     {
-        var commonSessionIds = FindCommonSessionIds(sources);
-        var commonSessions = commonSessionIds
-            .Select(sessionId => BuildCommonSession(sessionId, sources))
+        var commonSessionIds = FindCommonSessionIds(sources)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var sessionIds = sources
+            .SelectMany(SourceResults)
+            .Select(ResultSessionId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        var sessions = sessionIds
+            .Select(sessionId => BuildSession(
+                sessionId,
+                sources,
+                commonSessionIds.Contains(sessionId)))
             .OrderByDescending(session => session.SessionDate)
             .ThenByDescending(session => session.RoundId)
             .ThenByDescending(session => session.SessionId)
             .ToArray();
+        var commonSessions = sessions.Where(session => session.IsCommon).ToArray();
         var riders = sources
             .Select(source => BuildRider(source, commonSessions))
             .ToArray();
 
         return new CompareResponseDto(
             riders,
+            sessions,
             commonSessions,
-            new CompareSummaryDto(riders.Length, commonSessions.Length));
+            new CompareSummaryDto(riders.Length, sessions.Length, commonSessions.Length));
     }
 
     internal static IReadOnlyList<string> FindCommonSessionIds(IReadOnlyList<CompareRiderSource> sources)
@@ -224,6 +243,17 @@ public sealed class CompareService
                 group.Count()))
             .ToArray();
         var row = source.RankingRow;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var categories = results
+            .Select(result => PublicApiCodes.ToPublicCategory(
+                result.Object("sessions")?.Object("categories")?.String("code")))
+            .Where(category => !string.IsNullOrWhiteSpace(category))
+            .Select(category => category!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(category => category, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var pointsProgress = BuildPointsProgress(results);
+        var roundMetrics = BuildRoundMetrics(source, results);
 
         return new CompareRiderDto(
             PublicDtoMapping.Long(source.RiderId),
@@ -233,6 +263,11 @@ public sealed class CompareService
             source.Rider.DisplayName(),
             source.Rider.String("nation"),
             source.Rider.String("profile_image_url"),
+            RiderCategoryResolver.CalculateAge(
+                PublicDtoMapping.Date(source.Rider.String("birth_date")),
+                today),
+            RiderCategoryResolver.CurrentCategory(source.Rider, today),
+            categories,
             PublicDtoMapping.NullableLong(team?.String("id")),
             team?.String("name"),
             team?.String("code"),
@@ -250,12 +285,19 @@ public sealed class CompareService
             Average(preFinalPositions),
             finishGaps.Length == 0 ? null : Round(finishGaps.Average()),
             finishGaps.Length,
-            sectorGaps);
+            sectorGaps,
+            pointsProgress.LastOrDefault()?.CumulativePoints ?? 0m,
+            pointsProgress,
+            roundMetrics)
+        {
+            ConsistencyEvidence = row?.Decimal("consistency_confidence") ?? 0m
+        };
     }
 
-    private static CompareSessionDto BuildCommonSession(
+    private static CompareSessionDto BuildSession(
         string sessionId,
-        IReadOnlyList<CompareRiderSource> sources)
+        IReadOnlyList<CompareRiderSource> sources,
+        bool isCommon)
     {
         var sourceResults = sources
             .Select(source => new
@@ -264,8 +306,10 @@ public sealed class CompareService
                 Result = SourceResults(source)
                     .Where(result => string.Equals(ResultSessionId(result), sessionId, StringComparison.OrdinalIgnoreCase))
                     .OrderByDescending(result => PublicDtoMapping.Long(result.String("id")))
-                    .First()
+                    .FirstOrDefault()
             })
+            .Where(item => item.Result is not null)
+            .Select(item => new { item.Source, Result = item.Result! })
             .ToArray();
         var session = sourceResults
             .Select(item => item.Result.Object("sessions"))
@@ -279,7 +323,7 @@ public sealed class CompareService
             .Where(time => time is > 0)
             .Select(time => time!.Value)
             .ToArray();
-        var bestFinishTime = validFinishTimes.Length < 2 ? (int?)null : validFinishTimes.Min();
+        var bestFinishTime = validFinishTimes.Length == 0 ? (int?)null : validFinishTimes.Min();
         var precomputedByRider = sourceResults.ToDictionary(
             item => item.Source.RiderId,
             item => item.Source.Snapshot.PrecomputedSessions?
@@ -292,7 +336,7 @@ public sealed class CompareService
             .SelectMany(precomputed => precomputed!.Sectors)
             .Where(sector => IsValidTime(sector.TimeSeconds))
             .GroupBy(sector => sector.SectorIndex)
-            .Where(group => group.Count() >= 2)
+            .Where(group => !isCommon || group.Count() == sources.Count)
             .ToDictionary(group => group.Key, group => group.Min(sector => sector.TimeSeconds!.Value));
 
         var results = sourceResults
@@ -369,11 +413,141 @@ public sealed class CompareService
             track?.String("name"),
             track?.String("venue"),
             track?.String("country_code"),
-            PublicDtoMapping.Condition(round.Object("conditions")),
+             PublicDtoMapping.Condition(session.Object("conditions") ?? round.Object("conditions")),
             PublicDtoMapping.NullableLong(round.String("competition_class_id") ?? round.String("competition_level_id") ?? competitionClass?.String("id")),
             competitionClass?.String("code"),
             competitionClass?.String("name"),
+            isCommon,
             results);
+    }
+
+    private async Task<IReadOnlyDictionary<string, RiderPerformanceMetricValues>> CalculateRoundMetricsAsync(
+        CompareRiderSource source,
+        RiderMetricsContext context,
+        CancellationToken cancellationToken)
+    {
+        var metrics = new Dictionary<string, RiderPerformanceMetricValues>(StringComparer.OrdinalIgnoreCase);
+        var groups = SourceResults(source)
+            .GroupBy(ResultRoundId, StringComparer.OrdinalIgnoreCase)
+            .Where(group => !string.IsNullOrWhiteSpace(group.Key));
+        foreach (var group in groups)
+        {
+            var roundResults = group.ToArray();
+            var sessionIds = roundResults
+                .Select(ResultSessionId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var availableSessions = source.Snapshot.Sessions
+                .Where(session => sessionIds.Contains(session.String("id") ?? string.Empty))
+                .ToArray();
+            IReadOnlyDictionary<string, RiderPerformanceMetricValues> calculated;
+            if (source.Snapshot.PrecomputedSessions is not null)
+            {
+                var precomputed = source.Snapshot.PrecomputedSessions
+                    .Where(session => sessionIds.Contains(session.SessionId))
+                    .ToArray();
+                calculated = _metrics.CalculatePrecomputedPerformanceByRider(
+                    roundResults,
+                    precomputed,
+                    availableSessions);
+            }
+            else
+            {
+                var fieldResults = source.Snapshot.FieldResults
+                    .Where(result => sessionIds.Contains(ResultSessionId(result) ?? string.Empty))
+                    .ToArray();
+                var fieldResultIds = fieldResults
+                    .Select(result => result.String("id"))
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Select(id => id!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                calculated = await _metrics.CalculatePerformanceByRiderAsync(
+                    roundResults,
+                    context,
+                    cancellationToken,
+                    availableSessions: availableSessions,
+                    suppliedSplits: source.Snapshot.Splits
+                        .Where(split => fieldResultIds.Contains(split.String("result_id") ?? string.Empty))
+                        .ToArray(),
+                    suppliedFieldResults: fieldResults);
+            }
+
+            if (calculated.TryGetValue(source.RiderId, out var performance))
+            {
+                metrics[group.Key] = performance;
+            }
+        }
+
+        return metrics;
+    }
+
+    private static IReadOnlyList<ComparePointsProgressDto> BuildPointsProgress(
+        IReadOnlyList<JsonObject> results)
+    {
+        decimal cumulative = 0m;
+        return results
+            .OrderBy(ResultDate, StringComparer.Ordinal)
+            .ThenBy(result => PublicDtoMapping.Long(ResultSessionId(result)))
+            .ThenBy(result => PublicDtoMapping.Long(result.String("id")))
+            .Select(result =>
+            {
+                var session = result.Object("sessions");
+                var round = session?.Object("rounds");
+                var awarded = result.Decimal("awarded_points") ?? 0m;
+                cumulative += awarded;
+                return new ComparePointsProgressDto(
+                    PublicDtoMapping.Long(result.String("id")),
+                    PublicDtoMapping.Long(ResultSessionId(result)),
+                    PublicDtoMapping.Long(ResultRoundId(result)),
+                    PublicDtoMapping.Date(session?.String("session_date") ?? round?.String("start_date")),
+                    PublicApiCodes.ToPublicSessionType(session?.String("session_type")),
+                    PublicApiCodes.ToPublicCategory(session?.Object("categories")?.String("code")),
+                    awarded,
+                    cumulative);
+            })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<CompareRoundMetricsDto> BuildRoundMetrics(
+        CompareRiderSource source,
+        IReadOnlyList<JsonObject> results)
+    {
+        return results
+            .GroupBy(ResultRoundId, StringComparer.OrdinalIgnoreCase)
+            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
+            .Select(group =>
+            {
+                var result = group.OrderBy(ResultDate, StringComparer.Ordinal).First();
+                var session = result.Object("sessions");
+                var round = session?.Object("rounds");
+                var track = round?.Object("tracks");
+                var competitionClass = round?.Object("competition_levels") ?? round?.Object("competition_class");
+                RiderPerformanceMetricValues? performance = null;
+                if (source.RoundMetrics is not null)
+                {
+                    source.RoundMetrics.TryGetValue(group.Key, out performance);
+                }
+                return new CompareRoundMetricsDto(
+                    PublicDtoMapping.Long(group.Key),
+                    round?.Int("season_year"),
+                    round?.Int("round_number"),
+                    PublicDtoMapping.Date(round?.String("start_date") ?? session?.String("session_date")),
+                    PublicDtoMapping.NullableLong(round?.String("track_id") ?? track?.String("id")),
+                    track?.String("name"),
+                    track?.String("venue"),
+                    competitionClass?.String("code"),
+                    performance?.Rating,
+                    performance?.Pace,
+                    performance?.Consistency,
+                    performance?.PaceConfidence ?? 0m)
+                {
+                    ConsistencyEvidence = performance?.ConsistencyEvidence ?? 0m
+                };
+            })
+            .OrderBy(item => item.Date)
+            .ThenBy(item => item.RoundId)
+            .ToArray();
     }
 
     private static IReadOnlyList<JsonObject> SourceResults(CompareRiderSource source) =>
@@ -408,6 +582,14 @@ public sealed class CompareService
     private static string? ResultSessionId(JsonObject result) =>
         result.String("session_id") ?? result.Object("sessions")?.String("id");
 
+    private static string ResultRoundId(JsonObject result)
+    {
+        var session = result.Object("sessions");
+        return session?.String("round_id") ??
+            session?.Object("rounds")?.String("id") ??
+            string.Empty;
+    }
+
     private static string ResultDate(JsonObject result) =>
         result.Object("sessions")?.String("session_date") ??
         result.Object("sessions")?.Object("rounds")?.String("start_date") ??
@@ -426,4 +608,5 @@ internal sealed record CompareRiderSource(
     string RiderId,
     JsonObject Rider,
     JsonObject? RankingRow,
-    RankingSnapshot Snapshot);
+    RankingSnapshot Snapshot,
+    IReadOnlyDictionary<string, RiderPerformanceMetricValues>? RoundMetrics = null);

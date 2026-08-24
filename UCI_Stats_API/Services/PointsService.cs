@@ -112,6 +112,111 @@ public sealed class PointsService
         };
     }
 
+    public async Task<JsonObject> RefreshRankingPreaggregationsAsync(
+        RankingPreaggregationRefreshRequest request,
+        CancellationToken cancellationToken)
+    {
+        var mode = request.Mode?.Trim().ToLowerInvariant() ?? "missing";
+        if (mode is not ("missing" or "all"))
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "INVALID_PREAGGREGATION_MODE",
+                "mode must be missing or all.");
+        }
+
+        var context = new RiderMetricsContext(null, null, null, null, null, null, null, null, null, null, null);
+        var allSessionIds = await _domainQueries.ResolveSessionIdsAsync(context, SupabaseRole.Service, cancellationToken);
+        var sessionsWithResults = await SessionIdsWithResultsAsync(allSessionIds, cancellationToken);
+        var existing = await ExistingPreaggregationIdsAsync(sessionsWithResults, cancellationToken);
+        var targets = mode == "missing"
+            ? sessionsWithResults.Where(id => !existing.Contains(id)).ToArray()
+            : sessionsWithResults.ToArray();
+
+        var refreshed = new JsonArray();
+        var failed = new JsonArray();
+        foreach (var sessionId in targets)
+        {
+            try
+            {
+                await _supabase.RpcAsync(
+                    "refresh_ranking_session_preaggregate",
+                    new JsonObject { ["p_session_id"] = long.Parse(sessionId) },
+                    SupabaseRole.Service,
+                    cancellationToken);
+                refreshed.Add(sessionId);
+            }
+            catch (SupabaseApiException)
+            {
+                failed.Add(sessionId);
+            }
+        }
+
+        var presentAfterRefresh = await ExistingPreaggregationIdsAsync(sessionsWithResults, cancellationToken);
+        var stillMissing = sessionsWithResults
+            .Where(id => !presentAfterRefresh.Contains(id))
+            .Select(id => (JsonNode?)JsonValue.Create(id))
+            .ToArray();
+
+        return new JsonObject
+        {
+            ["mode"] = mode,
+            ["sessions_with_results"] = sessionsWithResults.Count,
+            ["sessions_requested"] = targets.Length,
+            ["sessions_refreshed"] = refreshed.Count,
+            ["sessions_failed"] = failed.Count,
+            ["session_ids"] = refreshed,
+            ["failed_session_ids"] = failed,
+            ["still_missing_session_ids"] = new JsonArray(stillMissing)
+        };
+    }
+
+    private async Task<IReadOnlyList<string>> SessionIdsWithResultsAsync(
+        IReadOnlyList<string> sessionIds,
+        CancellationToken cancellationToken)
+    {
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var batch in sessionIds.Chunk(10))
+        {
+            var response = await _supabase.GetAsync(
+                new SupabaseQuery("results").Select("session_id").In("session_id", batch),
+                role: SupabaseRole.Service,
+                cancellationToken: cancellationToken);
+            foreach (var row in response.Data)
+            {
+                if (row.String("session_id") is { Length: > 0 } id)
+                {
+                    found.Add(id);
+                }
+            }
+        }
+
+        return found.OrderBy(id => long.TryParse(id, out var parsed) ? parsed : long.MaxValue).ToArray();
+    }
+
+    private async Task<HashSet<string>> ExistingPreaggregationIdsAsync(
+        IReadOnlyList<string> sessionIds,
+        CancellationToken cancellationToken)
+    {
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var batch in sessionIds.Chunk(100))
+        {
+            var response = await _supabase.GetAsync(
+                new SupabaseQuery("ranking_session_preaggregates").Select("session_id").In("session_id", batch),
+                role: SupabaseRole.Service,
+                cancellationToken: cancellationToken);
+            foreach (var row in response.Data)
+            {
+                if (row.String("session_id") is { Length: > 0 } id)
+                {
+                    found.Add(id);
+                }
+            }
+        }
+
+        return found;
+    }
+
     private async Task TryRecalculateSessionAsync(string sessionId, JsonArray recalculated, CancellationToken cancellationToken)
     {
         var result = await _pointAwards.RecalculateSessionAsync(sessionId, cancellationToken);

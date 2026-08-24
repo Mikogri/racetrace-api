@@ -36,6 +36,32 @@ public sealed class RoundsServiceImageQueryTests
     }
 
     [Fact]
+    public async Task LiveRoundFilterIncludesExplicitRoundStatus()
+    {
+        var supabase = new RoundImageSupabaseClient();
+        var service = new RoundsService(
+            supabase,
+            new QueryValidationService(),
+            new DomainQueryService(supabase));
+
+        await service.ListRoundsAsync(
+            new QueryCollection(new Dictionary<string, StringValues>
+            {
+                ["season"] = "2026",
+                ["status"] = "live"
+            }),
+            CancellationToken.None);
+
+        Assert.Contains(
+            supabase.RoundsQuery!.Parameters,
+            parameter =>
+                parameter.Key == "or" &&
+                parameter.Value.Contains("status.eq.live", StringComparison.Ordinal) &&
+                parameter.Value.Contains("status.eq.active", StringComparison.Ordinal) &&
+                parameter.Value.Contains("status.eq.running", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RoundListLoadsOnlyImageMetadataInSmallBatches()
     {
         var supabase = new RoundImageSupabaseClient();

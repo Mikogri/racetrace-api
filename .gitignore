@@ -19,5 +19,11 @@ TestResults/
 coverage/
 coverage.*
 
+.codex-build/
+.codex-output/
+.codex-test-output/
+**/.codex-build/
+**/tmp/
+
 .DS_Store
 Thumbs.db

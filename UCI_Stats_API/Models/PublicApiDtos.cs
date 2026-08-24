@@ -46,7 +46,11 @@ public sealed record RankingRiderDto(
     [property: JsonPropertyName("confidence")] decimal Confidence,
     [property: JsonPropertyName("finalsCount")] int FinalsCount,
     [property: JsonPropertyName("qualifyingRate")] decimal QualifyingRate,
-    [property: JsonPropertyName("profileImageUrl")] string? ProfileImageUrl);
+    [property: JsonPropertyName("profileImageUrl")] string? ProfileImageUrl)
+{
+    [JsonPropertyName("consistencyEvidence")]
+    public decimal ConsistencyEvidence { get; init; }
+}
 
 public sealed record RankingSummaryDto(
     [property: JsonPropertyName("sessionsCount")] int SessionsCount,
@@ -78,6 +82,7 @@ public sealed record RoundListItemDto(
     [property: JsonPropertyName("roundId")] long RoundId,
     [property: JsonPropertyName("roundNumber")] int? RoundNumber,
     [property: JsonPropertyName("season")] int Season,
+    [property: JsonPropertyName("contextName")] string? ContextName,
     [property: JsonPropertyName("imageUrl")] string? ImageUrl,
     [property: JsonPropertyName("trackId")] long TrackId,
     [property: JsonPropertyName("trackName")] string? TrackName,

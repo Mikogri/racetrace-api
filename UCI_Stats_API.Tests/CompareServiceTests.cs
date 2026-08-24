@@ -64,6 +64,9 @@ public sealed class CompareServiceTests
             Result("21", "2", "100", "Q1", 1, "Finished", 102_000),
             Result("22", "2", "200", "FINAL", 2, "Finished", 203_000)
         };
+        firstResults[0]["awarded_points"] = 10;
+        firstResults[1]["awarded_points"] = 20;
+        firstResults[2]["awarded_points"] = 30;
         var first = Source(
             "1",
             firstResults,
@@ -98,8 +101,11 @@ public sealed class CompareServiceTests
         var response = CompareService.BuildResponse([first, second]);
 
         Assert.Equal(2, response.Summary.RidersCount);
+        Assert.Equal(3, response.Summary.SessionsCount);
         Assert.Equal(2, response.Summary.CommonSessionsCount);
+        Assert.Equal(3, response.Sessions.Count);
         Assert.Equal(2, response.CommonSessions.Count);
+        Assert.Single(response.Sessions, session => !session.IsCommon);
         Assert.All(response.CommonSessions, session => Assert.Equal(2, session.Results.Count));
 
         var firstRider = response.Riders[0];
@@ -113,6 +119,11 @@ public sealed class CompareServiceTests
         Assert.Equal(2, firstRider.WonSectorsCount);
         Assert.Equal(96m, firstRider.Rating);
         Assert.Equal(0m, firstRider.AverageFinishGapToBestSelected);
+        Assert.Equal([10m, 30m, 60m], firstRider.PointsProgress
+            .Select(point => point.CumulativePoints)
+            .ToArray());
+        Assert.Equal(60m, firstRider.TotalPoints);
+        Assert.Equal(["elite_men"], firstRider.Categories);
 
         var secondRider = response.Riders[1];
         Assert.Equal(2.5m, secondRider.AverageFinishGapToBestSelected);
@@ -123,6 +134,32 @@ public sealed class CompareServiceTests
         Assert.Equal([1, 2], secondRider.AverageSectorGapsToBestSelected
             .Select(gap => gap.SectorIndex)
             .ToArray());
+    }
+
+    [Fact]
+    public void SectorGapAveragesUseOnlySectorsAvailableForEveryComparedRider()
+    {
+        var first = Source(
+            "1",
+            [Result("11", "1", "100", "Q1", 1, "Finished", 100_000)],
+            [],
+            [PaceSession("1", "100", 100, 40, 60)]);
+        var second = Source(
+            "2",
+            [Result("21", "2", "100", "Q1", 2, "DNF", null)],
+            [],
+            [PaceSession("2", "100", 100, 42)]);
+
+        var response = CompareService.BuildResponse([first, second]);
+
+        Assert.Single(response.CommonSessions);
+        Assert.All(
+            response.CommonSessions[0].Results,
+            result => Assert.Single(result.Sectors, sector => sector.GapToBestSelected.HasValue));
+        Assert.All(
+            response.Riders,
+            rider => Assert.Single(rider.AverageSectorGapsToBestSelected));
+        Assert.Equal(2m, response.Riders[1].AverageSectorGapsToBestSelected[0].AverageGap);
     }
 
     private static QueryCollection Query(string riderIds) => new(new Dictionary<string, StringValues>

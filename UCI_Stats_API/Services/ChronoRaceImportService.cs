@@ -10,23 +10,27 @@ public sealed class ChronoRaceImportService
     private const int WriteBatchSize = 500;
     private static readonly HashSet<string> PlannedRoundStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
-        "scheduled",
-        "postponed",
-        "cancelled"
+		"scheduled",
+		"confirmed",
+		"live",
+		"cancelled"
     };
 
     private readonly ISupabaseRestClient _supabase;
     private readonly DomainQueryService _domainQueries;
     private readonly IPointAwardService _pointAwards;
+    private readonly RoundImageStorageService? _imageStorage;
 
     public ChronoRaceImportService(
         ISupabaseRestClient supabase,
         DomainQueryService domainQueries,
-        IPointAwardService pointAwards)
+        IPointAwardService pointAwards,
+        RoundImageStorageService? imageStorage = null)
     {
         _supabase = supabase;
         _domainQueries = domainQueries;
         _pointAwards = pointAwards;
+        _imageStorage = imageStorage;
     }
 
     public async Task<PlannedRoundCreateResponse> CreatePlannedRoundAsync(
@@ -56,10 +60,9 @@ public sealed class ChronoRaceImportService
             request.CompetitionClassCode,
             request.CompetitionClassName,
             request.CompetitionClassPriority);
-        var internalContext = BuildPlannedRoundContext(
-            request.SeasonYear,
-            request.RoundNumber,
-            track.String("id")!);
+        var internalContext = string.IsNullOrWhiteSpace(request.ContextName)
+            ? BuildPlannedRoundContext(request.SeasonYear, request.RoundNumber, track.String("id")!)
+            : request.ContextName.Trim();
         var roundPayload = new ImportRoundPayload(
             internalContext,
             request.SeasonYear,
@@ -185,6 +188,14 @@ public sealed class ChronoRaceImportService
             cancellationToken);
         var teamIdsByCode = await UpsertTeamsAsync(ridersDictionary, warnings, cancellationToken);
         var importedRiderIds = ImportedResultRiderIds(resultsArray, ridersDictionary, riderMap, warnings);
+        var effectiveDate = request.Session.SessionDate ??
+            (request.Round.StartDate is { } startDate
+                ? DateOnly.FromDateTime(startDate.UtcDateTime)
+                : (DateOnly?)null);
+        var fallbackTeamIds = await ResolveFallbackTeamIdsAsync(
+            importedRiderIds,
+            effectiveDate,
+            cancellationToken);
         var staleResultsDeleted = await DeleteStaleSessionResultsAsync(session.String("id")!, importedRiderIds, cancellationToken);
         if (staleResultsDeleted > 0)
         {
@@ -197,6 +208,7 @@ public sealed class ChronoRaceImportService
             ridersDictionary,
             riderMap.RiderIdsByUciId,
             teamIdsByCode,
+            fallbackTeamIds,
             warnings,
             cancellationToken);
         if (importedResults.RiderIdsWithExplicitTeams.Count > 0)
@@ -492,7 +504,7 @@ public sealed class ChronoRaceImportService
                 throw new ApiException(
                     StatusCodes.Status503ServiceUnavailable,
                     "ROUND_STATUS_SCHEMA_REQUIRED",
-                    "Apply the planned round status database migration before using postponed or cancelled.");
+					"Apply the round status database migration before using confirmed, live, or cancelled.");
             }
 
             values.Remove("status");
@@ -538,12 +550,16 @@ public sealed class ChronoRaceImportService
         PreparedRoundImage image,
         CancellationToken cancellationToken)
     {
+        var storagePath = _imageStorage is null
+            ? null
+            : await _imageStorage.UploadAsync(image, cancellationToken);
         await _supabase.PostAsync(
             "round_images",
             new JsonObject
             {
                 ["round_id"] = roundId,
-                ["image_data"] = $"\\x{Convert.ToHexString(image.Bytes)}",
+                ["image_data"] = storagePath is null ? $"\\x{Convert.ToHexString(image.Bytes)}" : null,
+                ["storage_path"] = storagePath,
                 ["content_type"] = "image/png",
                 ["file_name"] = image.FileName,
                 ["alt_text"] = image.AltText,
@@ -582,7 +598,7 @@ public sealed class ChronoRaceImportService
             throw new ApiException(
                 StatusCodes.Status400BadRequest,
                 "INVALID_ROUND_STATUS",
-                "status must be scheduled, postponed, or cancelled.");
+				"status must be scheduled, confirmed, live, or cancelled.");
         }
 
         if (request.CompetitionClassId <= 0 ||
@@ -654,7 +670,7 @@ public sealed class ChronoRaceImportService
         string? conditionId,
         string sessionType)
     {
-        return new JsonObject
+        var values = new JsonObject
         {
             ["round_id"] = roundId,
             ["category_id"] = categoryId,
@@ -664,24 +680,46 @@ public sealed class ChronoRaceImportService
             ["session_date"] = payload.SessionDate?.ToString("yyyy-MM-dd"),
             ["status"] = string.IsNullOrWhiteSpace(payload.Status) ? "scheduled" : payload.Status
         };
+
+        // The public ChronoRace JSON URL lets the frontend poll live timing
+        // directly. Inline/PDF imports deliberately keep an existing source.
+        if (!string.IsNullOrWhiteSpace(payload.ChronoraceUrl))
+        {
+            values["chronorace_url"] = payload.ChronoraceUrl.Trim();
+        }
+
+        return values;
     }
 
-    private async Task<JsonObject> SaveSessionAsync(JsonObject? existing, JsonObject values, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return existing is null
-                ? (await _supabase.PostAsync("sessions", values, SupabaseRole.Service, cancellationToken: cancellationToken)).First()
-                : (await _supabase.PatchAsync("sessions", values, new SupabaseQuery("sessions").Filter("id", "eq", existing.String("id")), SupabaseRole.Service, cancellationToken)).First();
-        }
-        catch (SupabaseApiException exception) when (exception.ResponseBody.Contains("condition_id", StringComparison.OrdinalIgnoreCase))
-        {
-            values.Remove("condition_id");
-            return existing is null
-                ? (await _supabase.PostAsync("sessions", values, SupabaseRole.Service, cancellationToken: cancellationToken)).First()
-                : (await _supabase.PatchAsync("sessions", values, new SupabaseQuery("sessions").Filter("id", "eq", existing.String("id")), SupabaseRole.Service, cancellationToken)).First();
-        }
-    }
+	private async Task<JsonObject> SaveSessionAsync(JsonObject? existing, JsonObject values, CancellationToken cancellationToken)
+	{
+		while (true)
+		{
+			try
+			{
+				return existing is null
+					? (await _supabase.PostAsync("sessions", values, SupabaseRole.Service, cancellationToken: cancellationToken)).First()
+					: (await _supabase.PatchAsync("sessions", values, new SupabaseQuery("sessions").Filter("id", "eq", existing.String("id")), SupabaseRole.Service, cancellationToken)).First();
+			}
+			catch (SupabaseApiException exception) when (
+				RemoveMissingOptionalSessionColumn(values, exception, "chronorace_url"))
+			{
+				// Live-source metadata remains optional for databases created before live timing support.
+			}
+		}
+	}
+
+	private static bool RemoveMissingOptionalSessionColumn(
+		JsonObject values,
+		SupabaseApiException exception,
+		string column)
+	{
+		return values.ContainsKey(column) &&
+			exception.ResponseBody.Contains(column, StringComparison.OrdinalIgnoreCase) &&
+			(exception.ResponseBody.Contains("schema cache", StringComparison.OrdinalIgnoreCase) ||
+			 exception.ResponseBody.Contains("PGRST204", StringComparison.OrdinalIgnoreCase)) &&
+			values.Remove(column);
+	}
 
     private async Task<RiderImportMap> UpsertRidersAsync(
         JsonObject riders,
@@ -825,7 +863,7 @@ public sealed class ChronoRaceImportService
             ["last_name"] = PreferNew(riderNode.String("FamilyName"), existing?.String("last_name")),
             ["first_name"] = PreferNew(riderNode.String("GivenName"), existing?.String("first_name")),
             ["nation"] = PreferNew(riderNode.String("Nation"), existing?.String("nation")),
-            ["birth_date"] = PreferNew(NormalizeDate(riderNode.String("BirthDate")), existing?.String("birth_date")),
+            ["birth_date"] = ResolveBirthDate(riderNode, existing),
             ["gender"] = PreferNew(gender, existing?.String("gender")),
             ["is_protected"] = riderNode.Bool("Protected") ?? existing?.Bool("is_protected") ?? false,
             ["has_injury"] = riderNode.Bool("Injury") ?? existing?.Bool("has_injury") ?? false
@@ -945,6 +983,7 @@ public sealed class ChronoRaceImportService
         JsonObject riders,
         IReadOnlyDictionary<string, string> riderIdsByUciId,
         IReadOnlyDictionary<string, string> teamIdsByCode,
+        IReadOnlyDictionary<string, string> fallbackTeamIdsByRiderId,
         List<string> warnings,
         CancellationToken cancellationToken)
     {
@@ -973,7 +1012,7 @@ public sealed class ChronoRaceImportService
             var teamId = team is not null &&
                 teamIdsByCode.TryGetValue(team.Value.Code, out var resolvedTeamId)
                     ? resolvedTeamId
-                    : null;
+                    : fallbackTeamIdsByRiderId.GetValueOrDefault(riderId);
             var values = BuildResultPayload(
                 sessionId,
                 riderId,
@@ -1070,6 +1109,36 @@ public sealed class ChronoRaceImportService
             splitRows.Count,
             finishedResultsWithoutSplits,
             riderIdsWithExplicitTeams.ToArray());
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>> ResolveFallbackTeamIdsAsync(
+        IReadOnlyCollection<string> riderIds,
+        DateOnly? effectiveDate,
+        CancellationToken cancellationToken)
+    {
+        if (!effectiveDate.HasValue || riderIds.Count == 0)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var history = await _domainQueries.GetRiderTeamHistoryAsync(
+            riderIds,
+            role: SupabaseRole.Service,
+            cancellationToken: cancellationToken);
+        return riderIds
+            .Select(riderId => new
+            {
+                RiderId = riderId,
+                TeamId = DomainQueryService.FindTeamPeriodOrNearest(
+                    history,
+                    riderId,
+                    effectiveDate.Value)?.String("team_id")
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.TeamId))
+            .ToDictionary(
+                item => item.RiderId,
+                item => item.TeamId!,
+                StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task RefreshRiderTeamHistoryAsync(
@@ -1351,6 +1420,24 @@ public sealed class ChronoRaceImportService
         return DateTimeOffset.TryParse(value, out var dateTime)
             ? dateTime.ToString("yyyy-MM-dd")
             : value;
+    }
+
+    private static string? ResolveBirthDate(JsonObject riderNode, JsonObject? existing)
+    {
+        var exactSourceDate = NormalizeDate(riderNode.String("BirthDate"));
+        if (!string.IsNullOrWhiteSpace(exactSourceDate))
+        {
+            return exactSourceDate;
+        }
+
+        var existingDate = existing?.String("birth_date");
+        if (!string.IsNullOrWhiteSpace(existingDate))
+        {
+            return existingDate;
+        }
+
+        var year = riderNode.Int("YearOfBirth");
+        return year is >= 1900 and <= 2100 ? $"{year:0000}-01-01" : null;
     }
 
     internal static string? GenderFromCategory(string? categoryCode)

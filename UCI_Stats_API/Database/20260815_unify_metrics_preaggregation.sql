@@ -206,7 +206,8 @@ field_results as materialized (
     ) as is_valid_classification
   from public.results re
   join relevant_sessions rs on rs.session_id = re.session_id
-  where p_status is null or re.status = p_status
+  where (p_status is null or re.status = p_status)
+    and upper(btrim(coalesce(re.status, ''))) <> 'DSQ'
 ),
 deduplicated_splits as materialized (
   select distinct on (ts.result_id, ts.split_index)

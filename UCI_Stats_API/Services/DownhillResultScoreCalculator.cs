@@ -16,10 +16,14 @@ internal sealed class ResultScoreOptions
 internal sealed class DownhillResultScoreCalculator
 {
     private readonly ResultScoreOptions _options;
+    private readonly SessionWeightOptions _sessionWeights;
 
-    public DownhillResultScoreCalculator(ResultScoreOptions? options = null)
+    public DownhillResultScoreCalculator(
+        ResultScoreOptions? options = null,
+        SessionWeightOptions? sessionWeights = null)
     {
         _options = options ?? new ResultScoreOptions();
+        _sessionWeights = sessionWeights ?? new SessionWeightOptions();
         if (_options.SecondPlaceScore <= 0 ||
             _options.SecondPlaceScore >= 100 ||
             _options.ConfidenceWeightScale <= 0)
@@ -35,14 +39,21 @@ internal sealed class DownhillResultScoreCalculator
         IEnumerable<PaceSessionData> sessions,
         CompetitionClassWeighting? competitionClassWeighting = null)
     {
-        var weightedScores = sessions
-            .Select(session => BuildSessionScore(
+        var sessionScores = sessions
+            .Select(session => new
+            {
+                session.SessionType,
+                Score = BuildSessionScore(
                 riderId,
                 session,
-                competitionClassWeighting))
-            .Where(score => score is not null && score.Weight > 0)
-            .Select(score => score!)
+                competitionClassWeighting)
+            })
+            .Where(item => item.Score is not null && item.Score.Weight > 0)
             .ToArray();
+        var evidenceWeightSum = sessionScores.Sum(item => item.Score!.Weight);
+        var weightedScores = ApplyFinalTargetImpact(sessionScores
+            .Select(item => (item.SessionType, item.Score!))
+            .ToArray());
 
         if (weightedScores.Length == 0)
         {
@@ -51,7 +62,7 @@ internal sealed class DownhillResultScoreCalculator
 
         var weightSum = weightedScores.Sum(score => score.Weight);
         var resultScore = weightedScores.Sum(score => score.Score * score.Weight) / weightSum;
-        var confidence = 1.0 - Math.Exp(-weightSum / _options.ConfidenceWeightScale);
+        var confidence = 1.0 - Math.Exp(-evidenceWeightSum / _options.ConfidenceWeightScale);
 
         return new RiderResultScore(
             Score: Clamp(resultScore, 0, 100),
@@ -63,13 +74,18 @@ internal sealed class DownhillResultScoreCalculator
         IEnumerable<PacePrecomputedSessionData> sessions,
         CompetitionClassWeighting? competitionClassWeighting = null)
     {
-        var weightedScores = sessions
-            .Select(session => BuildSessionScore(
-                session,
-                competitionClassWeighting))
-            .Where(score => score is not null && score.Weight > 0)
-            .Select(score => score!)
+        var sessionScores = sessions
+            .Select(session => new
+            {
+                session.SessionType,
+                Score = BuildSessionScore(session, competitionClassWeighting)
+            })
+            .Where(item => item.Score is not null && item.Score.Weight > 0)
             .ToArray();
+        var evidenceWeightSum = sessionScores.Sum(item => item.Score!.Weight);
+        var weightedScores = ApplyFinalTargetImpact(sessionScores
+            .Select(item => (item.SessionType, item.Score!))
+            .ToArray());
 
         if (weightedScores.Length == 0)
         {
@@ -78,7 +94,7 @@ internal sealed class DownhillResultScoreCalculator
 
         var weightSum = weightedScores.Sum(score => score.Weight);
         var resultScore = weightedScores.Sum(score => score.Score * score.Weight) / weightSum;
-        var confidence = 1.0 - Math.Exp(-weightSum / _options.ConfidenceWeightScale);
+        var confidence = 1.0 - Math.Exp(-evidenceWeightSum / _options.ConfidenceWeightScale);
 
         return new RiderResultScore(
             Score: Clamp(resultScore, 0, 100),
@@ -116,7 +132,7 @@ internal sealed class DownhillResultScoreCalculator
         PaceSessionData session,
         CompetitionClassWeighting? competitionClassWeighting)
     {
-        var sessionWeight = DownhillPaceCalculator.GetSessionWeight(session.SessionType);
+        var sessionWeight = _sessionWeights.GetWeight(session.SessionType);
         if (sessionWeight <= 0)
         {
             return null;
@@ -132,7 +148,10 @@ internal sealed class DownhillResultScoreCalculator
         }
 
         var classified = session.Runs
-            .Where(run => run.IsClassified && run.FinishRank is > 0)
+            .Where(run =>
+                !DownhillPaceCalculator.IsDisqualified(run.Status) &&
+                run.IsClassified &&
+                run.FinishRank is > 0)
             .GroupBy(run => run.RiderId, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
@@ -166,7 +185,7 @@ internal sealed class DownhillResultScoreCalculator
         PacePrecomputedSessionData session,
         CompetitionClassWeighting? competitionClassWeighting)
     {
-        var sessionWeight = DownhillPaceCalculator.GetSessionWeight(session.SessionType);
+        var sessionWeight = _sessionWeights.GetWeight(session.SessionType);
         if (sessionWeight <= 0 ||
             session.ClassifiedFieldSize < 2 ||
             IsIgnoredStatus(session.Run.Status))
@@ -195,13 +214,24 @@ internal sealed class DownhillResultScoreCalculator
 
     private static bool IsIgnoredStatus(string? status)
     {
-        return string.Equals(status, "DNS", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(status, "DSQ", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(status?.Trim(), "DNS", StringComparison.OrdinalIgnoreCase) ||
+            DownhillPaceCalculator.IsDisqualified(status);
     }
 
     private static bool IsDidNotFinish(string? status)
     {
-        return string.Equals(status, "DNF", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(status?.Trim(), "DNF", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private WeightedScore[] ApplyFinalTargetImpact(
+        IReadOnlyList<(PaceSessionType SessionType, WeightedScore Score)> sessionScores)
+    {
+        var effectiveWeights = _sessionWeights.ApplyFinalTargetImpact(
+            sessionScores.Select(item => item.SessionType).ToArray(),
+            sessionScores.Select(item => item.Score.Weight).ToArray());
+        return sessionScores
+            .Select((item, index) => item.Score with { Weight = effectiveWeights[index] })
+            .ToArray();
     }
 
     private static double Clamp(double value, double minimum, double maximum)

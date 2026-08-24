@@ -55,6 +55,9 @@ public sealed record RiderPerformanceMetricValues(
     int ConsistencyUsedRuns,
     int ConsistencyUsedSectors)
 {
+    [JsonPropertyName("consistency_evidence")]
+    public decimal ConsistencyEvidence => ConsistencyConfidence;
+
     [JsonPropertyName("pace_confidence_status")]
     public string PaceConfidenceStatus { get; init; } = "Low";
 
@@ -114,6 +117,9 @@ public sealed record RiderMetricValues(
     JsonObject? BestResult,
     decimal? BestSpeed)
 {
+    [JsonPropertyName("consistency_evidence")]
+    public decimal ConsistencyEvidence => ConsistencyConfidence;
+
     [JsonPropertyName("pace_confidence_status")]
     public string PaceConfidenceStatus { get; init; } = "Low";
 

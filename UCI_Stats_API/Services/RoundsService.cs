@@ -41,12 +41,18 @@ public sealed class RoundsService
     private readonly ISupabaseRestClient _supabase;
     private readonly QueryValidationService _validator;
     private readonly DomainQueryService _domainQueries;
+    private readonly RoundImageStorageService? _imageStorage;
 
-    public RoundsService(ISupabaseRestClient supabase, QueryValidationService validator, DomainQueryService domainQueries)
+    public RoundsService(
+        ISupabaseRestClient supabase,
+        QueryValidationService validator,
+        DomainQueryService domainQueries,
+        RoundImageStorageService? imageStorage = null)
     {
         _supabase = supabase;
         _validator = validator;
         _domainQueries = domainQueries;
+        _imageStorage = imageStorage;
     }
 
     public async Task<PublicPagedResponse<RoundListItemDto>> ListRoundsAsync(IQueryCollection queryString, CancellationToken cancellationToken)
@@ -119,29 +125,45 @@ public sealed class RoundsService
     {
         var image = await _supabase.GetSingleAsync(
             new SupabaseQuery("round_images")
-                .Select("round_id,image_data,content_type,file_name,alt_text")
+                .Select("round_id,image_data,storage_path,content_type,file_name,alt_text")
                 .Filter("round_id", "eq", roundId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             cancellationToken: cancellationToken);
 
-        if (image is null)
+        if (image?.String("storage_path") is { } roundStoragePath && !string.IsNullOrWhiteSpace(roundStoragePath))
         {
-            return null;
+            return new RoundImageFile(
+                null,
+                image.String("content_type") ?? "image/png",
+                image.String("file_name"),
+                image.String("alt_text"),
+                StoragePublicUrl(roundStoragePath));
         }
 
-        var rawImageData = image.String("image_data");
-        if (string.IsNullOrWhiteSpace(rawImageData))
+        var rawImageData = image?.String("image_data");
+        if (!string.IsNullOrWhiteSpace(rawImageData))
         {
-            throw new ApiException(
-                StatusCodes.Status500InternalServerError,
-                "ROUND_IMAGE_INVALID_DATA",
-                "Round image data is missing.");
+            return new RoundImageFile(
+                DecodeImageData(rawImageData),
+                image?.String("content_type") ?? "image/png",
+                image?.String("file_name"),
+                image?.String("alt_text"));
         }
 
-        return new RoundImageFile(
-            DecodeImageData(rawImageData),
-            image.String("content_type") ?? "image/png",
-            image.String("file_name"),
-            image.String("alt_text"));
+        var round = await _supabase.GetSingleAsync(
+            new SupabaseQuery("rounds")
+                .Select("track_id,tracks(venue_image_id,venue_images(storage_path,content_type,file_name,alt_text))")
+                .Filter("id", "eq", roundId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            cancellationToken: cancellationToken);
+        var venueImage = round?.Object("tracks")?.Object("venue_images");
+        var venueStoragePath = venueImage?.String("storage_path");
+        return string.IsNullOrWhiteSpace(venueStoragePath)
+            ? null
+            : new RoundImageFile(
+                null,
+                venueImage?.String("content_type") ?? "image/png",
+                venueImage?.String("file_name"),
+                venueImage?.String("alt_text"),
+                StoragePublicUrl(venueStoragePath));
     }
 
     public async Task<JsonObject> GetRoundAsync(string roundId, string[] include, CancellationToken cancellationToken)
@@ -376,19 +398,24 @@ public sealed class RoundsService
         if (!string.IsNullOrWhiteSpace(status))
         {
             var normalizedStatus = status.ToLowerInvariant();
-            if (normalizedStatus is not ("upcoming" or "live" or "completed"))
+            if (normalizedStatus is not ("upcoming" or "confirmed" or "live" or "completed" or "cancelled"))
             {
-                throw _validator.BadQuery("status must be upcoming, live, or completed.");
+                throw _validator.BadQuery("status must be upcoming, confirmed, live, completed, or cancelled.");
             }
 
-            var now = DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-            if (normalizedStatus == "upcoming")
+            var current = DateTimeOffset.UtcNow;
+            var now = current.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            if (normalizedStatus == "confirmed" || normalizedStatus == "cancelled")
+            {
+                query.Filter("status", "eq", normalizedStatus);
+            }
+            else if (normalizedStatus == "upcoming")
             {
                 query.Filter("start_date", "gt", now);
             }
             else if (normalizedStatus == "completed")
             {
-                query.Filter("end_date", "lt", now);
+                query.Or($"status.eq.completed,end_date.lt.{current.AddDays(-1).ToString("O", System.Globalization.CultureInfo.InvariantCulture)}");
             }
             else
             {
@@ -405,7 +432,10 @@ public sealed class RoundsService
                     .ToArray();
                 var expressions = new List<string>
                 {
-                    $"and(start_date.lte.{now},end_date.gte.{now})"
+                    "status.eq.live",
+                    "status.eq.active",
+                    "status.eq.running",
+                    $"and(start_date.lte.{now},end_date.gte.{current.AddDays(-1).ToString("O", System.Globalization.CultureInfo.InvariantCulture)})"
                 };
                 if (roundIds.Length > 0)
                 {
@@ -469,6 +499,7 @@ public sealed class RoundsService
             roundId,
             round.Int("round_number"),
             round.Int("season_year") ?? 0,
+            round.String("context_name"),
             round.Bool("has_round_image") == true ? $"/api/v1/rounds/{roundId}/image" : null,
             trackId,
             track?.String("name"),
@@ -487,7 +518,12 @@ public sealed class RoundsService
     internal static string RoundStatus(JsonObject round, DateTimeOffset? now = null)
     {
         var explicitStatus = round.String("status")?.Trim().ToLowerInvariant();
-        if (explicitStatus is "cancelled" or "postponed")
+        if (explicitStatus is "active" or "running")
+        {
+            return "live";
+        }
+
+        if (explicitStatus is "confirmed" or "live" or "cancelled")
         {
             return explicitStatus;
         }
@@ -504,18 +540,18 @@ public sealed class RoundsService
         }
 
         var start = ParseDateTime(round.String("start_date"));
-        var end = ParseDateTime(round.String("end_date"));
+        var end = InclusiveEndBoundary(round.String("end_date"));
         if (start is not null && start > current)
         {
             return "upcoming";
         }
 
-        if (start is not null && start <= current && end is not null && end >= current)
+        if (start is not null && start <= current && end is not null && end > current)
         {
             return "live";
         }
 
-        if ((end is not null && end < current) ||
+        if ((end is not null && end <= current) ||
             (sessionStatuses.Length > 0 && sessionStatuses.All(status => status is "finished" or "completed" or "final")))
         {
             return "completed";
@@ -529,6 +565,14 @@ public sealed class RoundsService
 
     private static DateTimeOffset? ParseDateTime(string? value) =>
         DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;
+
+    private static DateTimeOffset? InclusiveEndBoundary(string? value)
+    {
+        var parsed = ParseDateTime(value);
+        return parsed is not null && parsed.Value.TimeOfDay == TimeSpan.Zero
+            ? parsed.Value.AddDays(1)
+            : parsed;
+    }
 
     private static long ParseLong(string? value) => long.TryParse(value, out var parsed) ? parsed : 0;
 
@@ -621,7 +665,8 @@ public sealed class RoundsService
                 ? value
                 : null;
 
-            if (image is null)
+            var venueImageId = round.Object("tracks")?.String("venue_image_id");
+            if (image is null && string.IsNullOrWhiteSpace(venueImageId))
             {
                 round["has_round_image"] = false;
                 round["round_image_id"] = null;
@@ -630,10 +675,17 @@ public sealed class RoundsService
             }
 
             round["has_round_image"] = true;
-            round["round_image_id"] = image["round_id"]?.DeepClone();
+            round["round_image_id"] = image?["round_id"]?.DeepClone();
             round["round_image_url"] = $"/api/v1/rounds/{roundId}/image";
         }
     }
+
+    private string StoragePublicUrl(string storagePath) =>
+        _imageStorage?.PublicUrl(storagePath) ??
+        throw new ApiException(
+            StatusCodes.Status503ServiceUnavailable,
+            "SUPABASE_STORAGE_NOT_CONFIGURED",
+            "Supabase Storage is not configured for round images.");
 
     private static byte[] DecodeImageData(string rawImageData)
     {

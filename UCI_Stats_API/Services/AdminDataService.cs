@@ -52,9 +52,12 @@ public sealed class AdminDataService
 
     private readonly ISupabaseRestClient _supabase;
 
-    public AdminDataService(ISupabaseRestClient supabase)
+    private readonly RoundImageStorageService? _imageStorage;
+
+    public AdminDataService(ISupabaseRestClient supabase, RoundImageStorageService? imageStorage = null)
     {
         _supabase = supabase;
+        _imageStorage = imageStorage;
     }
 
     public JsonObject EditableResources()
@@ -326,10 +329,14 @@ public sealed class AdminDataService
         await EnsureReferenceAsync("rounds", roundId, "round_id", cancellationToken);
         var image = RoundImagePayloadParser.Parse(payload)
             ?? throw Invalid("ROUND_IMAGE_REQUIRED", "Round image payload is required.");
+        var storagePath = _imageStorage is null
+            ? null
+            : await _imageStorage.UploadAsync(image, cancellationToken);
         var values = new JsonObject
         {
             ["round_id"] = roundId,
-            ["image_data"] = $"\\x{Convert.ToHexString(image.Bytes)}",
+            ["image_data"] = storagePath is null ? $"\\x{Convert.ToHexString(image.Bytes)}" : null,
+            ["storage_path"] = storagePath,
             ["content_type"] = "image/png",
             ["file_name"] = image.FileName?.Trim(),
             ["alt_text"] = image.AltText?.Trim(),
@@ -386,10 +393,13 @@ public sealed class AdminDataService
     {
         switch (resourceName.ToLowerInvariant())
         {
-            case "rounds":
-                await EnsureReferenceAsync("tracks", RequiredPositiveLong(candidate, "track_id"), "track_id", cancellationToken);
-                await EnsureReferenceAsync("competition_ranks", RequiredPositiveLong(candidate, "competition_rank_id"), "competition_rank_id", cancellationToken);
-                await EnsureReferenceAsync("competition_levels", RequiredPositiveLong(candidate, "competition_level_id"), "competition_level_id", cancellationToken);
+			case "rounds":
+				await EnsureReferenceAsync("tracks", RequiredPositiveLong(candidate, "track_id"), "track_id", cancellationToken);
+				if (OptionalLong(candidate, "competition_rank_id") is { } competitionRankId)
+				{
+					await EnsureReferenceAsync("competition_ranks", competitionRankId.ToString(CultureInfo.InvariantCulture), "competition_rank_id", cancellationToken);
+				}
+				await EnsureReferenceAsync("competition_levels", RequiredPositiveLong(candidate, "competition_level_id"), "competition_level_id", cancellationToken);
                 await EnsureReferenceAsync("conditions", RequiredPositiveLong(candidate, "condition_id"), "condition_id", cancellationToken);
                 break;
             case "sessions":
@@ -569,11 +579,11 @@ public sealed class AdminDataService
                 }
                 break;
             }
-            case "rounds":
-                RequiredText(candidate, "context_name");
-                RequiredPositiveLong(candidate, "track_id");
-                RequiredPositiveLong(candidate, "competition_rank_id");
-                RequiredPositiveLong(candidate, "competition_level_id");
+			case "rounds":
+				RequiredText(candidate, "context_name");
+				RequiredPositiveLong(candidate, "track_id");
+				ValidateOptionalLong(candidate, "competition_rank_id", value => value > 0, "must be greater than zero");
+				RequiredPositiveLong(candidate, "competition_level_id");
                 RequiredBoolean(candidate, "is_season_final_round");
                 RequiredPositiveLong(candidate, "condition_id");
                 ValidateOptionalLong(candidate, "season_year", value => value is >= 1990 and <= 2100, "must be between 1990 and 2100");
@@ -582,9 +592,9 @@ public sealed class AdminDataService
                 ValidateOptionalDateTime(candidate, "end_date");
                 ValidateDateOrder(candidate, "start_date", "end_date");
                 var roundStatus = RequiredText(candidate, "status");
-                if (roundStatus is not ("scheduled" or "postponed" or "cancelled"))
-                {
-                    throw Invalid("INVALID_ADMIN_PAYLOAD", "round status must be scheduled, postponed, or cancelled.");
+				if (roundStatus is not ("scheduled" or "confirmed" or "live" or "completed" or "cancelled"))
+				{
+					throw Invalid("INVALID_ADMIN_PAYLOAD", "round status must be scheduled, confirmed, live, completed, or cancelled.");
                 }
                 break;
             case "sessions":

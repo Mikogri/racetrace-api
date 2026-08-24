@@ -709,7 +709,10 @@ public sealed class RankingService
             row.Decimal("confidence") ?? 0m,
             row.Int("finals_count") ?? 0,
             Math.Round((row.Decimal("quali_rate") ?? 0m) / 100m, 4, MidpointRounding.AwayFromZero),
-            rider.String("profile_image_url"));
+            rider.String("profile_image_url"))
+        {
+            ConsistencyEvidence = row.Decimal("consistency_confidence") ?? 0m
+        };
     }
 
     private static long ParseLong(string? value) =>

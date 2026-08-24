@@ -154,6 +154,37 @@ public sealed class RidersService
         return ResponseFactory.Page(data, page.Page, page.Limit, sorted.Count, sort.Sort, sort.Order);
     }
 
+    public async Task<JsonObject> ResolveUciIdsAsync(
+        string[] requestedUciIds,
+        CancellationToken cancellationToken)
+    {
+        var uciIds = requestedUciIds
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0 && value.All(char.IsDigit))
+            .Distinct(StringComparer.Ordinal)
+            .Take(200)
+            .ToArray();
+        if (uciIds.Length == 0)
+        {
+            return new JsonObject { ["items"] = new JsonArray() };
+        }
+
+        var response = await _supabase.GetAsync(
+            new SupabaseQuery("riders")
+                .Select("id,uci_id")
+                .In("uci_id", uciIds)
+                .Limit(uciIds.Length),
+            cancellationToken: cancellationToken);
+        return new JsonObject
+        {
+            ["items"] = new JsonArray(response.Data.Select(row => new JsonObject
+            {
+                ["riderId"] = row["id"]?.DeepClone(),
+                ["uciId"] = row["uci_id"]?.ToString()
+            }).ToArray())
+        };
+    }
+
     public async Task<JsonObject> GetRiderAsync(string riderId, string[] include, IQueryCollection queryString, CancellationToken cancellationToken)
     {
         var rider = await _domainQueries.FindByIdAsync("riders", riderId, cancellationToken: cancellationToken);
@@ -166,10 +197,13 @@ public sealed class RidersService
         var riderResults = await _domainQueries.GetMatchingResultsAsync(context, riderId, cancellationToken: cancellationToken);
         var teamHistory = await _domainQueries.GetRiderTeamHistoryAsync(
             [riderId],
-            context.FromDate,
-            context.ToDate,
             cancellationToken: cancellationToken);
         rider["teams"] = ToTeamHistoryJson(teamHistory);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        rider["current_category"] = RiderCategoryResolver.CurrentCategory(rider, today);
+        rider["age"] = RiderCategoryResolver.CalculateAge(
+            PublicDtoMapping.Date(rider.String("birth_date")),
+            today);
 
         if (include.Contains("metrics", StringComparer.OrdinalIgnoreCase))
         {
@@ -280,32 +314,26 @@ public sealed class RidersService
         int? suppliedRankingPosition = null)
     {
         var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var currentPresentationTask = GetCurrentPresentationAsync(
+            riderId,
+            cancellationToken);
         var snapshot = suppliedSnapshot ?? await _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
             riderId: riderId);
+        var currentPresentation = await currentPresentationTask;
         var riderRow = snapshot.Rows.FirstOrDefault(row => string.Equals(
             row.String("rider_id"),
             riderId,
             StringComparison.OrdinalIgnoreCase));
         if (riderRow is null)
         {
-            var existingRider = await _domainQueries.FindByIdAsync(
-                "riders",
-                riderId,
-                cancellationToken: cancellationToken);
-            if (existingRider is null)
-            {
-                throw new ApiException(StatusCodes.Status404NotFound, "RIDER_NOT_FOUND", "Rider was not found.");
-            }
-
             return EmptyPublicStatistics(
                 riderId,
-                existingRider,
-                context.ToDate ?? DateOnly.FromDateTime(DateTime.UtcNow));
+                currentPresentation);
         }
 
-        var rider = riderRow.Object("rider") ?? new JsonObject();
+        var rider = currentPresentation.Rider;
         var riderResults = snapshot.Results
             .Where(result => string.Equals(result.String("rider_id"), riderId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
@@ -344,10 +372,11 @@ public sealed class RidersService
             .Where(position => position is > 0)
             .Select(position => position!.Value)
             .ToArray();
-        var team = rider.Array("teams")?.OfType<JsonObject>().FirstOrDefault();
         var latestResult = riderResults.OrderByDescending(ResultDate).FirstOrDefault();
-        var currentCategory = PublicApiCodes.ToPublicCategory(latestResult?.Object("sessions")?.Object("categories")?.String("code"));
-        var endDate = context.ToDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var currentCategory = currentPresentation.CurrentCategory ??
+            PublicApiCodes.ToPublicCategory(
+                latestResult?.Object("sessions")?.Object("categories")?.String("code"));
+        var team = currentPresentation.Team;
 
         var targetSplits = splits.Where(split => targetResultIds.Contains(split.String("result_id") ?? string.Empty)).ToArray();
         var qualificationResultIds = qualifying.Select(result => result.String("id") ?? string.Empty).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -382,7 +411,7 @@ public sealed class RidersService
             team?.String("name"),
             team?.String("code"),
             currentCategory,
-            CalculateAge(PublicDtoMapping.Date(rider.String("birth_date")), endDate),
+            currentPresentation.Age,
             performance.Rating,
             performance.Pace,
             performance.Consistency,
@@ -620,6 +649,7 @@ public sealed class RidersService
         rider["pace_final_evidence"] = performance.PaceFinalEvidence;
         rider["consistency"] = performance.Consistency;
         rider["consistency_confidence"] = performance.ConsistencyConfidence;
+        rider["consistency_evidence"] = performance.ConsistencyEvidence;
         rider["consistency_used_runs"] = performance.ConsistencyUsedRuns;
         rider["consistency_used_sectors"] = performance.ConsistencyUsedSectors;
         rider["result_score"] = performance.ResultScore;
@@ -998,24 +1028,58 @@ public sealed class RidersService
             ResultScoreUsedSessions = row.Int("result_score_used_sessions") ?? 0
         };
 
+    private async Task<CurrentRiderPresentation> GetCurrentPresentationAsync(
+        string riderId,
+        CancellationToken cancellationToken)
+    {
+        var riderTask = _domainQueries.FindByIdAsync(
+            "riders",
+            riderId,
+            cancellationToken: cancellationToken);
+        var teamHistoryTask = _domainQueries.GetRiderTeamHistoryAsync(
+            [riderId],
+            cancellationToken: cancellationToken);
+        await Task.WhenAll(riderTask, teamHistoryTask);
+        var rider = await riderTask;
+        if (rider is null)
+        {
+            throw new ApiException(
+                StatusCodes.Status404NotFound,
+                "RIDER_NOT_FOUND",
+                "Rider was not found.");
+        }
+
+        var team = (await teamHistoryTask)
+            .OrderByDescending(row => row.String("valid_from"), StringComparer.Ordinal)
+            .Select(row => row.Object("teams"))
+            .FirstOrDefault(row => row is not null);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return new CurrentRiderPresentation(
+            rider,
+            team,
+            RiderCategoryResolver.CurrentCategory(rider, today),
+            RiderCategoryResolver.CalculateAge(
+                PublicDtoMapping.Date(rider.String("birth_date")),
+                today));
+    }
+
     private static RiderStatisticsDto EmptyPublicStatistics(
         string riderId,
-        JsonObject rider,
-        DateOnly endDate) =>
+        CurrentRiderPresentation presentation) =>
         new(
             PublicDtoMapping.Long(riderId),
-            rider.String("uci_id"),
-            rider.String("first_name"),
-            rider.String("last_name"),
-            rider.DisplayName(),
-            rider.String("profile_image_url"),
-            rider.String("nation"),
-            rider.String("gender"),
-            null,
-            null,
-            null,
-            null,
-            CalculateAge(PublicDtoMapping.Date(rider.String("birth_date")), endDate),
+            presentation.Rider.String("uci_id"),
+            presentation.Rider.String("first_name"),
+            presentation.Rider.String("last_name"),
+            presentation.Rider.DisplayName(),
+            presentation.Rider.String("profile_image_url"),
+            presentation.Rider.String("nation"),
+            presentation.Rider.String("gender"),
+            PublicDtoMapping.NullableLong(presentation.Team?.String("id")),
+            presentation.Team?.String("name"),
+            presentation.Team?.String("code"),
+            presentation.CurrentCategory,
+            presentation.Age,
             null,
             null,
             null,
@@ -1059,22 +1123,6 @@ public sealed class RidersService
     {
         var session = result.Object("sessions");
         return PublicDtoMapping.Date(session?.String("session_date") ?? session?.Object("rounds")?.String("start_date"));
-    }
-
-    private static int? CalculateAge(DateOnly? birthDate, DateOnly onDate)
-    {
-        if (birthDate is null || birthDate > onDate)
-        {
-            return null;
-        }
-
-        var age = onDate.Year - birthDate.Value.Year;
-        if (birthDate.Value > onDate.AddYears(-age))
-        {
-            age--;
-        }
-
-        return age;
     }
 
     private static decimal? AveragePosition(IEnumerable<JsonObject> results)
@@ -1236,4 +1284,10 @@ public sealed class RidersService
             .ThenBy(row => row.TrackId)
             .ToArray();
     }
+
+    private sealed record CurrentRiderPresentation(
+        JsonObject Rider,
+        JsonObject? Team,
+        string? CurrentCategory,
+        int? Age);
 }
