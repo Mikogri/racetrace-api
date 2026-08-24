@@ -71,11 +71,11 @@ internal sealed class ConsistencyOptions
     // As evidence grows, the observed incident rate increasingly drives the score.
     public double IncidentToleranceRuns { get; init; } = 2.0;
 
-    // Repeated incidents are increasingly meaningful. The first incident is
-    // protected by sample tolerance; this penalty starts with the second one.
-    public double RepeatedIncidentPenalty { get; init; } = 5.0;
+    // Maximum additional loss for a sustained pattern of repeated incidents.
+    // The actual penalty uses incident frequency, not an absolute career count.
+    public double MaximumRepeatedIncidentPenalty { get; init; } = 60.0;
 
-    public double RepeatedIncidentPenaltyExponent { get; init; } = 1.30;
+    public double RepeatedIncidentPenaltyExponent { get; init; } = 1.15;
 
     // Score assigned to an event where the rider reached the final through Q2.
     public double Q2QualificationScore { get; init; } = 75.0;
@@ -133,7 +133,7 @@ internal sealed class DownhillConsistencyCalculator
 
         if (_options.IncidentRateExponent <= 0 ||
             _options.IncidentToleranceRuns < 0 ||
-            _options.RepeatedIncidentPenalty < 0 ||
+            _options.MaximumRepeatedIncidentPenalty < 0 ||
             _options.RepeatedIncidentPenaltyExponent <= 0 ||
             _options.Q2QualificationScore is < 0 or > 100 ||
             _options.FinalIncidentReliabilityShare is < 0 or > 1 ||
@@ -368,10 +368,13 @@ internal sealed class DownhillConsistencyCalculator
         var baseReliability = 100.0 * Math.Pow(
             Clamp(cleanRate, 0, 1),
             _options.IncidentRateExponent);
-        var repeatedIncidentPenalty = incidentCount <= 1
+        var repeatedIncidentRate = incidentCount <= 1
             ? 0
-            : _options.RepeatedIncidentPenalty * Math.Pow(
-                incidentCount - 1,
+            : (incidentCount - 1.0) /
+                (runs.Count + _options.IncidentToleranceRuns);
+        var repeatedIncidentPenalty =
+            _options.MaximumRepeatedIncidentPenalty * Math.Pow(
+                repeatedIncidentRate,
                 _options.RepeatedIncidentPenaltyExponent);
         return Clamp(baseReliability - repeatedIncidentPenalty, 0, 100);
     }
@@ -419,17 +422,22 @@ internal sealed class DownhillConsistencyCalculator
     private double CalculatePositionRepeatability(
         IReadOnlyCollection<ConsistencyRunInput> runs)
     {
-        var positions = runs
+        var eligibleRuns = runs
             .Where(run =>
                 run.IsClassified &&
                 run.FinishRank is > 0 &&
                 run.FieldSize is > 0 &&
                 run.FinishRank <= run.FieldSize)
-            .Select(run => new WeightedPosition(
+            .ToArray();
+        var effectiveWeights = _sessionWeights.ApplyFinalTargetImpact(
+            eligibleRuns.Select(run => run.SessionType).ToArray(),
+            eligibleRuns.Select(run => _sessionWeights.GetWeight(run.SessionType)).ToArray());
+        var positions = eligibleRuns
+            .Select((run, index) => new WeightedPosition(
                 run.FieldSize == 1
                     ? 0
                     : (run.FinishRank!.Value - 1.0) / (run.FieldSize!.Value - 1.0),
-                _sessionWeights.GetWeight(run.SessionType)))
+                effectiveWeights[index]))
             .Where(position => position.Weight > 0)
             .ToArray();
         if (positions.Length < 2)

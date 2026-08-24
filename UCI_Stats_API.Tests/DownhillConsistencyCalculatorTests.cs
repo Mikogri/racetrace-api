@@ -230,6 +230,43 @@ public sealed class DownhillConsistencyCalculatorTests
     }
 
     [Fact]
+    public void RepeatedIncidentPenaltyDependsOnFrequencyNotCareerCount()
+    {
+        var calculator = new DownhillConsistencyCalculator();
+        var concentrated = calculator.Calculate(Enumerable.Range(1, 7)
+            .SelectMany(index => Weekend(
+                $"short-{index}", 4, finalStatus: index <= 4 ? "DNF" : null))
+            .ToArray());
+        var occasional = calculator.Calculate(Enumerable.Range(1, 35)
+            .SelectMany(index => Weekend(
+                $"long-{index}", 4, finalStatus: index <= 4 ? "DNF" : null))
+            .ToArray());
+
+        Assert.True(occasional.IncidentReliability > concentrated.IncidentReliability);
+        Assert.True(occasional.Consistency > concentrated.Consistency + 10);
+    }
+
+    [Fact]
+    public void FinalPositionVariationMattersMoreThanQualifyingVariation()
+    {
+        var calculator = new DownhillConsistencyCalculator();
+        var variableQualifying = calculator.Calculate(
+            [Run("a-q1", "a", PaceSessionType.Qualifying1, 40),
+             Run("a-final", "a", PaceSessionType.Final, 4),
+             Run("b-q1", "b", PaceSessionType.Qualifying1, 1),
+             Run("b-final", "b", PaceSessionType.Final, 4)]);
+        var variableFinals = calculator.Calculate(
+            [Run("a-q1", "a", PaceSessionType.Qualifying1, 4),
+             Run("a-final", "a", PaceSessionType.Final, 40),
+             Run("b-q1", "b", PaceSessionType.Qualifying1, 4),
+             Run("b-final", "b", PaceSessionType.Final, 1)]);
+
+        Assert.True(variableQualifying.PositionRepeatability >
+            variableFinals.PositionRepeatability);
+        Assert.True(variableQualifying.Consistency > variableFinals.Consistency);
+    }
+
+    [Fact]
     public void SectorAnalysisStillDetectsLargeWithinRunDrops()
     {
         var sectors = new[] { 0.95, 0.94, 0.10, 0.96 }
