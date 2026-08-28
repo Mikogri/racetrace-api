@@ -107,19 +107,22 @@ public sealed class RidersService
     private readonly DomainQueryService _domainQueries;
     private readonly MetricsService _metrics;
     private readonly RankingService _ranking;
+    private readonly AnalyticsService _analytics;
 
     public RidersService(
         ISupabaseRestClient supabase,
         QueryValidationService validator,
         DomainQueryService domainQueries,
         MetricsService metrics,
-        RankingService ranking)
+        RankingService ranking,
+        AnalyticsService analytics)
     {
         _supabase = supabase;
         _validator = validator;
         _domainQueries = domainQueries;
         _metrics = metrics;
         _ranking = ranking;
+        _analytics = analytics;
     }
 
     public async Task<ListResponse<JsonObject>> ListRidersAsync(IQueryCollection queryString, CancellationToken cancellationToken)
@@ -475,15 +478,33 @@ public sealed class RidersService
             overviewQuery,
             cancellationToken,
             snapshot);
+        var pressurePerformanceTask = _analytics.GetPressurePerformanceAsync(
+            riderId,
+            overviewQuery,
+            cancellationToken);
+        var teamHistoryTask = _domainQueries.GetRiderTeamHistoryAsync(
+            [riderId],
+            cancellationToken: cancellationToken);
         await Task.WhenAll(
             statisticsTask,
             roundResultsTask,
-            trackStatisticsTask);
+            trackStatisticsTask,
+            pressurePerformanceTask,
+            teamHistoryTask);
+
+        var sessionResults = new JsonArray(
+            snapshot.Results
+                .Where(result => string.Equals(result.String("rider_id"), riderId, StringComparison.OrdinalIgnoreCase))
+                .Select(result => result.DeepClone())
+                .ToArray());
 
         return new RiderOverviewDto(
             await statisticsTask,
             (await roundResultsTask).Items,
-            (await trackStatisticsTask).Items);
+            (await trackStatisticsTask).Items,
+            sessionResults,
+            JsonSerializerProxy.ToJsonObject(await pressurePerformanceTask),
+            ToTeamHistoryJson(await teamHistoryTask));
     }
 
     public Task<PublicPagedResponse<RiderRoundResultDto>> ListPublicRiderRoundResultsAsync(

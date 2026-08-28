@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 
 namespace UCI_Stats_API.Models;
 
@@ -268,7 +269,10 @@ public sealed record RiderTrackStatisticsDto(
 public sealed record RiderOverviewDto(
     [property: JsonPropertyName("statistics")] RiderStatisticsDto Statistics,
     [property: JsonPropertyName("roundResults")] IReadOnlyList<RiderRoundResultDto> RoundResults,
-    [property: JsonPropertyName("trackStatistics")] IReadOnlyList<RiderTrackStatisticsDto> TrackStatistics);
+    [property: JsonPropertyName("trackStatistics")] IReadOnlyList<RiderTrackStatisticsDto> TrackStatistics,
+    [property: JsonPropertyName("sessionResults")] JsonArray SessionResults,
+    [property: JsonPropertyName("pressurePerformance")] JsonNode? PressurePerformance,
+    [property: JsonPropertyName("teamHistory")] JsonArray TeamHistory);
 
 public sealed record CommonSessionDto(
     [property: JsonPropertyName("sessionId")] long SessionId,
