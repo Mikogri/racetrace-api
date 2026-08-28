@@ -296,6 +296,20 @@ public sealed class RidersService
             .ToArray());
     }
 
+    private static JsonArray ToPublicTeamHistoryJson(IEnumerable<JsonObject> history) =>
+        new JsonArray(history.Select(row => (JsonNode)new JsonObject
+        {
+            ["id"] = row["id"]?.DeepClone(),
+            ["riderId"] = row["rider_id"]?.DeepClone(),
+            ["teamId"] = row["team_id"]?.DeepClone(),
+            ["teamName"] = row.Object("teams")?.String("name"),
+            ["teamCode"] = row.Object("teams")?.String("code"),
+            ["validFrom"] = row["valid_from"]?.DeepClone(),
+            ["validTo"] = row["valid_to"]?.DeepClone(),
+            ["isCurrent"] = row["valid_to"] is null,
+            ["sourceRoundId"] = row["source_round_id"]?.DeepClone(),
+        }).ToArray());
+
     public async Task<JsonObject> GetMetricsAsync(string riderId, IQueryCollection queryString, CancellationToken cancellationToken)
     {
         await EnsureRiderExistsAsync(riderId, cancellationToken);
@@ -504,7 +518,7 @@ public sealed class RidersService
             (await trackStatisticsTask).Items,
             sessionResults,
             JsonSerializerProxy.ToJsonObject(await pressurePerformanceTask),
-            ToTeamHistoryJson(await teamHistoryTask));
+            ToPublicTeamHistoryJson(await teamHistoryTask));
     }
 
     public Task<PublicPagedResponse<RiderRoundResultDto>> ListPublicRiderRoundResultsAsync(
