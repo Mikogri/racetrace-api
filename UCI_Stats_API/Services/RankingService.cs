@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Primitives;
 using UCI_Stats_API.Infrastructure;
 using UCI_Stats_API.Models;
 
@@ -116,7 +117,7 @@ public sealed class RankingService
         var requestedComparison = _validator.String(queryString, "comparison");
         JsonObject[]? comparisonRows = null;
         if (string.Equals(requestedComparison, "previousRound", StringComparison.OrdinalIgnoreCase) &&
-            TryWithoutLatestRound(snapshot.Sessions, out var previousSessions))
+            TryWithoutLatestRound(snapshot.Sessions, snapshot.FieldResults, out var previousSessions))
         {
             var previousSnapshot = await BuildSnapshotAsync(
                 context,
@@ -136,7 +137,7 @@ public sealed class RankingService
 
             if (SameSessionSet(snapshot.Sessions, defaultSnapshot.Sessions) &&
                 SameRiderSet(rows, defaultRows) &&
-                TryWithoutLatestRound(snapshot.Sessions, out var defaultPreviousSessions))
+                TryWithoutLatestRound(snapshot.Sessions, snapshot.FieldResults, out var defaultPreviousSessions))
             {
                 var previousSnapshot = await BuildSnapshotAsync(
                     context,
@@ -152,6 +153,18 @@ public sealed class RankingService
                 comparisonRows = defaultRows;
                 resolvedComparisonBasis = "defaultFilters";
             }
+        }
+        else if (string.Equals(requestedComparison, "previousFilters", StringComparison.OrdinalIgnoreCase))
+        {
+            var previousFilterQuery = PreviousFilterQuery(queryString);
+            var previousContext = DomainQueryService.MetricsContextFromQuery(previousFilterQuery, _validator);
+            var previousRiderQuery = _validator.String(previousFilterQuery, "search");
+            var previousSnapshot = await BuildSnapshotAsync(
+                previousContext,
+                cancellationToken,
+                riderQuery: previousRiderQuery);
+            comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: false);
+            resolvedComparisonBasis = "previousFilters";
         }
 
         if (comparisonRows is not null)
@@ -787,12 +800,25 @@ public sealed class RankingService
 
     internal static bool TryWithoutLatestRound(
         IReadOnlyList<JsonObject> sessions,
+        IReadOnlyList<JsonObject> results,
         out IReadOnlyList<JsonObject> previousSessions)
     {
+        var resultSessionIds = results
+            .Select(ResultSessionId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var resultRoundIds = results
+            .Select(ResultRoundId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var sessionRounds = sessions
+            .Where(session =>
+                resultSessionIds.Contains(session.String("id") ?? string.Empty) ||
+                resultRoundIds.Contains(SessionRoundId(session) ?? string.Empty))
             .Select(session => new
             {
-                Session = session,
                 RoundId = SessionRoundId(session),
                 Date = SessionRoundDate(session)
             })
@@ -800,6 +826,7 @@ public sealed class RankingService
             .ToArray();
         var latest = sessionRounds
             .OrderByDescending(item => item.Date)
+            .ThenByDescending(item => NumericId(item.RoundId))
             .ThenByDescending(item => item.RoundId, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
         if (latest is null)
@@ -808,14 +835,46 @@ public sealed class RankingService
             return false;
         }
 
-        previousSessions = sessions
-            .Where(session => !string.Equals(
-                SessionRoundId(session),
+        var previousRoundIds = sessionRounds
+            .Where(item => !string.Equals(
+                item.RoundId,
                 latest.RoundId,
                 StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.RoundId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        previousSessions = sessions
+            .Where(session => previousRoundIds.Contains(
+                SessionRoundId(session) ?? string.Empty))
             .ToArray();
-        return previousSessions.Count > 0;
+        return previousRoundIds.Count > 0 && previousSessions.Count > 0;
     }
+
+    internal static QueryCollection PreviousFilterQuery(IQueryCollection query)
+    {
+        var values = new Dictionary<string, StringValues>(StringComparer.OrdinalIgnoreCase);
+        CopyComparisonValue(query, values, "comparisonSeason", "season");
+        CopyComparisonValue(query, values, "comparisonTrackId", "trackId");
+        CopyComparisonValue(query, values, "comparisonConditionId", "conditionId");
+        CopyComparisonValue(query, values, "comparisonCompetitionClassId", "competitionClassId");
+        CopyComparisonValue(query, values, "comparisonCategory", "category");
+        CopyComparisonValue(query, values, "comparisonSearch", "search");
+        return new QueryCollection(values);
+    }
+
+    private static void CopyComparisonValue(
+        IQueryCollection source,
+        IDictionary<string, StringValues> destination,
+        string sourceKey,
+        string destinationKey)
+    {
+        if (source.TryGetValue(sourceKey, out var value) && !StringValues.IsNullOrEmpty(value))
+        {
+            destination[destinationKey] = value;
+        }
+    }
+
+    private static long NumericId(string? value) =>
+        long.TryParse(value, out var parsed) ? parsed : long.MinValue;
 
     internal static RiderMetricsContext DefaultRankingContext(RiderMetricsContext context) =>
         new(

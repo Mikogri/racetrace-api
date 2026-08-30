@@ -172,6 +172,8 @@ Opcjonalny parametr `comparison=previousRound` dodaje do każdego ridera lekkie 
 
 `comparison=defaultFilters` porównuje bieżący, zawężony ranking z pełnym zestawem dla tego samego sezonu i kategorii. Filtry trasy, warunków, klasy, dat, sesji, wyszukiwania i progów metryk nie są stosowane do zestawu bazowego. Jeśli zestaw bieżący i bazowy obejmują te same sesje oraz riderów, API automatycznie porównuje go z poprzednią rundą i zwraca `comparisonBasis=previousRound`; w przeciwnym razie zwraca `comparisonBasis=defaultFilters`.
 
+`comparison=previousFilters` przyjmuje bazowy zestaw przez parametry `comparisonSeason`, `comparisonCategory`, `comparisonTrackId`, `comparisonConditionId`, `comparisonCompetitionClassId` i `comparisonSearch`. API przelicza pełny ranking bazowy i zwraca wyłącznie zmianę pozycji przy bieżących rekordach, dzięki czemu porównanie nie jest ograniczone do poprzedniej strony paginacji. Zmiana kolumny lub kierunku sortowania nie zmienia zestawu bazowego; oba zestawy są jedynie ponownie pozycjonowane według tego samego parametru.
+
 ### Porównanie
 
 `GET /api/v1/compare?riderIds=12,34&seasons=2025&category=elite_men`

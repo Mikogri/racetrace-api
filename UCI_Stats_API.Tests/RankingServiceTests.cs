@@ -445,8 +445,14 @@ public sealed class RankingServiceTests
             ComparisonSession("102", "2", "2025-06-14"),
             ComparisonSession("103", "2", "2025-06-15")
         };
+        var results = new[]
+        {
+            Result("10", "2025-05-10", sessionId: "101", roundId: "1"),
+            Result("10", "2025-06-14", sessionId: "102", roundId: "2"),
+            Result("11", "2025-06-15", sessionId: "103", roundId: "2")
+        };
 
-        var hasComparison = RankingService.TryWithoutLatestRound(sessions, out var previousSessions);
+        var hasComparison = RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions);
 
         Assert.True(hasComparison);
         Assert.Single(previousSessions);
@@ -461,9 +467,72 @@ public sealed class RankingServiceTests
             ComparisonSession("101", "1", "2025-05-10"),
             ComparisonSession("102", "1", "2025-05-11")
         };
+        var results = new[]
+        {
+            Result("10", "2025-05-10", sessionId: "101", roundId: "1"),
+            Result("11", "2025-05-11", sessionId: "102", roundId: "1")
+        };
 
-        Assert.False(RankingService.TryWithoutLatestRound(sessions, out var previousSessions));
+        Assert.False(RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions));
         Assert.Empty(previousSessions);
+    }
+
+    [Fact]
+    public void RankingComparisonIgnoresLaterRoundWithoutResults()
+    {
+        var sessions = new[]
+        {
+            ComparisonSession("101", "9", "2025-05-10"),
+            ComparisonSession("102", "10", "2025-06-14"),
+            ComparisonSession("103", "11", "2025-07-20")
+        };
+        var results = new[]
+        {
+            Result("10", "2025-05-10", sessionId: "101", roundId: "9"),
+            Result("10", "2025-06-14", sessionId: "102", roundId: "10")
+        };
+
+        Assert.True(RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions));
+        Assert.Single(previousSessions);
+        Assert.Equal("101", previousSessions[0].String("id"));
+    }
+
+    [Fact]
+    public void RankingComparisonUsesNumericRoundIdForEqualDates()
+    {
+        var sessions = new[]
+        {
+            ComparisonSession("101", "9", "2025-06-14"),
+            ComparisonSession("102", "10", "2025-06-14")
+        };
+        var results = new[]
+        {
+            Result("10", "2025-06-14", sessionId: "101", roundId: "9"),
+            Result("11", "2025-06-14", sessionId: "102", roundId: "10")
+        };
+
+        Assert.True(RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions));
+        Assert.Single(previousSessions);
+        Assert.Equal("101", previousSessions[0].String("id"));
+    }
+
+    [Fact]
+    public void PreviousFilterQueryMapsComparisonParameters()
+    {
+        var query = Query(new()
+        {
+            ["comparisonSeason"] = "2026",
+            ["comparisonCategory"] = "elite_women",
+            ["comparisonTrackId"] = "4,7",
+            ["comparisonSearch"] = "rider"
+        });
+
+        var previous = RankingService.PreviousFilterQuery(query);
+
+        Assert.Equal("2026", previous["season"].ToString());
+        Assert.Equal("elite_women", previous["category"].ToString());
+        Assert.Equal("4,7", previous["trackId"].ToString());
+        Assert.Equal("rider", previous["search"].ToString());
     }
 
     [Fact]
