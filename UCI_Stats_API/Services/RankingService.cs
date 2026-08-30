@@ -90,19 +90,32 @@ public sealed class RankingService
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count();
-        var rows = snapshot.Rows
-            .Where(row => MetricFilters(row, metricFilters))
-            .Where(row => PointFilters(row, queryString))
-            .Where(row => StartFilters(row, startFilters))
-            .Select(row => row.DeepClone().AsObject())
-            .ToArray();
+        JsonObject[] PrepareRows(RankingSnapshot source, bool applyCurrentRowFilters)
+        {
+            var sourceRows = source.Rows.AsEnumerable();
+            if (applyCurrentRowFilters)
+            {
+                sourceRows = sourceRows
+                    .Where(row => MetricFilters(row, metricFilters))
+                    .Where(row => PointFilters(row, queryString))
+                    .Where(row => StartFilters(row, startFilters));
+            }
+
+            return sourceRows
+                .Select(row => row.DeepClone().AsObject())
+                .ToArray();
+        }
+
+        var rows = PrepareRows(snapshot, applyCurrentRowFilters: true);
 
         AssignCanonicalPositions(rows, sort.Sort);
         var sorted = SortRows(rows, sort.Sort, sort.Descending);
 
         Dictionary<string, JsonObject>? previousRowsByRider = null;
-        var comparisonBasis = _validator.String(queryString, "comparison");
-        if (string.Equals(comparisonBasis, "previousRound", StringComparison.OrdinalIgnoreCase) &&
+        string? resolvedComparisonBasis = null;
+        var requestedComparison = _validator.String(queryString, "comparison");
+        JsonObject[]? comparisonRows = null;
+        if (string.Equals(requestedComparison, "previousRound", StringComparison.OrdinalIgnoreCase) &&
             TryWithoutLatestRound(snapshot.Sessions, out var previousSessions))
         {
             var previousSnapshot = await BuildSnapshotAsync(
@@ -111,14 +124,40 @@ public sealed class RankingService
                 resolvedSessions: previousSessions,
                 riderQuery: riderQuery,
                 nation: nation);
-            var previousRows = previousSnapshot.Rows
-                .Where(row => MetricFilters(row, metricFilters))
-                .Where(row => PointFilters(row, queryString))
-                .Where(row => StartFilters(row, startFilters))
-                .Select(row => row.DeepClone().AsObject())
-                .ToArray();
-            AssignCanonicalPositions(previousRows, sort.Sort);
-            previousRowsByRider = previousRows
+            comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: true);
+            resolvedComparisonBasis = "previousRound";
+        }
+        else if (string.Equals(requestedComparison, "defaultFilters", StringComparison.OrdinalIgnoreCase))
+        {
+            var defaultContext = DefaultRankingContext(context);
+            var defaultSnapshot = await BuildSnapshotAsync(defaultContext, cancellationToken);
+            var defaultRows = PrepareRows(defaultSnapshot, applyCurrentRowFilters: false);
+            AssignCanonicalPositions(defaultRows, sort.Sort);
+
+            if (SameSessionSet(snapshot.Sessions, defaultSnapshot.Sessions) &&
+                SameRiderSet(rows, defaultRows) &&
+                TryWithoutLatestRound(snapshot.Sessions, out var defaultPreviousSessions))
+            {
+                var previousSnapshot = await BuildSnapshotAsync(
+                    context,
+                    cancellationToken,
+                    resolvedSessions: defaultPreviousSessions,
+                    riderQuery: riderQuery,
+                    nation: nation);
+                comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: true);
+                resolvedComparisonBasis = "previousRound";
+            }
+            else
+            {
+                comparisonRows = defaultRows;
+                resolvedComparisonBasis = "defaultFilters";
+            }
+        }
+
+        if (comparisonRows is not null)
+        {
+            AssignCanonicalPositions(comparisonRows, sort.Sort);
+            previousRowsByRider = comparisonRows
                 .Where(row => !string.IsNullOrWhiteSpace(row.String("rider_id")))
                 .ToDictionary(row => row.String("rider_id")!, StringComparer.OrdinalIgnoreCase);
         }
@@ -137,7 +176,7 @@ public sealed class RankingService
             page.Page > 1,
             page.Page < totalPages,
             new RankingSummaryDto(totalSessions, totalFinalSessions, sorted.Length),
-            previousRowsByRider is null ? null : "previousRound");
+            previousRowsByRider is null ? null : resolvedComparisonBasis);
     }
 
     internal Task<RankingSnapshot> BuildSnapshotAsync(
@@ -777,6 +816,48 @@ public sealed class RankingService
             .ToArray();
         return previousSessions.Count > 0;
     }
+
+    internal static RiderMetricsContext DefaultRankingContext(RiderMetricsContext context) =>
+        new(
+            context.SeasonYear,
+            context.CategoryCode,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null)
+        {
+            SeasonYears = context.SeasonYears,
+            CategoryCodes = context.CategoryCodes
+        };
+
+    internal static bool SameSessionSet(
+        IReadOnlyList<JsonObject> left,
+        IReadOnlyList<JsonObject> right) =>
+        IdSet(left).SetEquals(IdSet(right));
+
+    internal static bool SameRiderSet(
+        IReadOnlyList<JsonObject> left,
+        IReadOnlyList<JsonObject> right) =>
+        RiderIdSet(left).SetEquals(RiderIdSet(right));
+
+    private static HashSet<string> IdSet(IEnumerable<JsonObject> rows) =>
+        rows
+            .Select(row => row.String("id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private static HashSet<string> RiderIdSet(IEnumerable<JsonObject> rows) =>
+        rows
+            .Select(row => row.String("rider_id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static string? SessionRoundId(JsonObject session)
     {

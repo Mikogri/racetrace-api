@@ -170,6 +170,8 @@ Najważniejsze filtry obejmują sezony, daty, trasy, venue, kraj trasy, warunki,
 
 Opcjonalny parametr `comparison=previousRound` dodaje do każdego ridera lekkie pole `positionChange` bez zwracania drugiej tabeli. Oznacza ono zmianę pozycji po aktualnym sortowaniu; wartość dodatnia to awans. `comparisonBasis` ma wtedy wartość `previousRound`. Jeśli w zakresie istnieje tylko jedna runda, `positionChange` i `comparisonBasis` mają wartość `null`.
 
+`comparison=defaultFilters` porównuje bieżący, zawężony ranking z pełnym zestawem dla tego samego sezonu i kategorii. Filtry trasy, warunków, klasy, dat, sesji, wyszukiwania i progów metryk nie są stosowane do zestawu bazowego. Jeśli zestaw bieżący i bazowy obejmują te same sesje oraz riderów, API automatycznie porównuje go z poprzednią rundą i zwraca `comparisonBasis=previousRound`; w przeciwnym razie zwraca `comparisonBasis=defaultFilters`.
+
 ### Porównanie
 
 `GET /api/v1/compare?riderIds=12,34&seasons=2025&category=elite_men`

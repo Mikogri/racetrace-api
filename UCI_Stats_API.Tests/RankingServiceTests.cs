@@ -467,6 +467,41 @@ public sealed class RankingServiceTests
     }
 
     [Fact]
+    public void DefaultRankingComparisonPreservesOnlySeasonAndCategory()
+    {
+        var context = new RiderMetricsContext(
+            2026,
+            "EM",
+            new DateOnly(2026, 5, 1),
+            new DateOnly(2026, 8, 31),
+            "12",
+            "4",
+            "FRA",
+            2,
+            "world_cup",
+            "FINAL",
+            "completed")
+        {
+            SeasonYears = [2025, 2026],
+            CategoryCodes = ["EM"],
+            TrackIds = ["4", "7"],
+            ConditionIds = [2],
+            CompetitionClassIds = [1, 2]
+        };
+
+        var baseline = RankingService.DefaultRankingContext(context);
+
+        Assert.Equal([2025, 2026], baseline.SeasonYears);
+        Assert.Equal(["EM"], baseline.CategoryCodes);
+        Assert.Empty(baseline.TrackIds);
+        Assert.Empty(baseline.ConditionIds);
+        Assert.Empty(baseline.CompetitionClassIds);
+        Assert.Null(baseline.FromDate);
+        Assert.Null(baseline.SessionType);
+        Assert.Null(baseline.Status);
+    }
+
+    [Fact]
     public void ConfidenceQueryIsUsedAsMinimumConfidence()
     {
         var service = ParserOnlyService();
