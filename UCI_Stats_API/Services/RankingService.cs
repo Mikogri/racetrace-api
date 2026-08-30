@@ -100,8 +100,33 @@ public sealed class RankingService
         AssignCanonicalPositions(rows, sort.Sort);
         var sorted = SortRows(rows, sort.Sort, sort.Descending);
 
+        Dictionary<string, JsonObject>? previousRowsByRider = null;
+        var comparisonBasis = _validator.String(queryString, "comparison");
+        if (string.Equals(comparisonBasis, "previousRound", StringComparison.OrdinalIgnoreCase) &&
+            TryWithoutLatestRound(snapshot.Sessions, out var previousSessions))
+        {
+            var previousSnapshot = await BuildSnapshotAsync(
+                context,
+                cancellationToken,
+                resolvedSessions: previousSessions,
+                riderQuery: riderQuery,
+                nation: nation);
+            var previousRows = previousSnapshot.Rows
+                .Where(row => MetricFilters(row, metricFilters))
+                .Where(row => PointFilters(row, queryString))
+                .Where(row => StartFilters(row, startFilters))
+                .Select(row => row.DeepClone().AsObject())
+                .ToArray();
+            AssignCanonicalPositions(previousRows, sort.Sort);
+            previousRowsByRider = previousRows
+                .Where(row => !string.IsNullOrWhiteSpace(row.String("rider_id")))
+                .ToDictionary(row => row.String("rider_id")!, StringComparer.OrdinalIgnoreCase);
+        }
+
         var data = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
-        var items = data.Select(ToPublicDto).ToArray();
+        var items = data.Select(row => ToPublicDto(
+            row,
+            previousRowsByRider?.GetValueOrDefault(row.String("rider_id") ?? string.Empty))).ToArray();
         var totalPages = sorted.Length == 0 ? 0 : (int)Math.Ceiling(sorted.Length / (double)page.Limit);
         return new RankingResponseDto(
             items,
@@ -111,7 +136,8 @@ public sealed class RankingService
             totalPages,
             page.Page > 1,
             page.Page < totalPages,
-            new RankingSummaryDto(totalSessions, totalFinalSessions, sorted.Length));
+            new RankingSummaryDto(totalSessions, totalFinalSessions, sorted.Length),
+            previousRowsByRider is null ? null : "previousRound");
     }
 
     internal Task<RankingSnapshot> BuildSnapshotAsync(
@@ -688,7 +714,9 @@ public sealed class RankingService
         }
     }
 
-    private static RankingRiderDto ToPublicDto(JsonObject row)
+    private static RankingRiderDto ToPublicDto(
+        JsonObject row,
+        JsonObject? previousRow = null)
     {
         var rider = row.Object("rider") ?? new JsonObject();
         var team = rider.Array("teams")?.OfType<JsonObject>().FirstOrDefault();
@@ -711,8 +739,58 @@ public sealed class RankingService
             Math.Round((row.Decimal("quali_rate") ?? 0m) / 100m, 4, MidpointRounding.AwayFromZero),
             rider.String("profile_image_url"))
         {
-            ConsistencyEvidence = row.Decimal("consistency_confidence") ?? 0m
+            ConsistencyEvidence = row.Decimal("consistency_confidence") ?? 0m,
+            PositionChange = previousRow is null
+                ? null
+                : (previousRow.Int("rank") ?? 0) - (row.Int("rank") ?? 0)
         };
+    }
+
+    internal static bool TryWithoutLatestRound(
+        IReadOnlyList<JsonObject> sessions,
+        out IReadOnlyList<JsonObject> previousSessions)
+    {
+        var sessionRounds = sessions
+            .Select(session => new
+            {
+                Session = session,
+                RoundId = SessionRoundId(session),
+                Date = SessionRoundDate(session)
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.RoundId) && item.Date is not null)
+            .ToArray();
+        var latest = sessionRounds
+            .OrderByDescending(item => item.Date)
+            .ThenByDescending(item => item.RoundId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (latest is null)
+        {
+            previousSessions = [];
+            return false;
+        }
+
+        previousSessions = sessions
+            .Where(session => !string.Equals(
+                SessionRoundId(session),
+                latest.RoundId,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return previousSessions.Count > 0;
+    }
+
+    private static string? SessionRoundId(JsonObject session)
+    {
+        var round = session.Object("rounds") ??
+            session.Object("round_categories")?.Object("rounds");
+        return session.String("round_id") ?? round?.String("id");
+    }
+
+    private static DateOnly? SessionRoundDate(JsonObject session)
+    {
+        var round = session.Object("rounds") ??
+            session.Object("round_categories")?.Object("rounds");
+        return PublicDtoMapping.Date(
+            round?.String("start_date") ?? session.String("session_date"));
     }
 
     private static long ParseLong(string? value) =>

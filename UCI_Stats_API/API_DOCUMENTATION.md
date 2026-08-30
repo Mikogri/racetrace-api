@@ -168,6 +168,8 @@ Najważniejsze filtry obejmują sezony, daty, trasy, venue, kraj trasy, warunki,
 
 `confidence=81` działa jako minimalny Confidence 81. Można też używać zakresu `minConfidence` i `maxConfidence`.
 
+Opcjonalny parametr `comparison=previousRound` dodaje do każdego ridera lekkie pole `positionChange` bez zwracania drugiej tabeli. Oznacza ono zmianę pozycji po aktualnym sortowaniu; wartość dodatnia to awans. `comparisonBasis` ma wtedy wartość `previousRound`. Jeśli w zakresie istnieje tylko jedna runda, `positionChange` i `comparisonBasis` mają wartość `null`.
+
 ### Porównanie
 
 `GET /api/v1/compare?riderIds=12,34&seasons=2025&category=elite_men`

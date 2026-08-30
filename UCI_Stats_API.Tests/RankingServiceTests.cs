@@ -437,6 +437,36 @@ public sealed class RankingServiceTests
     }
 
     [Fact]
+    public void RankingComparisonExcludesEverySessionFromLatestRound()
+    {
+        var sessions = new[]
+        {
+            ComparisonSession("101", "1", "2025-05-10"),
+            ComparisonSession("102", "2", "2025-06-14"),
+            ComparisonSession("103", "2", "2025-06-15")
+        };
+
+        var hasComparison = RankingService.TryWithoutLatestRound(sessions, out var previousSessions);
+
+        Assert.True(hasComparison);
+        Assert.Single(previousSessions);
+        Assert.Equal("101", previousSessions[0].String("id"));
+    }
+
+    [Fact]
+    public void RankingComparisonIsUnavailableForSingleRound()
+    {
+        var sessions = new[]
+        {
+            ComparisonSession("101", "1", "2025-05-10"),
+            ComparisonSession("102", "1", "2025-05-11")
+        };
+
+        Assert.False(RankingService.TryWithoutLatestRound(sessions, out var previousSessions));
+        Assert.Empty(previousSessions);
+    }
+
+    [Fact]
     public void ConfidenceQueryIsUsedAsMinimumConfidence()
     {
         var service = ParserOnlyService();
@@ -540,6 +570,14 @@ public sealed class RankingServiceTests
         {
             ["id"] = id,
             ["session_type"] = sessionType
+        };
+
+    private static JsonObject ComparisonSession(string id, string roundId, string date) =>
+        new()
+        {
+            ["id"] = id,
+            ["round_id"] = roundId,
+            ["session_date"] = date
         };
 
     private static QueryCollection Query(Dictionary<string, StringValues> values) =>

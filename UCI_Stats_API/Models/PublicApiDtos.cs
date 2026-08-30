@@ -51,6 +51,9 @@ public sealed record RankingRiderDto(
 {
     [JsonPropertyName("consistencyEvidence")]
     public decimal ConsistencyEvidence { get; init; }
+
+    [JsonPropertyName("positionChange")]
+    public int? PositionChange { get; init; }
 }
 
 public sealed record RankingSummaryDto(
@@ -66,7 +69,8 @@ public sealed record RankingResponseDto(
     [property: JsonPropertyName("totalPages")] int TotalPages,
     [property: JsonPropertyName("hasPreviousPage")] bool HasPreviousPage,
     [property: JsonPropertyName("hasNextPage")] bool HasNextPage,
-    [property: JsonPropertyName("summary")] RankingSummaryDto Summary);
+    [property: JsonPropertyName("summary")] RankingSummaryDto Summary,
+    [property: JsonPropertyName("comparisonBasis")] string? ComparisonBasis = null);
 
 public sealed record RiderTeamHistoryDto(
     [property: JsonPropertyName("id")] long Id,
