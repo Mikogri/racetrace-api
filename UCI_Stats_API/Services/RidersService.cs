@@ -1,3 +1,5 @@
+using UCI_Stats_API.Features.Metrics;
+using UCI_Stats_API.Features.Riders;
 using System.Text.Json.Nodes;
 using UCI_Stats_API.Infrastructure;
 using UCI_Stats_API.Models;
@@ -129,7 +131,7 @@ public sealed class RidersService
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, RiderSorts, "last_name", "asc");
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var riderQuery = _validator.String(queryString, "q");
         var nation = _validator.String(queryString, "nation");
         var results = await _domainQueries.GetMatchingResultsAsync(
@@ -196,12 +198,12 @@ public sealed class RidersService
             throw new ApiException(StatusCodes.Status404NotFound, "RIDER_NOT_FOUND", "Rider was not found.");
         }
 
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var riderResults = await _domainQueries.GetMatchingResultsAsync(context, riderId, cancellationToken: cancellationToken);
         var teamHistory = await _domainQueries.GetRiderTeamHistoryAsync(
             [riderId],
             cancellationToken: cancellationToken);
-        rider["teams"] = ToTeamHistoryJson(teamHistory);
+        rider["teams"] = RiderTeamHistoryMapper.ToTeamHistoryJson(teamHistory);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         rider["current_category"] = RiderCategoryResolver.CurrentCategory(rider, today);
         rider["age"] = RiderCategoryResolver.CalculateAge(
@@ -275,45 +277,10 @@ public sealed class RidersService
             .ToArray();
     }
 
-    private static JsonArray ToTeamHistoryJson(IEnumerable<JsonObject> history)
-    {
-        return new JsonArray(history
-            .OrderByDescending(row => row.String("valid_from"), StringComparer.Ordinal)
-            .Select(row =>
-            {
-                var team = row.Object("teams")?.DeepClone().AsObject() ??
-                    new JsonObject
-                    {
-                        ["id"] = row["team_id"]?.DeepClone()
-                    };
-                team["history_id"] = row["id"]?.DeepClone();
-                team["valid_from"] = row["valid_from"]?.DeepClone();
-                team["valid_to"] = row["valid_to"]?.DeepClone();
-                team["is_current"] = row["valid_to"] is null;
-                team["source_round_id"] = row["source_round_id"]?.DeepClone();
-                return (JsonNode)team;
-            })
-            .ToArray());
-    }
-
-    private static JsonArray ToPublicTeamHistoryJson(IEnumerable<JsonObject> history) =>
-        new JsonArray(history.Select(row => (JsonNode)new JsonObject
-        {
-            ["id"] = row["id"]?.DeepClone(),
-            ["riderId"] = row["rider_id"]?.DeepClone(),
-            ["teamId"] = row["team_id"]?.DeepClone(),
-            ["teamName"] = row.Object("teams")?.String("name"),
-            ["teamCode"] = row.Object("teams")?.String("code"),
-            ["validFrom"] = row["valid_from"]?.DeepClone(),
-            ["validTo"] = row["valid_to"]?.DeepClone(),
-            ["isCurrent"] = row["valid_to"] is null,
-            ["sourceRoundId"] = row["source_round_id"]?.DeepClone(),
-        }).ToArray());
-
     public async Task<JsonObject> GetMetricsAsync(string riderId, IQueryCollection queryString, CancellationToken cancellationToken)
     {
         await EnsureRiderExistsAsync(riderId, cancellationToken);
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         return JsonSerializerProxy.ToJsonObject(await _metrics.CalculateMetricsAsync(riderId, context, cancellationToken));
     }
 
@@ -330,7 +297,7 @@ public sealed class RidersService
         RankingSnapshot? suppliedSnapshot = null,
         int? suppliedRankingPosition = null)
     {
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var currentPresentationTask = GetCurrentPresentationAsync(
             riderId,
             cancellationToken);
@@ -366,8 +333,8 @@ public sealed class RidersService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var splits = snapshot.Splits;
         var sectorRows = BuildSectorRows(splits, allResults);
-        var splitWins = CountTimingWins(splits, allResults, targetResultIds, useSectorTimes: false);
-        var sectorWins = CountTimingWins(sectorRows, allResults, targetResultIds, useSectorTimes: true);
+        var splitWins = RiderTimingStatistics.CountTimingWins(splits, allResults, targetResultIds, useSectorTimes: false);
+        var sectorWins = RiderTimingStatistics.CountTimingWins(sectorRows, allResults, targetResultIds, useSectorTimes: true);
         var targetSectorRows = sectorRows
             .Where(row => targetResultIds.Contains(row.String("result_id") ?? string.Empty) && row.Int("sector_time_ms") is > 0)
             .ToArray();
@@ -408,10 +375,10 @@ public sealed class RidersService
         var finalSplits = splits.Where(split => allFinalResultIds.Contains(split.String("result_id") ?? string.Empty)).ToArray();
         var preFinalSectors = sectorRows.Where(row => allPreFinalResultIds.Contains(row.String("result_id") ?? string.Empty)).ToArray();
         var finalSectors = sectorRows.Where(row => allFinalResultIds.Contains(row.String("result_id") ?? string.Empty)).ToArray();
-        var preFinalSplitWins = CountTimingWins(preFinalSplits, allPreFinalResults, preFinalResultIds, useSectorTimes: false);
-        var preFinalSectorWins = CountTimingWins(preFinalSectors, allPreFinalResults, preFinalResultIds, useSectorTimes: true);
-        var finalSplitWins = CountTimingWins(finalSplits, allFinalResults, finalResultIds, useSectorTimes: false);
-        var finalSectorWins = CountTimingWins(finalSectors, allFinalResults, finalResultIds, useSectorTimes: true);
+        var preFinalSplitWins = RiderTimingStatistics.CountTimingWins(preFinalSplits, allPreFinalResults, preFinalResultIds, useSectorTimes: false);
+        var preFinalSectorWins = RiderTimingStatistics.CountTimingWins(preFinalSectors, allPreFinalResults, preFinalResultIds, useSectorTimes: true);
+        var finalSplitWins = RiderTimingStatistics.CountTimingWins(finalSplits, allFinalResults, finalResultIds, useSectorTimes: false);
+        var finalSectorWins = RiderTimingStatistics.CountTimingWins(finalSectors, allFinalResults, finalResultIds, useSectorTimes: true);
         var qualificationSpeeds = targetSplits.Where(split => qualificationResultIds.Contains(split.String("result_id") ?? string.Empty)).Select(split => split.Decimal("speed")).Where(value => value is not null).Select(value => value!.Value).ToArray();
         var finalSpeeds = targetSplits.Where(split => finalResultIds.Contains(split.String("result_id") ?? string.Empty)).Select(split => split.Decimal("speed")).Where(value => value is not null).Select(value => value!.Value).ToArray();
 
@@ -467,7 +434,7 @@ public sealed class RidersService
         CancellationToken cancellationToken)
     {
         var overviewQuery = OverviewQuery(queryString);
-        var context = DomainQueryService.MetricsContextFromQuery(overviewQuery, _validator);
+        var context = MetricsQueryParser.Parse(overviewQuery, _validator);
         var snapshot = await _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
@@ -518,7 +485,11 @@ public sealed class RidersService
             (await trackStatisticsTask).Items,
             sessionResults,
             JsonSerializerProxy.ToJsonObject(await pressurePerformanceTask),
-            ToPublicTeamHistoryJson(await teamHistoryTask));
+            RiderTeamHistoryMapper.ToPublicTeamHistoryJson(await teamHistoryTask))
+        {
+            ChartStatistics = RiderChartStatistics.Build(sessionResults.OfType<JsonObject>(),
+                (await roundResultsTask).Items, (await trackStatisticsTask).Items)
+        };
     }
 
     public Task<PublicPagedResponse<RiderRoundResultDto>> ListPublicRiderRoundResultsAsync(
@@ -535,7 +506,7 @@ public sealed class RidersService
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, PublicRoundSorts, "roundStartDate", "desc");
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var snapshot = suppliedSnapshot ?? await _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
@@ -585,7 +556,7 @@ public sealed class RidersService
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, PublicTrackSorts, "venueName", "asc");
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var snapshot = suppliedSnapshot ?? await _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
@@ -625,7 +596,7 @@ public sealed class RidersService
         await EnsureRiderExistsAsync(riderId, cancellationToken);
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, RiderResultSorts, "date", "desc");
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var results = await _domainQueries.GetMatchingResultsAsync(context, riderId, riderQuery: _validator.String(queryString, "q"), cancellationToken: cancellationToken);
         await _domainQueries.DecorateGapMsAsync(results, cancellationToken: cancellationToken);
         var sorted = JsonSorting.Sort(DecorateResultRows(results), sort.Sort, sort.Descending);
@@ -637,7 +608,7 @@ public sealed class RidersService
         await EnsureRiderExistsAsync(riderId, cancellationToken);
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, VenueSorts, "venue", "asc");
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var rows = await BuildVenueRowsAsync(riderId, context, cancellationToken);
         var q = _validator.String(queryString, "q");
         var countryCode = _validator.String(queryString, "country_code");
@@ -846,119 +817,8 @@ public sealed class RidersService
     }
 
     internal static IReadOnlyList<JsonObject> BuildSectorRows(
-        IReadOnlyList<JsonObject> splits,
-        IReadOnlyList<JsonObject>? results = null)
-    {
-        var rows = new List<JsonObject>(splits.Count);
-        foreach (var group in splits.GroupBy(split => split.String("result_id") ?? string.Empty, StringComparer.OrdinalIgnoreCase))
-        {
-            int? previous = 0;
-            foreach (var split in group.OrderBy(row => row.Int("split_index") ?? int.MaxValue))
-            {
-                var cumulative = split.Int("race_time");
-                var sectorTime = cumulative is not null && previous is not null && cumulative >= previous
-                    ? cumulative - previous
-                    : null;
-                var row = split.DeepClone().AsObject();
-                row["sector_time_ms"] = sectorTime;
-                rows.Add(row);
-                previous = cumulative;
-            }
-        }
-
-        if (results is null)
-        {
-            return rows;
-        }
-
-        var resultsById = results
-            .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
-            .ToDictionary(result => result.String("id")!, StringComparer.OrdinalIgnoreCase);
-        var resultSessionIds = resultsById.ToDictionary(
-            pair => pair.Key,
-            pair => pair.Value.String("session_id") ?? pair.Value.Object("sessions")?.String("id") ?? string.Empty,
-            StringComparer.OrdinalIgnoreCase);
-        var maximumSplitBySession = splits
-            .Where(split => resultSessionIds.ContainsKey(split.String("result_id") ?? string.Empty))
-            .GroupBy(split => resultSessionIds.GetValueOrDefault(split.String("result_id") ?? string.Empty))
-            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-            .ToDictionary(
-                group => group.Key!,
-                group => group.Max(split => split.Int("split_index") ?? 0),
-                StringComparer.OrdinalIgnoreCase);
-
-        foreach (var resultGroup in rows
-            .GroupBy(row => row.String("result_id") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .ToArray())
-        {
-            if (!resultsById.TryGetValue(resultGroup.Key, out var result) ||
-                !maximumSplitBySession.TryGetValue(resultSessionIds[resultGroup.Key], out var maximumSplitIndex))
-            {
-                continue;
-            }
-
-            var tail = resultGroup.FirstOrDefault(row => row.Int("split_index") == maximumSplitIndex);
-            var tailTimeMs = tail?.Int("race_time");
-            var finishTimeMs = result.Int("race_time_ms");
-            if (tailTimeMs is not > 0 || finishTimeMs is not > 0 || finishTimeMs <= tailTimeMs)
-            {
-                continue;
-            }
-
-            rows.Add(new JsonObject
-            {
-                ["id"] = null,
-                ["result_id"] = resultGroup.Key,
-                ["split_index"] = maximumSplitIndex + 1,
-                ["race_time"] = finishTimeMs,
-                ["speed"] = null,
-                ["sector_time_ms"] = finishTimeMs.Value - tailTimeMs.Value
-            });
-        }
-
-        return rows;
-    }
-
-    private static int CountTimingWins(
-        IReadOnlyList<JsonObject> timingRows,
-        IReadOnlyList<JsonObject> results,
-        IReadOnlySet<string> targetResultIds,
-        bool useSectorTimes)
-    {
-        var sessionByResultId = results
-            .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
-            .ToDictionary(
-                result => result.String("id")!,
-                result => result.String("session_id") ?? result.Object("sessions")?.String("id") ?? string.Empty,
-                StringComparer.OrdinalIgnoreCase);
-        var valueField = useSectorTimes ? "sector_time_ms" : "race_time";
-        var rankField = useSectorTimes ? "sector_rank" : "split_rank";
-        var wins = 0;
-        foreach (var group in timingRows
-            .Where(row => row.Int(valueField) is > 0)
-            .GroupBy(row => new
-            {
-                SessionId = sessionByResultId.GetValueOrDefault(row.String("result_id") ?? string.Empty),
-                Index = row.Int("split_index")
-            })
-            .Where(group => !string.IsNullOrWhiteSpace(group.Key.SessionId) && group.Key.Index is not null))
-        {
-            if (group.Any(row => row.Int(rankField) is > 0))
-            {
-                wins += group.Count(row =>
-                    targetResultIds.Contains(row.String("result_id") ?? string.Empty) &&
-                    row.Int(rankField) == 1);
-                continue;
-            }
-
-            var best = group.Min(row => row.Int(valueField)!.Value);
-            wins += group.Count(row =>
-                targetResultIds.Contains(row.String("result_id") ?? string.Empty) &&
-                row.Int(valueField) == best);
-        }
-
-        return wins;
-    }
+        IReadOnlyList<JsonObject> splits, IReadOnlyList<JsonObject>? results = null) =>
+        RiderTimingStatistics.BuildSectorRows(splits, results);
 
     private static SessionPositionDto ToSessionPosition(JsonObject result)
     {

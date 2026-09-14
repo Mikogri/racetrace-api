@@ -48,7 +48,18 @@ public sealed record CompareRiderDto(
 {
     [JsonPropertyName("consistencyEvidence")]
     public decimal ConsistencyEvidence { get; init; }
+
+    [JsonPropertyName("sectorGapSummary")]
+    public IReadOnlyList<CompareSectorGapSummaryDto> SectorGapSummary { get; init; } = [];
+
+    [JsonPropertyName("resultsAveragePosition")]
+    public decimal? ResultsAveragePosition { get; init; }
 }
+
+public sealed record CompareSectorGapSummaryDto(
+    [property: JsonPropertyName("sectorIndex")] int SectorIndex,
+    [property: JsonPropertyName("averageGap")] decimal? AverageGap,
+    [property: JsonPropertyName("samplesCount")] int SamplesCount);
 
 public sealed record ComparePointsProgressDto(
     [property: JsonPropertyName("resultId")] long ResultId,

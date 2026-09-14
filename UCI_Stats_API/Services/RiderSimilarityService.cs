@@ -1,3 +1,4 @@
+using UCI_Stats_API.Features.Metrics;
 using Microsoft.AspNetCore.Http;
 using UCI_Stats_API.Infrastructure;
 using UCI_Stats_API.Models;
@@ -27,7 +28,7 @@ public sealed class RiderSimilarityService
         CancellationToken cancellationToken)
     {
         var options = ParseOptions(query);
-        var context = DomainQueryService.MetricsContextFromQuery(query, _validator);
+        var context = MetricsQueryParser.Parse(query, _validator);
         var matchingSessions = await _domainQueries.GetMatchingSessionsAsync(
             context,
             cancellationToken: cancellationToken);

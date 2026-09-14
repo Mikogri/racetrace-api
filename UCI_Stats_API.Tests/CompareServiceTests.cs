@@ -14,8 +14,9 @@ public sealed class CompareServiceTests
         var validator = new QueryValidationService();
 
         Assert.Equal(
-            ["3", "8", "11"],
-            CompareService.ParseRiderIds(Query("3,8,3,11"), validator));
+            ["3", "8"],
+            CompareService.ParseRiderIds(Query("3,8,3"), validator));
+        Assert.Throws<ApiException>(() => CompareService.ParseRiderIds(Query("3,8,11"), validator));
         Assert.Throws<ApiException>(() => CompareService.ParseRiderIds(Query("3,3"), validator));
         Assert.Throws<ApiException>(() => CompareService.ParseRiderIds(Query("3,nope"), validator));
     }
@@ -124,6 +125,12 @@ public sealed class CompareServiceTests
             .ToArray());
         Assert.Equal(60m, firstRider.TotalPoints);
         Assert.Equal(["elite_men"], firstRider.Categories);
+        Assert.Equal(1.5m, firstRider.ResultsAveragePosition);
+        CompareService.ValidateCategoryData(response, "EM", new QueryValidationService());
+        Assert.Throws<ApiException>(() => CompareService.ValidateCategoryData(response, "EW", new QueryValidationService()));
+        Assert.Throws<ApiException>(() => CompareService.ValidateCategoryData(
+            response with { Riders = [firstRider with { Categories = [] }, response.Riders[1]] },
+            "EM", new QueryValidationService()));
 
         var secondRider = response.Riders[1];
         Assert.Equal(2.5m, secondRider.AverageFinishGapToBestSelected);

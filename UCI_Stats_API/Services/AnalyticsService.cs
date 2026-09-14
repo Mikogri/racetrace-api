@@ -1,3 +1,4 @@
+using UCI_Stats_API.Features.Metrics;
 using System.Text.Json.Nodes;
 using UCI_Stats_API.Infrastructure;
 using UCI_Stats_API.Models;
@@ -30,7 +31,7 @@ public sealed class AnalyticsService
         CancellationToken cancellationToken)
     {
         var context = WithDefaultCategoryAndSeason(
-            DomainQueryService.MetricsContextFromQuery(queryString, _validator));
+            MetricsQueryParser.Parse(queryString, _validator));
         var finalContext = context with
         {
             SessionType = "FINAL",
@@ -116,7 +117,7 @@ public sealed class AnalyticsService
         CancellationToken cancellationToken)
     {
         var context = WithDefaultCategoryAndSeason(
-            DomainQueryService.MetricsContextFromQuery(queryString, _validator),
+            MetricsQueryParser.Parse(queryString, _validator),
             defaultSeason: false);
         var sessions = await _domainQueries.GetMatchingSessionsAsync(
             context,

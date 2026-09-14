@@ -1,3 +1,4 @@
+using UCI_Stats_API.Features.Metrics;
 using System.Text.Json.Nodes;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
@@ -72,7 +73,7 @@ public sealed class RankingService
         var sort = new SortRequest(Sorts[requestedSort.Sort], requestedSort.Order);
         var startFilters = ReadStartFilters(queryString);
         var metricFilters = ReadMetricFilters(queryString);
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var riderQuery = _validator.StringAny(queryString, "search", "q");
         var nation = _validator.String(queryString, "nation");
         var snapshot = await BuildSnapshotAsync(
@@ -157,7 +158,7 @@ public sealed class RankingService
         else if (string.Equals(requestedComparison, "previousFilters", StringComparison.OrdinalIgnoreCase))
         {
             var previousFilterQuery = PreviousFilterQuery(queryString);
-            var previousContext = DomainQueryService.MetricsContextFromQuery(previousFilterQuery, _validator);
+            var previousContext = MetricsQueryParser.Parse(previousFilterQuery, _validator);
             var previousRiderQuery = _validator.String(previousFilterQuery, "search");
             var previousSnapshot = await BuildSnapshotAsync(
                 previousContext,

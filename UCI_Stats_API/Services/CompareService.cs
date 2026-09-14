@@ -1,3 +1,4 @@
+using UCI_Stats_API.Features.Metrics;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using UCI_Stats_API.Infrastructure;
@@ -7,7 +8,7 @@ namespace UCI_Stats_API.Services;
 
 public sealed class CompareService
 {
-    private const int MaximumComparedRiders = 10;
+    private const int MaximumComparedRiders = 2;
 
     private readonly QueryValidationService _validator;
     private readonly DomainQueryService _domainQueries;
@@ -31,7 +32,11 @@ public sealed class CompareService
         CancellationToken cancellationToken)
     {
         var riderIds = ParseRiderIds(queryString, _validator);
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
+        if (context.CategoryCodes.Count != 1)
+        {
+            throw _validator.BadQuery("Select exactly one category for comparison.");
+        }
         var snapshotTasks = riderIds
             .Select(riderId => _ranking.BuildSnapshotAsync(
                 context,
@@ -72,7 +77,20 @@ public sealed class CompareService
             });
         }
 
-        return BuildResponse(sources);
+        var response = BuildResponse(sources);
+        ValidateCategoryData(response, context.CategoryCodes[0], _validator);
+        return response;
+    }
+
+    internal static void ValidateCategoryData(CompareResponseDto response, string category, QueryValidationService validator)
+    {
+        var expected = PublicApiCodes.ToPublicCategory(category);
+        bool Matches(string? value) => string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);
+        if (response.Riders.Any(rider => !rider.Categories.Any(Matches)) ||
+            response.Sessions.Any(session => session.Category is not null && !Matches(session.Category)))
+        {
+            throw validator.BadQuery("Both riders must have data in the selected category for the selected range.");
+        }
     }
 
     internal static string[] ParseRiderIds(
@@ -290,9 +308,24 @@ public sealed class CompareService
             pointsProgress,
             roundMetrics)
         {
-            ConsistencyEvidence = row?.Decimal("consistency_confidence") ?? 0m
+            ConsistencyEvidence = row?.Decimal("consistency_confidence") ?? 0m,
+            SectorGapSummary = SummarizeSectorGaps(sectorGaps),
+            ResultsAveragePosition = commonSessions.SelectMany(session => session.Results)
+                .Where(result => result.RiderId == PublicDtoMapping.Long(source.RiderId) && result.IsClassified && result.Position > 0)
+                .Select(result => (decimal?)result.Position).Average()
         };
     }
+
+    internal static IReadOnlyList<CompareSectorGapSummaryDto> SummarizeSectorGaps(IEnumerable<CompareAverageSectorGapDto> sectors) =>
+        sectors.Where(sector => !sector.IsFinishSector)
+            .GroupBy(sector => sector.SectorIndex)
+            .OrderBy(group => group.Key)
+            .Select(group => new CompareSectorGapSummaryDto(
+                group.Key,
+                group.Sum(sector => sector.SamplesCount) == 0 ? null :
+                    group.Sum(sector => sector.AverageGap * sector.SamplesCount) / group.Sum(sector => sector.SamplesCount),
+                group.Sum(sector => sector.SamplesCount)))
+            .ToArray();
 
     private static CompareSessionDto BuildSession(
         string sessionId,

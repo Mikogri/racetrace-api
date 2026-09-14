@@ -31,8 +31,7 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         }
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        EnsureSuccess(response, content);
+        var content = await ReadSuccessfulContentAsync(response, cancellationToken);
 
         var total = ParseTotal(response);
         return new SupabaseQueryResult(ParseArray(content), total);
@@ -61,8 +60,7 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         request.Content = JsonContent(payload);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        EnsureSuccess(response, content);
+        var content = await ReadSuccessfulContentAsync(response, cancellationToken);
         return ParseArray(content);
     }
 
@@ -74,8 +72,7 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         request.Content = JsonContent(payload);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        EnsureSuccess(response, content);
+        var content = await ReadSuccessfulContentAsync(response, cancellationToken);
         return ParseArray(content);
     }
 
@@ -85,8 +82,7 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         AddAuthHeaders(request, role);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        EnsureSuccess(response, content);
+        await ReadSuccessfulContentAsync(response, cancellationToken);
     }
 
     public async Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role, CancellationToken cancellationToken = default)
@@ -176,6 +172,13 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
     private static StringContent JsonContent(JsonNode payload)
     {
         return new StringContent(payload.ToJsonString(JsonOptions), Encoding.UTF8, "application/json");
+    }
+
+    private static async Task<string> ReadSuccessfulContentAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureSuccess(response, content);
+        return content;
     }
 
     private static void EnsureSuccess(HttpResponseMessage response, string content)

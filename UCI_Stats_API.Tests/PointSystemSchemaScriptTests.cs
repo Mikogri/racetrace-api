@@ -4,13 +4,8 @@ public sealed class PointSystemSchemaScriptTests
 {
     private static readonly string Script = File.ReadAllText(Path.Combine(
         AppContext.BaseDirectory,
-        "..",
-        "..",
-        "..",
-        "..",
-        "UCI_Stats_API",
-        "Database",
-        "20260720_stage1_competition_levels_and_point_systems.sql"));
+        "Fixtures",
+        "point-system-schema.sql"));
 
     [Fact]
     public void CompetitionLevelConstraintsArePresent()

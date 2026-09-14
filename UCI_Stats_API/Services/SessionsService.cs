@@ -1,3 +1,4 @@
+using UCI_Stats_API.Features.Metrics;
 using System.Text.Json.Nodes;
 using UCI_Stats_API.Infrastructure;
 using UCI_Stats_API.Models;
@@ -49,7 +50,7 @@ public sealed class SessionsService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var commonOnly = _validator.BoolAny(queryString, "commonSessionsOnly", "common_sessions_only") == true;
-        var context = DomainQueryService.MetricsContextFromQuery(queryString, _validator);
+        var context = MetricsQueryParser.Parse(queryString, _validator);
         var matchingSessions = await _domainQueries.GetMatchingSessionsAsync(context, cancellationToken: cancellationToken);
         var sessionIds = matchingSessions
             .Select(session => session.String("id"))
