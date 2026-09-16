@@ -1,6 +1,8 @@
 using System.Net;
 using UCI_Stats_API.Configuration;
 using UCI_Stats_API.Services;
+using UCI_Stats_API.Features.Fantasy;
+using UCI_Stats_API.Features.Fantasy.Import;
 
 namespace UCI_Stats_API.Infrastructure;
 
@@ -13,6 +15,11 @@ public static class ServiceCollectionExtensions
         services.Configure<ApiAccessOptions>(configuration.GetSection(ApiAccessOptions.SectionName));
         services.Configure<AdminOptions>(configuration.GetSection(AdminOptions.SectionName));
         services.Configure<PointSystemSeedOptions>(configuration.GetSection(PointSystemSeedOptions.SectionName));
+        services.AddOptions<FantasyOptions>().Bind(configuration.GetSection(FantasyOptions.SectionName))
+            .Validate(options => options.SyncInterval >= TimeSpan.FromMinutes(5), "Fantasy sync interval must be at least five minutes.");
+        services.AddOptions<FantasyImportOptions>().Bind(configuration.GetSection("Fantasy:Import"))
+            .Validate(options => options.TimeoutSeconds is > 0 and <= 120 && options.StaleAfterHours > 0 && options.MinimumRiderCount >= 6,
+                "Fantasy import timeout, freshness and minimum rider count must be valid.");
         services.PostConfigure<ApiAccessOptions>(options =>
         {
             var environmentSecret = configuration["API_READ_SECRET"];
@@ -97,6 +104,15 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<SeasonSummaryService>();
         services.AddScoped<PodiumPredictorService>();
+        services.AddHttpClient(PinkbikeFantasyImporter.HttpClientName);
+        services.AddSingleton<FantasyPriceSnapshotStore>();
+        services.AddSingleton<FantasyPreparedStore>();
+        services.AddSingleton<FantasyWorkCoordinator>();
+        services.AddScoped<PinkbikeFantasyImporter>();
+        services.AddScoped<FantasyRacePrediction>();
+        services.AddScoped<FantasyPreparationService>();
+        services.AddScoped<FantasyService>();
+        services.AddHostedService<FantasySyncHostedService>();
         services.AddScoped<TracksService>();
         services.AddScoped<TeamsService>();
         services.AddScoped<PointsService>();

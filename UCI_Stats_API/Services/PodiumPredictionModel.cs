@@ -91,6 +91,8 @@ internal sealed record MonteCarloPrediction(
     double Top5Probability,
     double ExpectedPosition);
 
+internal sealed record MonteCarloRaceResult(MonteCarloPrediction Summary, IReadOnlyList<double> PositionProbabilities);
+
 internal sealed class PodiumPredictionCalibration
 {
     private readonly PodiumPredictionOptions _options;
@@ -167,6 +169,10 @@ internal sealed class MonteCarloRaceSimulator
     }
 
     public IReadOnlyList<MonteCarloPrediction> Simulate(
+        IReadOnlyList<PodiumPredictionDistribution> riders) =>
+        SimulateDetailed(riders).Select(result => result.Summary).ToArray();
+
+    internal IReadOnlyList<MonteCarloRaceResult> SimulateDetailed(
         IReadOnlyList<PodiumPredictionDistribution> riders)
     {
         if (riders.Count == 0)
@@ -178,6 +184,7 @@ internal sealed class MonteCarloRaceSimulator
         var podiums = new int[riders.Count];
         var top5 = new int[riders.Count];
         var positionSums = new long[riders.Count];
+        var positionCounts = Enumerable.Range(0, riders.Count).Select(_ => new int[riders.Count]).ToArray();
         var random = new Random(_options.RandomSeed);
         var sampled = new (int Index, double Performance)[riders.Count];
 
@@ -205,6 +212,7 @@ internal sealed class MonteCarloRaceSimulator
                 var rider = sampled[position].Index;
                 var officialPosition = position + 1;
                 positionSums[rider] += officialPosition;
+                positionCounts[rider][position]++;
                 if (officialPosition == 1) wins[rider]++;
                 if (officialPosition <= 3) podiums[rider]++;
                 if (officialPosition <= 5) top5[rider]++;
@@ -212,11 +220,12 @@ internal sealed class MonteCarloRaceSimulator
         }
 
         return Enumerable.Range(0, riders.Count)
-            .Select(index => new MonteCarloPrediction(
+            .Select(index => new MonteCarloRaceResult(new MonteCarloPrediction(
                 wins[index] / (double)_options.MonteCarloIterations,
                 podiums[index] / (double)_options.MonteCarloIterations,
                 top5[index] / (double)_options.MonteCarloIterations,
-                positionSums[index] / (double)_options.MonteCarloIterations))
+                positionSums[index] / (double)_options.MonteCarloIterations),
+                positionCounts[index].Select(count => count / (double)_options.MonteCarloIterations).ToArray()))
             .ToArray();
     }
 

@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <None Update="Fixtures\pinkbike-fantasy-athletes-2026.html" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\UCI_Stats_API\Database\20260720_stage1_competition_levels_and_point_systems.sql"
           Link="Fixtures\point-system-schema.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
