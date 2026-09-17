@@ -14,7 +14,8 @@ public sealed record FantasyPreparedRound(int Season, string RoundId, DateTimeOf
     string EngineVersion, string ProjectionVersion, string RulesVersion, string EventFingerprint,
     IReadOnlyList<FantasyPreparedRider> Riders, IReadOnlyList<string> Warnings, IReadOnlyList<FantasyRoundBacktest> Backtests,
     IReadOnlyDictionary<string, FantasyStageCalibration>? Calibrations = null,
-    string? DataRevision = null);
+    string? DataRevision = null,
+    IReadOnlyList<FantasyTrainingField>? TrainingFields = null);
 
 /// <summary>Prepared forecasts survive restarts; a failed refresh never replaces the last successful file.</summary>
 public sealed class FantasyPreparedStore(IOptions<FantasyOptions> options, IHostEnvironment environment)

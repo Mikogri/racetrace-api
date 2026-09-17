@@ -63,7 +63,7 @@ public sealed class FantasyRacePrediction(
         var key = $"fantasy-calendar:{season}:{await DataRevisionAsync(token)}";
         if (cache.TryGetValue<IReadOnlyList<JsonObject>>(key, out var cached)) return cached!;
         var response = await supabase.GetAsync(new SupabaseQuery("rounds")
-            .Select("id,season_year,round_number,track_id,start_date,end_date,status,competition_levels(code),tracks(name,venue,country_code)")
+            .Select("id,season_year,round_number,track_id,start_date,end_date,status,context_name,competition_levels(code),tracks(name,venue,country_code)")
             .Filter("season_year", "gte", Math.Max(2021, season - 3)).Filter("season_year", "lte", season)
             .Order("start_date", false).Limit(1000), cancellationToken: token);
         var rounds = response.Data.Where(round => round.Object("competition_levels")?.String("code") is "world_cup" or "world_championships" or "world_championship").ToArray();

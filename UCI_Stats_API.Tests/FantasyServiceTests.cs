@@ -16,7 +16,11 @@ public sealed class FantasyServiceTests
     [InlineData("ready", true)]
     [InlineData("unknown-start-list", true)]
     [InlineData("unknown-start-list-injury", false)]
-    [InlineData("stale-prices", false)]
+    [InlineData("stale-prices", true)]
+    [InlineData("overdue-forecast", true)]
+    [InlineData("other-round-prices", false)]
+    [InlineData("training-exclusion", false)]
+    [InlineData("training-empty", true)]
     [InlineData("missing-mapping", false)]
     [InlineData("wrong-category", false)]
     [InlineData("injury", false)]
@@ -57,6 +61,16 @@ public sealed class FantasyServiceTests
     }
 
     [Fact]
+    public async Task LiveRoundRemainsTheFantasyTargetAfterTrainingStarts()
+    {
+        using var fixture = new Fixture("unknown-start-list");
+        fixture.Database.RoundAlreadyStarted = true;
+        fixture.Database.RoundLive = true;
+        var response = await fixture.Service.CurrentAsync(default);
+        Assert.Equal("37", response.Round?.RoundId);
+    }
+
+    [Fact]
     public async Task MissingPricesReturnsDiagnosticsWithoutInventedRiders()
     {
         using var fixture = new Fixture("ready");
@@ -93,7 +107,7 @@ public sealed class FantasyServiceTests
 
         public Fixture(string scenario)
         {
-            _event = scenario.StartsWith("unknown-start-list", StringComparison.Ordinal) ? null : new FantasyEventOptions
+            _event = scenario.StartsWith("unknown-start-list", StringComparison.Ordinal) || scenario.StartsWith("training-", StringComparison.Ordinal) ? null : new FantasyEventOptions
             {
                 Q1BonusApplies = true,
                 StartListRiderIds = Enumerable.Range(0, scenario == "outside-start-list" ? 5 : 6).Select(index => index.ToString()).ToList(),
@@ -116,14 +130,15 @@ public sealed class FantasyServiceTests
                 scenario == "missing-mapping" && index == 0 ? null : index.ToString(), "Rider " + index,
                 index < 4 ? "male" : "female", 200_000, 40, scenario.Contains("injury", StringComparison.Ordinal) && index == 0, Now,
                 "mapped", null, [])).ToArray();
-            await _provider.GetRequiredService<FantasyPriceSnapshotStore>().SaveAsync(new("prices", 2026, "37",
+            await _provider.GetRequiredService<FantasyPriceSnapshotStore>().SaveAsync(new("prices", 2026, scenario == "other-round-prices" ? "36" : "37",
                 scenario == "stale-prices" ? Now.AddDays(-2) : Now, riders, FantasyRules2026.AthletesUrl, "test"));
             var projections = riders.Select((rider, index) => new FantasyPreparedRider(index.ToString(), rider.Name, "FRA",
                 scenario == "wrong-category" && index == 0 ? "female" : rider.Gender, 90, 2, 90, 10, 100)).ToArray();
-            await _provider.GetRequiredService<FantasyPreparedStore>().WriteAsync(new(2026, "37", Now.AddDays(10), Now,
+            await _provider.GetRequiredService<FantasyPreparedStore>().WriteAsync(new(2026, "37", Now.AddDays(10), scenario == "overdue-forecast" ? Now.AddDays(-1) : Now,
                 scenario == "stale-model" ? "old" : FantasyRacePrediction.EngineVersion, FantasyCalibration.Version,
                 FantasyRules2026.Rules.Version, FantasyPreparationService.EventFingerprint(_event), projections, [], [],
-                DataRevision: scenario == "changed-source" ? "old-data" : await _scope.ServiceProvider.GetRequiredService<FantasyRacePrediction>().DataRevisionAsync(default)));
+                DataRevision: scenario == "changed-source" ? "old-data" : await _scope.ServiceProvider.GetRequiredService<FantasyRacePrediction>().DataRevisionAsync(default),
+                TrainingFields: scenario == "training-exclusion" ? [new("male", "test", "https://example.org/training", Now, ["0", "1", "2"])] : []));
         }
 
         public void Dispose()
@@ -146,6 +161,7 @@ public sealed class FantasyServiceTests
     {
         public int CalendarReads { get; private set; }
         public bool RoundAlreadyStarted { get; set; }
+        public bool RoundLive { get; set; }
         public Task<SupabaseQueryResult> GetAsync(SupabaseQuery query, bool count = false, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
         {
             if (count)
@@ -160,6 +176,7 @@ public sealed class FantasyServiceTests
                 "competition_levels":{"code":"world_cup"},"tracks":{"venue":"Whistler","name":"1199"}}
                 """)!.AsObject();
             if (RoundAlreadyStarted) round["start_date"] = "2026-09-15T00:00:00Z";
+            if (RoundLive) round["status"] = "live";
             return Task.FromResult(new SupabaseQueryResult([round], null));
         }
         public Task<JsonObject?> GetSingleAsync(SupabaseQuery query, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default) => throw new NotSupportedException();

@@ -17,6 +17,7 @@ public sealed class FantasyPreparationService(
     FantasyWorkCoordinator coordinator,
     FantasyPreparedStore store,
     FantasyPriceSnapshotStore prices,
+    FantasyTrainingParticipants training,
     ILogger<FantasyPreparationService> logger)
 {
     public async Task<FantasyPreparedRound> PrepareAsync(JsonObject targetRound, CancellationToken token)
@@ -52,6 +53,9 @@ public sealed class FantasyPreparationService(
         var roundId = target.String("id") ?? throw new InvalidDataException("The upcoming round has no ID.");
         var starts = DateTimeOffset.Parse(target.String("start_date")!, CultureInfo.InvariantCulture);
         var eventOptions = options.Value.Events.GetValueOrDefault(roundId);
+        var priceSnapshot = await prices.GetLatestAsync(season, token);
+        var previousForecast = await store.ReadAsync(roundId, token);
+        var trainingFields = await training.ResolveAsync(target, priceSnapshot?.Riders ?? [], previousForecast?.TrainingFields, token);
         var warnings = new HashSet<string>(StringComparer.Ordinal);
         var backtests = new List<FantasyRoundBacktest>();
         var preparedRiders = new List<FantasyPreparedRider>();
@@ -143,6 +147,8 @@ public sealed class FantasyPreparationService(
                 warnings.Add($"{category}: at least two earlier category events with valid final and applicable Q1 observations are required for calibrated projections.");
                 continue;
             }
+            // Training matches cover the Pinkbike catalogue, not necessarily the entire race field.
+            // They constrain team selection only; do not artificially improve odds by removing competitors.
             var startList = eventOptions?.StartListRiderIds?.ToHashSet(StringComparer.Ordinal);
             var current = await source.ForecastAsync(archive, target, category, 50_000, startList, token);
             foreach (var forecast in current)
@@ -169,7 +175,7 @@ public sealed class FantasyPreparationService(
             throw new InvalidDataException("Race data changed during Fantasy preparation. Retry to prepare a consistent forecast.");
         var prepared = new FantasyPreparedRound(season, roundId, starts, timeProvider.GetUtcNow(), FantasyRacePrediction.EngineVersion,
             FantasyCalibration.Version, FantasyRules2026.Rules.Version, EventFingerprint(eventOptions),
-            preparedRiders.OrderByDescending(rider => rider.ExpectedFantasyPoints).ToArray(), warnings.Order(StringComparer.Ordinal).ToArray(), backtests, calibrations, dataRevision);
+            preparedRiders.OrderByDescending(rider => rider.ExpectedFantasyPoints).ToArray(), warnings.Order(StringComparer.Ordinal).ToArray(), backtests, calibrations, dataRevision, trainingFields);
         await store.WriteAsync(prepared, token);
         logger.LogInformation("Prepared Fantasy round {RoundId}: {RiderCount} projections and {BacktestCount} walk-forward category tests.",
             roundId, prepared.Riders.Count, backtests.Count);

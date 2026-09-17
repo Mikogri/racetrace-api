@@ -123,7 +123,13 @@ Wbudowane przygotowanie łączy kategorie dla historycznego składu tylko przy p
 Bez tych danych jawnie wykonuje ocenę samych prognoz.
 
 Lokalnie Pinkbike zwraca HTTP 403 na automatyczny import. Zachowywany jest ostatni dobry snapshot i pokazywana diagnostyka; można użyć ręcznego, oryginalnego zapisu publicznej strony.
-Brak potwierdzonej listy startowej nie blokuje rekomendacji. Skład z katalogu Pinkbike jest oznaczony jako oparty na niepotwierdzonym udziale. Automatyczne rozpoznawanie uczestników z treningów ChronoRace/Tissot nie jest jeszcze wdrożone; sama zmiana statusu rundy na live nie importuje listy uczestników do Fantasy.
+Brak potwierdzonej listy startowej nie blokuje rekomendacji. Skład z katalogu Pinkbike jest oznaczony jako oparty na niepotwierdzonym udziale.
+
+Od 17.09.2026 przygotowanie prognoz dla rundy live próbuje również odczytać roster Timed Training z ChronoRace (kontekst rundy) albo listę startową fazy Timed Training / Timed Practice w Tissot (odkrywane numery wydarzeń i faz w danym sezonie). Nie wykorzystuje częściowej listy finiszerów ani listy z finału jako pełnej puli treningowej. Jeśli dostawca nie publikuje treningów, pozostaje katalog Pinkbike. Nazwy są dopasowywane bez uwzględniania wielkości liter, akcentów i kolejności imienia/nazwiska, osobno dla kobiet i mężczyzn; niejednoznaczności nie są zgadywane. Użyte źródło i czas pobrania pozostają w przygotowanym artefakcie. Brak wystarczającego dopasowania nie zeruje całej kategorii.
+
+Roster zawęża wyłącznie wybór Best Team; tabela nadal zawiera wszystkich riderów, w tym kontuzjowanych. Nie usuwa pozostałych konkurentów z modelu wyścigu, ponieważ katalog Pinkbike nie musi obejmować całego pola. Jawnie skonfigurowana lista startowa ma pierwszeństwo. Błąd źródła zachowuje ostatni roster tego samego kontekstu. Runda live ma pierwszeństwo przed kolejną przyszłą rundą. `Fantasy:LiveSyncInterval` (domyślnie 15 minut) określa sprawdzanie rundy i przygotowanie danych live; import cen nadal odbywa się co `SyncInterval`. Publiczne odczyty nie pobierają treningów ani nie uruchamiają symulacji.
+
+Upływ `SyncInterval` sam w sobie nie kasuje zgodnych prognoz: stary czas odświeżenia powoduje ostrzeżenie, natomiast zmiana modelu, reguł, konfiguracji lub rewizji danych nadal unieważnia prognozę. Ostatnie ceny mogą służyć do rekomendacji z ostrzeżeniem o nieaktualności, ale tylko gdy snapshot dotyczy tej samej rundy. Nie podstawia się cen poprzedniej rundy i nie zmienia się daty importu, aby udawać świeżość.
 Nie ma automatycznego udawania, że nowa wersja scoringu 2027 jest taka sama jak 2026.
 
 ## Weryfikacja

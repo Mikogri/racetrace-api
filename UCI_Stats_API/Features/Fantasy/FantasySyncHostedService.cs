@@ -11,7 +11,8 @@ public sealed class FantasySyncHostedService(IServiceScopeFactory scopes, IOptio
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!options.Value.ScheduledSyncEnabled) return;
-        using var timer = new PeriodicTimer(options.Value.SyncInterval, time);
+        var nextPriceSync = DateTimeOffset.MinValue;
+        var nextPreparation = DateTimeOffset.MinValue;
         do
         {
             using var scope = scopes.CreateScope();
@@ -21,22 +22,30 @@ public sealed class FantasySyncHostedService(IServiceScopeFactory scopes, IOptio
                 var round = await fantasy.NextRoundAsync(stoppingToken);
                 try
                 {
-                    await scope.ServiceProvider.GetRequiredService<PinkbikeFantasyImporter>()
-                        .SyncAsync(time.GetUtcNow().Year, round?.String("id"), stoppingToken);
+                    if (time.GetUtcNow() >= nextPriceSync)
+                    {
+                        nextPriceSync = time.GetUtcNow() + options.Value.SyncInterval;
+                        await scope.ServiceProvider.GetRequiredService<PinkbikeFantasyImporter>()
+                            .SyncAsync(time.GetUtcNow().Year, round?.String("id"), stoppingToken);
+                    }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
                 catch (Exception exception)
                 {
                     logger.LogWarning(exception, "Fantasy price sync failed; refreshing independent race projections using the preserved price history.");
                 }
-                if (round is not null)
+                if (round is not null && (FantasyTrainingParticipants.IsLive(round) || time.GetUtcNow() >= nextPreparation))
+                {
                     await scope.ServiceProvider.GetRequiredService<FantasyPreparationService>().PrepareAsync(round, stoppingToken);
+                    nextPreparation = time.GetUtcNow() + options.Value.SyncInterval;
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception exception)
             {
                 logger.LogWarning(exception, "Fantasy refresh failed; the last successful price and projection snapshots are preserved.");
             }
-        } while (await timer.WaitForNextTickAsync(stoppingToken));
+            await Task.Delay(options.Value.LiveSyncInterval, time, stoppingToken);
+        } while (!stoppingToken.IsCancellationRequested);
     }
 }

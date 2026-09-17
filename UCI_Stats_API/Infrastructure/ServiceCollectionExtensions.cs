@@ -16,7 +16,7 @@ public static class ServiceCollectionExtensions
         services.Configure<AdminOptions>(configuration.GetSection(AdminOptions.SectionName));
         services.Configure<PointSystemSeedOptions>(configuration.GetSection(PointSystemSeedOptions.SectionName));
         services.AddOptions<FantasyOptions>().Bind(configuration.GetSection(FantasyOptions.SectionName))
-            .Validate(options => options.SyncInterval >= TimeSpan.FromMinutes(5), "Fantasy sync interval must be at least five minutes.");
+            .Validate(options => options.SyncInterval >= TimeSpan.FromMinutes(5) && options.LiveSyncInterval >= TimeSpan.FromMinutes(5), "Fantasy sync intervals must be at least five minutes.");
         services.AddOptions<FantasyImportOptions>().Bind(configuration.GetSection("Fantasy:Import"))
             .Validate(options => options.TimeoutSeconds is > 0 and <= 120 && options.StaleAfterHours > 0 && options.MinimumRiderCount >= 6,
                 "Fantasy import timeout, freshness and minimum rider count must be valid.");
@@ -112,6 +112,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<FantasyRacePrediction>();
         services.AddScoped<FantasyPreparationService>();
         services.AddScoped<FantasyService>();
+        services.AddHttpClient<FantasyTrainingParticipants>(client => client.Timeout = TimeSpan.FromSeconds(20));
         services.AddHostedService<FantasySyncHostedService>();
         services.AddScoped<TracksService>();
         services.AddScoped<TeamsService>();
