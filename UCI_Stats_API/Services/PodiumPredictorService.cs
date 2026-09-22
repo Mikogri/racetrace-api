@@ -48,7 +48,7 @@ public sealed class PodiumPredictorService
         CancellationToken cancellationToken)
     {
         var season = _seasonSummary.ReadSeason(queryString);
-        var (publicCategory, categoryCode) = _seasonSummary.ReadCategory(queryString);
+        var (publicCategory, categoryCode) = await _seasonSummary.ReadCategoryAsync(queryString, cancellationToken);
         if (IsJuniorCategory(categoryCode))
         {
             return new PodiumPredictionResponseDto(

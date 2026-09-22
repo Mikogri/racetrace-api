@@ -5,7 +5,8 @@ internal sealed record PodiumBacktestPrediction(
     string RiderId,
     int ActualPosition,
     double PodiumProbability,
-    double RankingScore);
+    double RankingScore,
+    double? WinProbability = null);
 
 internal sealed record PodiumBacktestMetrics(
     double WinnerAccuracy,
@@ -42,22 +43,22 @@ internal static class PodiumPredictionBacktester
             var ordered = eventGroup
                 .OrderByDescending(value => value.RankingScore)
                 .ToArray();
-            if (ordered[0].ActualPosition == 1)
+            if (eventGroup.OrderByDescending(value => value.WinProbability ?? value.RankingScore).First().ActualPosition == 1)
             {
                 winnerHits++;
             }
 
-            var podium = eventGroup.Where(value => value.ActualPosition <= 3).ToArray();
+            var podium = eventGroup.Where(value => IsPodium(value.ActualPosition)).ToArray();
             var denominator = Math.Max(1, podium.Length);
-            recall3 += ordered.Take(3).Count(value => value.ActualPosition <= 3) /
+            recall3 += ordered.Take(3).Count(value => IsPodium(value.ActualPosition)) /
                 (double)denominator;
-            recall5 += ordered.Take(5).Count(value => value.ActualPosition <= 3) /
+            recall5 += ordered.Take(5).Count(value => IsPodium(value.ActualPosition)) /
                 (double)denominator;
             ndcg += NdcgAt3(ordered);
 
             foreach (var prediction in eventGroup)
             {
-                var actual = prediction.ActualPosition <= 3 ? 1.0 : 0.0;
+                var actual = IsPodium(prediction.ActualPosition) ? 1.0 : 0.0;
                 var probability = Math.Clamp(prediction.PodiumProbability, 0.000001, 0.999999);
                 brier += Math.Pow(probability - actual, 2);
                 logLoss -= actual * Math.Log(probability) +
@@ -79,11 +80,13 @@ internal static class PodiumPredictionBacktester
     {
         var dcg = ordered.Take(3).Select((value, index) =>
         {
-            var relevance = value.ActualPosition <= 3 ? 4 - value.ActualPosition : 0;
+            var relevance = IsPodium(value.ActualPosition) ? 4 - value.ActualPosition : 0;
             return (Math.Pow(2, relevance) - 1) / Math.Log2(index + 2);
         }).Sum();
         var ideal = new[] { 3, 2, 1 }.Select((relevance, index) =>
             (Math.Pow(2, relevance) - 1) / Math.Log2(index + 2)).Sum();
         return ideal <= 0 ? 0 : dcg / ideal;
     }
+
+    private static bool IsPodium(int position) => position is > 0 and <= 3;
 }

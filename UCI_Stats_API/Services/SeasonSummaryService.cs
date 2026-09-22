@@ -96,7 +96,7 @@ public sealed class SeasonSummaryService
         CancellationToken cancellationToken)
     {
         var season = ReadSeason(queryString);
-        var (publicCategory, categoryCode) = ReadCategory(queryString);
+        var (publicCategory, categoryCode) = await ReadCategoryAsync(queryString, cancellationToken);
         var rounds = await LoadRoundsAsync(season, cancellationToken);
         var roundIds = rounds
             .Select(round => round.String("id"))
@@ -205,8 +205,9 @@ public sealed class SeasonSummaryService
         return season;
     }
 
-    internal (string PublicCategory, string DatabaseCategory) ReadCategory(
-        IQueryCollection queryString)
+    internal async Task<(string PublicCategory, string DatabaseCategory)> ReadCategoryAsync(
+        IQueryCollection queryString,
+        CancellationToken cancellationToken)
     {
         var value = _validator.StringAny(
             queryString,
@@ -215,7 +216,7 @@ public sealed class SeasonSummaryService
             "category_code") ?? "elite_men";
         try
         {
-            var databaseCategory = PublicApiCodes.ToDatabaseCategory(value);
+            var databaseCategory = await _domainQueries.ResolveCategoryCodeAsync(value, cancellationToken);
             return (
                 PublicApiCodes.ToPublicCategory(databaseCategory) ?? value,
                 databaseCategory);

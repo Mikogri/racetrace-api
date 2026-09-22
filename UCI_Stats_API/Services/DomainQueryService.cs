@@ -1,4 +1,5 @@
 using UCI_Stats_API.Features.Metrics;
+using UCI_Stats_API.Features.Metadata;
 using UCI_Stats_API.Infrastructure.Supabase;
 using System.Globalization;
 using System.Text.Json.Nodes;
@@ -15,6 +16,8 @@ public sealed class DomainQueryService
     private const int ResultFilterBatchSize = 300;
 
     private readonly ISupabaseRestClient _supabase;
+    private readonly DisplayMetadataService _metadata;
+    private Task<DisplayMetadataDto>? _metadataTask;
 
     public const string ResultSelect = "*,riders(*),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,conditions(*),round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
 
@@ -27,9 +30,57 @@ public sealed class DomainQueryService
 
     public const string SessionSelect = "*,round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*))";
 
-    public DomainQueryService(ISupabaseRestClient supabase)
+    public DomainQueryService(ISupabaseRestClient supabase, DisplayMetadataService? metadata = null)
     {
         _supabase = supabase;
+        _metadata = metadata ?? new DisplayMetadataService(supabase);
+    }
+
+    public Task<RiderMetricsContext> ParseMetricsContextAsync(
+        IQueryCollection query,
+        QueryValidationService validator,
+        CancellationToken cancellationToken,
+        string? forcedStatus = null) =>
+        MetricsQueryParser.ParseAsync(query, validator, this, cancellationToken, forcedStatus);
+
+    public async Task<string> ResolveCategoryCodeAsync(string value, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return PublicApiCodes.ToDatabaseCategory(value);
+        }
+        catch (ArgumentException)
+        {
+            var metadata = await GetMetadataAsync(cancellationToken);
+            return FindDatabaseCode(metadata.Categories, value)
+                ?? throw new ArgumentException($"Unsupported category '{value}'.", nameof(value));
+        }
+    }
+
+    public async Task<string> ResolveSessionTypeCodeAsync(string value, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return PublicApiCodes.ToDatabaseSessionType(value);
+        }
+        catch (ArgumentException)
+        {
+            var metadata = await GetMetadataAsync(cancellationToken);
+            return FindDatabaseCode(metadata.SessionTypes, value)
+                ?? throw new ArgumentException($"Unsupported session type '{value}'.", nameof(value));
+        }
+    }
+
+    // DomainQueryService is request-scoped: multiple dynamic filters share one metadata snapshot.
+    private Task<DisplayMetadataDto> GetMetadataAsync(CancellationToken cancellationToken) =>
+        _metadataTask ??= _metadata.GetAsync(cancellationToken);
+
+    private static string? FindDatabaseCode(IEnumerable<DisplayLabelDto> entries, string value)
+    {
+        var normalized = value.Trim();
+        return entries.FirstOrDefault(entry =>
+            string.Equals(entry.Code, normalized, StringComparison.OrdinalIgnoreCase) ||
+            entry.Aliases.Contains(normalized, StringComparer.OrdinalIgnoreCase))?.DatabaseCode;
     }
 
     public async Task<JsonObject?> FindByIdAsync(string table, string id, string select = "*", SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)

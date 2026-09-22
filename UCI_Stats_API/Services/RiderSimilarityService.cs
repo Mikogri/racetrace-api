@@ -28,7 +28,7 @@ public sealed class RiderSimilarityService
         CancellationToken cancellationToken)
     {
         var options = ParseOptions(query);
-        var context = MetricsQueryParser.Parse(query, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(query, _validator, cancellationToken);
         var matchingSessions = await _domainQueries.GetMatchingSessionsAsync(
             context,
             cancellationToken: cancellationToken);

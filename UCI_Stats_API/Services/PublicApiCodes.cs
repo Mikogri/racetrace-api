@@ -106,4 +106,15 @@ public static class PublicApiCodes
     }
 
     public static bool IsFinal(string? value) => ToPublicSessionType(value) == "final";
+
+    public static IEnumerable<string> GetCategoryAliases(string databaseCode) =>
+        PublicToDatabaseCategories
+            .Where(pair => ToPublicCategory(pair.Value) == ToPublicCategory(databaseCode))
+            .Select(pair => pair.Key);
+
+    public static IEnumerable<string> GetSessionTypeAliases(string databaseCode) =>
+        PublicToDatabaseSessions.Keys
+            .Concat(["QUALIFICATION", "QUALIFYING", "QUALIFYING_1", "QUALIFYING1", "QUALIFYING_2", "QUALIFYING2",
+                "SEMIFINAL", "SEMI_FINAL", "SEMI-FINAL", "FINALS", "TIMEDTRAINING", "TRAINING"])
+            .Where(alias => ToPublicSessionType(alias) == ToPublicSessionType(databaseCode));
 }

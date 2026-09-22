@@ -3,6 +3,7 @@ using UCI_Stats_API.Configuration;
 using UCI_Stats_API.Services;
 using UCI_Stats_API.Features.Fantasy;
 using UCI_Stats_API.Features.Fantasy.Import;
+using UCI_Stats_API.Features.Metadata;
 
 namespace UCI_Stats_API.Infrastructure;
 
@@ -89,6 +90,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AdminGuard>();
         services.AddScoped<AdminAuthorizationFilter>();
         services.AddScoped<DomainQueryService>();
+        services.AddScoped<DisplayMetadataService>();
         services.AddScoped<PaceService>();
         services.AddScoped<MetricsService>();
         services.AddScoped<SearchService>();

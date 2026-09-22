@@ -50,7 +50,7 @@ public sealed class SessionsService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var commonOnly = _validator.BoolAny(queryString, "commonSessionsOnly", "common_sessions_only") == true;
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var matchingSessions = await _domainQueries.GetMatchingSessionsAsync(context, cancellationToken: cancellationToken);
         var sessionIds = matchingSessions
             .Select(session => session.String("id"))

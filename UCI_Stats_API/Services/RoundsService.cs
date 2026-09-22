@@ -215,7 +215,7 @@ public sealed class RoundsService
         {
             try
             {
-                categoryCode = PublicApiCodes.ToDatabaseCategory(categoryValue);
+                categoryCode = await _domainQueries.ResolveCategoryCodeAsync(categoryValue, cancellationToken);
             }
             catch (ArgumentException)
             {
@@ -240,7 +240,7 @@ public sealed class RoundsService
         {
             try
             {
-                query.Filter("session_type", "eq", PublicApiCodes.ToDatabaseSessionType(type));
+                query.Filter("session_type", "eq", await _domainQueries.ResolveSessionTypeCodeAsync(type, cancellationToken));
             }
             catch (ArgumentException)
             {
@@ -283,8 +283,8 @@ public sealed class RoundsService
         string sessionType;
         try
         {
-            categoryCode = PublicApiCodes.ToDatabaseCategory(categoryValue);
-            sessionType = PublicApiCodes.ToDatabaseSessionType(sessionTypeValue);
+            categoryCode = await _domainQueries.ResolveCategoryCodeAsync(categoryValue, cancellationToken);
+            sessionType = await _domainQueries.ResolveSessionTypeCodeAsync(sessionTypeValue, cancellationToken);
         }
         catch (ArgumentException exception)
         {
@@ -452,7 +452,7 @@ public sealed class RoundsService
         {
             try
             {
-                categoryCode = PublicApiCodes.ToDatabaseCategory(categoryValue);
+                categoryCode = await _domainQueries.ResolveCategoryCodeAsync(categoryValue, cancellationToken);
             }
             catch (ArgumentException)
             {

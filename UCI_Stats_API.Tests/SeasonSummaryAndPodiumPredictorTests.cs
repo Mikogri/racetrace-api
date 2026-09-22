@@ -135,13 +135,13 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
     }
 
     [Fact]
-    public void SummaryFiltersDefaultToSeasonFromCurrentDateAndMenElite()
+    public async Task SummaryFiltersDefaultToSeasonFromCurrentDateAndMenElite()
     {
         var service = ParserOnlySeasonSummaryService(
             new DateTimeOffset(2028, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
         var season = service.ReadSeason(Query());
-        var category = service.ReadCategory(Query());
+        var category = await service.ReadCategoryAsync(Query(), default);
 
         Assert.Equal(2028, season);
         Assert.Equal("elite_men", category.PublicCategory);
@@ -196,7 +196,7 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
         new(
             null!,
             new QueryValidationService(),
-            null!,
+            new DomainQueryService(null!),
             null!,
             new FixedTimeProvider(now));
 

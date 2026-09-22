@@ -31,7 +31,7 @@ public sealed class AnalyticsService
         CancellationToken cancellationToken)
     {
         var context = WithDefaultCategoryAndSeason(
-            MetricsQueryParser.Parse(queryString, _validator));
+            await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken));
         var finalContext = context with
         {
             SessionType = "FINAL",
@@ -117,7 +117,7 @@ public sealed class AnalyticsService
         CancellationToken cancellationToken)
     {
         var context = WithDefaultCategoryAndSeason(
-            MetricsQueryParser.Parse(queryString, _validator),
+            await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken),
             defaultSeason: false);
         var sessions = await _domainQueries.GetMatchingSessionsAsync(
             context,

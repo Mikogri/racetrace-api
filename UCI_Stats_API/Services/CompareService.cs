@@ -32,7 +32,7 @@ public sealed class CompareService
         CancellationToken cancellationToken)
     {
         var riderIds = ParseRiderIds(queryString, _validator);
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         if (context.CategoryCodes.Count != 1)
         {
             throw _validator.BadQuery("Select exactly one category for comparison.");

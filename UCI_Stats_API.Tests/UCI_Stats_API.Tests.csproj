@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\UCI_Stats_API\UCI_Stats_API.csproj" />
+    <ProjectReference Include="..\tools\UCI_Stats_API.PodiumBacktest\UCI_Stats_API.PodiumBacktest.csproj" />
   </ItemGroup>
 
   <ItemGroup>

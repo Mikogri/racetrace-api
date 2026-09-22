@@ -108,7 +108,7 @@ public sealed class TracksService
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, RecordsSorts, "race_time_ms", "asc");
-        var context = MetricsQueryParser.Parse(queryString, _validator) with { TrackId = trackId };
+        var context = (await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken)) with { TrackId = trackId };
         var results = await _domainQueries.GetMatchingResultsAsync(context, cancellationToken: cancellationToken);
         var rows = results
             .Where(result => result.Decimal("race_time_ms") is not null)

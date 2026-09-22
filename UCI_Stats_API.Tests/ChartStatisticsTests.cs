@@ -16,7 +16,7 @@ public sealed class ChartStatisticsTests
     [InlineData("elite_men,elite_women")]
     public async Task ComparisonRejectsMissingOrMultipleCategoriesBeforeDataAccess(string category)
     {
-        var service = new CompareService(new QueryValidationService(), null!, null!, null!);
+        var service = new CompareService(new QueryValidationService(), new DomainQueryService(null!), null!, null!);
         var query = new QueryCollection(new Dictionary<string, StringValues>
         {
             ["riderIds"] = "1,2", ["category"] = category
@@ -28,7 +28,7 @@ public sealed class ChartStatisticsTests
     [Fact]
     public async Task ComparisonRejectsReversedDateRangeBeforeDataAccess()
     {
-        var service = new CompareService(new QueryValidationService(), null!, null!, null!);
+        var service = new CompareService(new QueryValidationService(), new DomainQueryService(null!), null!, null!);
         var query = new QueryCollection(new Dictionary<string, StringValues>
         {
             ["riderIds"] = "1,2", ["category"] = "elite_men",

@@ -131,7 +131,7 @@ public sealed class RidersService
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, RiderSorts, "last_name", "asc");
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var riderQuery = _validator.String(queryString, "q");
         var nation = _validator.String(queryString, "nation");
         var results = await _domainQueries.GetMatchingResultsAsync(
@@ -198,7 +198,7 @@ public sealed class RidersService
             throw new ApiException(StatusCodes.Status404NotFound, "RIDER_NOT_FOUND", "Rider was not found.");
         }
 
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var riderResults = await _domainQueries.GetMatchingResultsAsync(context, riderId, cancellationToken: cancellationToken);
         var teamHistory = await _domainQueries.GetRiderTeamHistoryAsync(
             [riderId],
@@ -280,7 +280,7 @@ public sealed class RidersService
     public async Task<JsonObject> GetMetricsAsync(string riderId, IQueryCollection queryString, CancellationToken cancellationToken)
     {
         await EnsureRiderExistsAsync(riderId, cancellationToken);
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         return JsonSerializerProxy.ToJsonObject(await _metrics.CalculateMetricsAsync(riderId, context, cancellationToken));
     }
 
@@ -297,7 +297,7 @@ public sealed class RidersService
         RankingSnapshot? suppliedSnapshot = null,
         int? suppliedRankingPosition = null)
     {
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var currentPresentationTask = GetCurrentPresentationAsync(
             riderId,
             cancellationToken);
@@ -434,7 +434,7 @@ public sealed class RidersService
         CancellationToken cancellationToken)
     {
         var overviewQuery = OverviewQuery(queryString);
-        var context = MetricsQueryParser.Parse(overviewQuery, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(overviewQuery, _validator, cancellationToken);
         var snapshot = await _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
@@ -506,7 +506,7 @@ public sealed class RidersService
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, PublicRoundSorts, "roundStartDate", "desc");
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var snapshot = suppliedSnapshot ?? await _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
@@ -556,7 +556,7 @@ public sealed class RidersService
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, PublicTrackSorts, "venueName", "asc");
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var snapshot = suppliedSnapshot ?? await _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
@@ -596,7 +596,7 @@ public sealed class RidersService
         await EnsureRiderExistsAsync(riderId, cancellationToken);
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, RiderResultSorts, "date", "desc");
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var results = await _domainQueries.GetMatchingResultsAsync(context, riderId, riderQuery: _validator.String(queryString, "q"), cancellationToken: cancellationToken);
         await _domainQueries.DecorateGapMsAsync(results, cancellationToken: cancellationToken);
         var sorted = JsonSorting.Sort(DecorateResultRows(results), sort.Sort, sort.Descending);
@@ -608,7 +608,7 @@ public sealed class RidersService
         await EnsureRiderExistsAsync(riderId, cancellationToken);
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, VenueSorts, "venue", "asc");
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var rows = await BuildVenueRowsAsync(riderId, context, cancellationToken);
         var q = _validator.String(queryString, "q");
         var countryCode = _validator.String(queryString, "country_code");

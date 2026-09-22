@@ -97,6 +97,19 @@ Starsze aliasy są akceptowane tam, gdzie przewiduje to parser, ale frontend pow
 | `GET /api/v1/conditions` | lista warunków |
 | `GET /api/v1/competition-classes` | klasy zawodów, np. World Cup i World Champs |
 | `GET /api/v1/points/systems` | dostępne systemy punktowe |
+| `GET /api/v1/metadata` | nazwy, skróty, kolejność i aliasy kategorii, typów sesji oraz statusów |
+
+Metadane prezentacji pochodzą z bazy (`categories`, `session_types`,
+`display_statuses`). Odpowiedź zawiera `categories`, `sessionTypes`,
+`roundStatuses` i `sessionStatuses` w formacie camelCase. Każdy wpis ma
+`code`, `name`, `shortName`, `displayOrder`, `aliases`; kategorie dodatkowo
+`gender`, `minAge`, `maxAge`, a sesje `abbreviation` i `groupName`.
+To jeden lekki RPC `get_display_metadata`, z pięciominutowym output cache.
+Zmiana nazwy lub dodanie wpisu nie wymaga nowej mapy etykiet we frontendzie.
+Metadane nie określają wag, punktacji ani tego, czy sesja jest finałem.
+Istniejące kody publiczne i ich aliasy pozostają kompatybilne.
+
+Migracja i granice refactoru: `../docs/refactor-display-metadata.md`.
 
 ### Rundy i sesje
 

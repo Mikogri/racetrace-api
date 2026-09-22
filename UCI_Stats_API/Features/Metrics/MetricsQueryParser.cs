@@ -9,7 +9,51 @@ namespace UCI_Stats_API.Features.Metrics;
 /// </summary>
 public static class MetricsQueryParser
 {
-    public static RiderMetricsContext Parse(IQueryCollection query, QueryValidationService validator, string? forcedStatus = null)
+    private static readonly string[] CategoryKeys =
+        ["category", "categories", "categoryCode", "categoryCodes", "category_code", "category_codes"];
+
+    public static async Task<RiderMetricsContext> ParseAsync(
+        IQueryCollection query,
+        QueryValidationService validator,
+        DomainQueryService domainQueries,
+        CancellationToken cancellationToken,
+        string? forcedStatus = null)
+    {
+        var categories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in validator.CsvAny(query, CategoryKeys))
+        {
+            try
+            {
+                categories[value] = await domainQueries.ResolveCategoryCodeAsync(value, cancellationToken);
+            }
+            catch (ArgumentException)
+            {
+                throw validator.BadQuery($"Unsupported category '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicCategories)}.");
+            }
+        }
+
+        var sessions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in validator.CsvAny(query, "sessionType", "session_type"))
+        {
+            try
+            {
+                sessions[value] = await domainQueries.ResolveSessionTypeCodeAsync(value, cancellationToken);
+            }
+            catch (ArgumentException)
+            {
+                throw validator.BadQuery($"Unsupported sessionType '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicSessionTypes)}.");
+            }
+        }
+
+        return Parse(query, validator, forcedStatus, value => categories[value], value => sessions[value]);
+    }
+
+    public static RiderMetricsContext Parse(
+        IQueryCollection query,
+        QueryValidationService validator,
+        string? forcedStatus = null,
+        Func<string, string>? categoryResolver = null,
+        Func<string, string>? sessionResolver = null)
     {
         var seasonYears = ParseSeasonYears(query, validator);
         var trackIds = validator.CsvAny(query, "trackId", "track_id", "tracks");
@@ -20,19 +64,12 @@ public static class MetricsQueryParser
             .Select(value => value.ToUpperInvariant())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var categoryValues = validator.CsvAny(
-            query,
-            "category",
-            "categories",
-            "categoryCode",
-            "categoryCodes",
-            "category_code",
-            "category_codes");
+        var categoryValues = validator.CsvAny(query, CategoryKeys);
         var categoryCodes = categoryValues.Select(value =>
         {
             try
             {
-                return PublicApiCodes.ToDatabaseCategory(value);
+                return (categoryResolver ?? PublicApiCodes.ToDatabaseCategory)(value);
             }
             catch (ArgumentException)
             {
@@ -44,7 +81,7 @@ public static class MetricsQueryParser
         {
             try
             {
-                return PublicApiCodes.ToDatabaseSessionType(value);
+                return (sessionResolver ?? PublicApiCodes.ToDatabaseSessionType)(value);
             }
             catch (ArgumentException)
             {

@@ -31,7 +31,7 @@ public sealed class LiveService
     public async Task<ListResponse<JsonObject>> ListLiveSessionsAsync(IQueryCollection queryString, CancellationToken cancellationToken)
     {
         var sort = _validator.Sort(queryString, SessionSorts, "session_date", "asc");
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var sessionIds = await _domainQueries.ResolveSessionIdsAsync(context, cancellationToken: cancellationToken);
         var hasFilters = context.SeasonYears.Count > 0 ||
             context.SeasonYear is not null ||

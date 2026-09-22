@@ -73,7 +73,7 @@ public sealed class RankingService
         var sort = new SortRequest(Sorts[requestedSort.Sort], requestedSort.Order);
         var startFilters = ReadStartFilters(queryString);
         var metricFilters = ReadMetricFilters(queryString);
-        var context = MetricsQueryParser.Parse(queryString, _validator);
+        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var riderQuery = _validator.StringAny(queryString, "search", "q");
         var nation = _validator.String(queryString, "nation");
         var snapshot = await BuildSnapshotAsync(
@@ -158,7 +158,7 @@ public sealed class RankingService
         else if (string.Equals(requestedComparison, "previousFilters", StringComparison.OrdinalIgnoreCase))
         {
             var previousFilterQuery = PreviousFilterQuery(queryString);
-            var previousContext = MetricsQueryParser.Parse(previousFilterQuery, _validator);
+            var previousContext = await _domainQueries.ParseMetricsContextAsync(previousFilterQuery, _validator, cancellationToken);
             var previousRiderQuery = _validator.String(previousFilterQuery, "search");
             var previousSnapshot = await BuildSnapshotAsync(
                 previousContext,

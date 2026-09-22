@@ -53,6 +53,18 @@ public sealed class PaceService
         RankingDataBundle bundle,
         IReadOnlyDictionary<string, string?> categoriesBySessionId)
     {
+        return CalculateSessionPaceObservations(bundle)
+            .SelectMany(observation => SimilarityObservations(
+                observation.SessionId,
+                observation.Result,
+                categoriesBySessionId.GetValueOrDefault(observation.SessionId)))
+            .ToArray();
+    }
+
+    // Reuse the same run construction and incident detector for historical experiments.
+    internal IReadOnlyList<RiderSessionPaceObservation> CalculateSessionPaceObservations(
+        RankingDataBundle bundle)
+    {
         var sessionsById = bundle.Sessions
             .Where(session => !string.IsNullOrWhiteSpace(session.String("id")))
             .ToDictionary(session => session.String("id")!, StringComparer.OrdinalIgnoreCase);
@@ -67,7 +79,7 @@ public sealed class PaceService
             .Where(result => !DownhillPaceCalculator.IsDisqualified(result.String("status")))
             .ToArray();
         var splitLayouts = BuildSessionSplitLayouts(fieldResults, splitsByResultId);
-        var observations = new List<RiderSectorObservation>();
+        var observations = new List<RiderSessionPaceObservation>();
 
         foreach (var sessionGroup in fieldResults
                      .Where(result => !string.IsNullOrWhiteSpace(result.String("session_id")))
@@ -93,10 +105,8 @@ public sealed class PaceService
             }
             foreach (var result in _paceCalculator.CalculateSession(paceSession))
             {
-                observations.AddRange(SimilarityObservations(
-                    sessionGroup.Key,
-                    result,
-                    categoriesBySessionId.GetValueOrDefault(sessionGroup.Key)));
+                observations.Add(new RiderSessionPaceObservation(
+                    sessionGroup.Key, result.RiderId, result));
             }
         }
 

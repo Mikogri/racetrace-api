@@ -166,8 +166,8 @@ public sealed class ResultsService
         string sessionType;
         try
         {
-            categoryCode = PublicApiCodes.ToDatabaseCategory(categoryValue);
-            sessionType = PublicApiCodes.ToDatabaseSessionType(sessionTypeValue);
+            categoryCode = await _domainQueries.ResolveCategoryCodeAsync(categoryValue, cancellationToken);
+            sessionType = await _domainQueries.ResolveSessionTypeCodeAsync(sessionTypeValue, cancellationToken);
         }
         catch (ArgumentException exception)
         {
@@ -200,7 +200,7 @@ public sealed class ResultsService
             ?? throw new ApiException(StatusCodes.Status502BadGateway, "SESSION_DATA_MISSING", "Session data is missing from the results package.");
 
         DomainQueryService.NormalizeSessionEmbed(session);
-        ValidateSessionFilters(session, queryString);
+        await ValidateSessionFiltersAsync(session, queryString, cancellationToken);
         var timeView = TimingMode(queryString);
         var allSplits = ExtractEmbeddedSplits(response.Data);
         DecorateGapMs(response.Data);
@@ -848,7 +848,7 @@ public sealed class ResultsService
         string timeView, decimal? trackLengthM = null) =>
         ResultTimingProjection.BuildPerfectRun(results, splits, timeView, trackLengthM);
 
-    private void ValidateSessionFilters(JsonObject session, IQueryCollection queryString)
+    private async Task ValidateSessionFiltersAsync(JsonObject session, IQueryCollection queryString, CancellationToken cancellationToken)
     {
         var categories = _validator.CsvAny(queryString, "category", "categoryCode", "category_code");
         if (categories.Length > 1)
@@ -861,7 +861,7 @@ public sealed class ResultsService
             string expected;
             try
             {
-                expected = PublicApiCodes.ToDatabaseCategory(categories[0]);
+                expected = await _domainQueries.ResolveCategoryCodeAsync(categories[0], cancellationToken);
             }
             catch (ArgumentException)
             {
@@ -885,7 +885,7 @@ public sealed class ResultsService
             string expected;
             try
             {
-                expected = PublicApiCodes.ToDatabaseSessionType(sessionTypes[0]);
+                expected = await _domainQueries.ResolveSessionTypeCodeAsync(sessionTypes[0], cancellationToken);
             }
             catch (ArgumentException)
             {
