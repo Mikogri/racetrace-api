@@ -1,10 +1,32 @@
 using System.Text.Json.Nodes;
 using UCI_Stats_API.Services;
+using UCI_Stats_API.Features.Results;
 
 namespace UCI_Stats_API.Tests;
 
 public sealed class PerfectRunResultsTests
 {
+    [Theory]
+    [InlineData("DNF")]
+    [InlineData("DNS")]
+    [InlineData("DSQ")]
+    [InlineData(" dnf ")]
+    public void InvalidFinishDoesNotCreateFinishSector(string status)
+    {
+        var invalid = Result(2, 151_000);
+        invalid["status"] = status;
+        var splits = Enumerable.Range(1, 4)
+            .SelectMany(index => new[] { Split(1, index, index * 37_500), Split(2, index, index * 37_500) })
+            .ToArray();
+
+        var sectors = ResultTimingProjection.BuildSectorsByResultId(
+            splits, new[] { Result(1, 180_000), invalid }, includeFinishSector: true);
+
+        Assert.Equal(5, sectors["1"].Count);
+        Assert.Equal(4, sectors["2"].Count);
+        Assert.Equal(150_000, sectors["2"][^1].RaceTimeMs);
+    }
+
     [Fact]
     public void PerfectRunIncludesTheFifthFinishSector()
     {

@@ -24,7 +24,12 @@ public sealed record FieldSpreadPointDto(
     [property: JsonPropertyName("position")] int Position,
     [property: JsonPropertyName("raceTime")] decimal RaceTime,
     [property: JsonPropertyName("gapToLeader")] decimal GapToLeader,
-    [property: JsonPropertyName("gapPercent")] decimal GapPercent);
+    [property: JsonPropertyName("gapPercent")] decimal GapPercent)
+{
+    [JsonPropertyName("previousPosition")] public int PreviousPosition { get; init; }
+    [JsonPropertyName("incrementalSpread")] public decimal? IncrementalSpread { get; init; }
+    [JsonPropertyName("incrementalSpreadPercent")] public decimal? IncrementalSpreadPercent { get; init; }
+}
 
 public sealed record FieldSpreadDto(
     [property: JsonPropertyName("fieldSize")] int FieldSize,
@@ -42,7 +47,14 @@ public sealed record TrackFingerprintSectorDto(
 
 public sealed record TrackFingerprintDto(
     [property: JsonPropertyName("mostDecisiveSector")] int? MostDecisiveSector,
-    [property: JsonPropertyName("sectors")] IReadOnlyList<TrackFingerprintSectorDto> Sectors);
+    [property: JsonPropertyName("sectors")] IReadOnlyList<TrackFingerprintSectorDto> Sectors)
+{
+    [JsonPropertyName("positionSpread")]
+    public IReadOnlyList<FieldSpreadPointDto> PositionSpread { get; init; } = [];
+
+    [JsonPropertyName("positionSpreadFullPosition")]
+    public int PositionSpreadFullPosition { get; init; }
+}
 
 public sealed record RoundProfileResponseDto(
     [property: JsonPropertyName("season")] int Season,
@@ -51,7 +63,11 @@ public sealed record RoundProfileResponseDto(
     [property: JsonPropertyName("sessionId")] long? SessionId,
     [property: JsonPropertyName("results")] IReadOnlyList<RoundProfileResultDto> Results,
     [property: JsonPropertyName("fieldSpread")] FieldSpreadDto FieldSpread,
-    [property: JsonPropertyName("trackFingerprint")] TrackFingerprintDto TrackFingerprint);
+    [property: JsonPropertyName("trackFingerprint")] TrackFingerprintDto TrackFingerprint)
+{
+    [JsonPropertyName("analytics")]
+    public RoundRaceAnalyticsDto? Analytics { get; init; }
+}
 
 public sealed record PressurePerformancePointDto(
     [property: JsonPropertyName("roundId")] long RoundId,

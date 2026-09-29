@@ -79,7 +79,6 @@ public sealed class RankingService
         var snapshot = await BuildSnapshotAsync(
             context,
             cancellationToken,
-            riderQuery: riderQuery,
             nation: nation);
         var totalSessions = snapshot.Sessions
             .Select(session => session.String("id"))
@@ -124,7 +123,6 @@ public sealed class RankingService
                 context,
                 cancellationToken,
                 resolvedSessions: previousSessions,
-                riderQuery: riderQuery,
                 nation: nation);
             comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: true);
             resolvedComparisonBasis = "previousRound";
@@ -144,7 +142,6 @@ public sealed class RankingService
                     context,
                     cancellationToken,
                     resolvedSessions: defaultPreviousSessions,
-                    riderQuery: riderQuery,
                     nation: nation);
                 comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: true);
                 resolvedComparisonBasis = "previousRound";
@@ -159,11 +156,9 @@ public sealed class RankingService
         {
             var previousFilterQuery = PreviousFilterQuery(queryString);
             var previousContext = await _domainQueries.ParseMetricsContextAsync(previousFilterQuery, _validator, cancellationToken);
-            var previousRiderQuery = _validator.String(previousFilterQuery, "search");
             var previousSnapshot = await BuildSnapshotAsync(
                 previousContext,
-                cancellationToken,
-                riderQuery: previousRiderQuery);
+                cancellationToken);
             comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: false);
             resolvedComparisonBasis = "previousFilters";
         }
@@ -176,6 +171,9 @@ public sealed class RankingService
                 .ToDictionary(row => row.String("rider_id")!, StringComparer.OrdinalIgnoreCase);
         }
 
+        // Search changes visibility, not the ranking positions used for comparison.
+        sorted = sorted.Where(row => DomainQueryService.MatchesRankingRider(
+            row.Object("rider"), riderQuery, null)).ToArray();
         var data = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
         var items = data.Select(row => ToPublicDto(
             row,
@@ -858,7 +856,6 @@ public sealed class RankingService
         CopyComparisonValue(query, values, "comparisonConditionId", "conditionId");
         CopyComparisonValue(query, values, "comparisonCompetitionClassId", "competitionClassId");
         CopyComparisonValue(query, values, "comparisonCategory", "category");
-        CopyComparisonValue(query, values, "comparisonSearch", "search");
         return new QueryCollection(values);
     }
 

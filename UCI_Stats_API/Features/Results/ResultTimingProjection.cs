@@ -40,6 +40,12 @@ internal static class ResultTimingProjection
 
         foreach (var result in results)
         {
+            // Non-finishers may carry a partial clock in race_time_ms, not a finish time.
+            if (result.String("status")?.Trim().ToUpperInvariant() is "DNF" or "DNS" or "DSQ")
+            {
+                continue;
+            }
+
             var resultId = result.String("id");
             if (string.IsNullOrWhiteSpace(resultId) ||
                 !sectorsByResultId.TryGetValue(resultId, out var resultSectors))

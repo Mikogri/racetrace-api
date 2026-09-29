@@ -162,12 +162,15 @@ public sealed class ResultsService
             ?? throw _validator.BadQuery("category is required for round results.");
         var sessionTypeValue = _validator.StringAny(queryString, "sessionType", "session_type")
             ?? throw _validator.BadQuery("sessionType is required for round results.");
-        string categoryCode;
-        string sessionType;
+        var categoryValues = RoundResultSelection.Categories(categoryValue);
+        var all = string.Equals(sessionTypeValue, "all", StringComparison.OrdinalIgnoreCase);
+        var categoryCodes = new List<string>();
+        string? sessionType;
         try
         {
-            categoryCode = await _domainQueries.ResolveCategoryCodeAsync(categoryValue, cancellationToken);
-            sessionType = await _domainQueries.ResolveSessionTypeCodeAsync(sessionTypeValue, cancellationToken);
+            foreach (var value in categoryValues)
+                categoryCodes.Add(await _domainQueries.ResolveCategoryCodeAsync(value, cancellationToken));
+            sessionType = all ? null : await _domainQueries.ResolveSessionTypeCodeAsync(sessionTypeValue, cancellationToken);
         }
         catch (ArgumentException exception)
         {
@@ -178,16 +181,20 @@ public sealed class ResultsService
             .Select(PublicResultSelect)
             .Filter("sessions.round_id", "eq", roundId)
             .Filter("sessions.session_type", "eq", sessionType)
-            .Filter("sessions.round_categories.categories.code", "eq", categoryCode)
             .Order("id", false)
             .Limit(5000);
-        return await BuildPublicResultsResponseAsync(query, queryString, cancellationToken);
+        if (categoryCodes.Count == 1) query.Filter("sessions.round_categories.categories.code", "eq", categoryCodes[0]);
+        else query.In("sessions.round_categories.categories.code", categoryCodes);
+        return await BuildPublicResultsResponseAsync(query, queryString, cancellationToken,
+            combinedCategory: categoryValues.Length > 1 ? categoryValue.ToLowerInvariant() : null, bestOnly: all);
     }
 
     private async Task<SessionResultsResponseDto> BuildPublicResultsResponseAsync(
         SupabaseQuery query,
         IQueryCollection queryString,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? combinedCategory = null,
+        bool bestOnly = false)
     {
         var response = await _supabase.GetAsync(query, cancellationToken: cancellationToken);
         if (response.Data.Count == 0)
@@ -196,17 +203,20 @@ public sealed class ResultsService
         }
 
         DomainQueryService.NormalizeResultEmbeds(response.Data);
+        IReadOnlyList<JsonObject> resultRows = combinedCategory is not null || bestOnly
+            ? RoundResultSelection.Select(response.Data, bestOnly) : response.Data;
         var session = response.Data[0].Object("sessions")
             ?? throw new ApiException(StatusCodes.Status502BadGateway, "SESSION_DATA_MISSING", "Session data is missing from the results package.");
 
         DomainQueryService.NormalizeSessionEmbed(session);
-        await ValidateSessionFiltersAsync(session, queryString, cancellationToken);
+        if (combinedCategory is null && !bestOnly)
+            await ValidateSessionFiltersAsync(session, queryString, cancellationToken);
         var timeView = TimingMode(queryString);
-        var allSplits = ExtractEmbeddedSplits(response.Data);
-        DecorateGapMs(response.Data);
-        DecorateLoadedTiming(response.Data, allSplits, timeView);
+        var allSplits = ExtractEmbeddedSplits(resultRows);
+        DecorateGapMs(resultRows);
+        DecorateLoadedTiming(resultRows, allSplits, timeView);
 
-        var filtered = ApplyPublicResultFilters(response.Data, queryString);
+        var filtered = ApplyPublicResultFilters(resultRows, queryString);
         var sorted = SortPublicResults(filtered, queryString, timeView);
         var page = _validator.Page(queryString);
         var pageResults = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
@@ -220,9 +230,9 @@ public sealed class ResultsService
             result,
             timeView,
             canonicalPositions.GetValueOrDefault(result.String("id") ?? string.Empty),
-            trackLengthM)).ToArray();
+            trackLengthM) with { SessionType = bestOnly ? PublicApiCodes.ToPublicSessionType(result.Object("sessions")?.String("session_type")) : null }).ToArray();
         var perfectRun = BuildPerfectRun(
-            response.Data,
+            resultRows,
             allSplits,
             timeView,
             trackLengthM);
@@ -240,13 +250,13 @@ public sealed class ResultsService
         var summary = new SessionSummaryDto(
             ParseLong(session.String("id")),
             ParseLong(session.String("round_id") ?? round?.String("id")),
-            PublicApiCodes.ToPublicSessionType(session.String("session_type")),
-            PublicApiCodes.ToPublicCategory(category?.String("code")),
+            bestOnly ? "all" : PublicApiCodes.ToPublicSessionType(session.String("session_type")),
+            combinedCategory ?? PublicApiCodes.ToPublicCategory(category?.String("code")),
             ToCondition(condition),
-            response.Data.Count(IsCompletedResult),
-            response.Data.Count,
+            resultRows.Count(IsCompletedResult),
+            resultRows.Count,
             distinctSplitCount,
-            CountSessionSectors(response.Data, allSplits),
+            CountSessionSectors(resultRows, allSplits),
             timeView);
 
         return new SessionResultsResponseDto(

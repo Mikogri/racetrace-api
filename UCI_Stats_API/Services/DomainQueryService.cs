@@ -519,7 +519,7 @@ public sealed class DomainQueryService
         return merged;
     }
 
-    private static bool MatchesRankingRider(JsonObject? rider, string? riderQuery, string? nation)
+    internal static bool MatchesRankingRider(JsonObject? rider, string? riderQuery, string? nation)
     {
         if (rider is null)
         {

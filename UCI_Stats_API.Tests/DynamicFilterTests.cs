@@ -139,6 +139,21 @@ public sealed class DynamicFilterTests
     }
 
     [Fact]
+    public async Task AllRoundResultsPreserveSourceSessionAndDoNotFilterSessionType()
+    {
+        using var handler = new FilterHandler { ReturnResults = true };
+        using var http = new HttpClient(handler);
+        var client = Client(http);
+        var domain = new DomainQueryService(client);
+        var service = new ResultsService(client, new QueryValidationService(), domain,
+            new MetricsService(domain, new PaceService(client)));
+        var result = await service.ListPublicRoundResultsAsync("4", Query("Open U23", "all"), default);
+        Assert.Equal("all", result.Session.SessionType);
+        Assert.Equal("super_final", Assert.Single(result.Items.Where(item => !item.IsPerfectRun)).SessionType);
+        Assert.DoesNotContain(handler.Queries, query => query.Contains("sessions.session_type=", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RegisteredButMismatchedSessionFiltersRemainBadRequests()
     {
         using var handler = new FilterHandler { ReturnResults = true };

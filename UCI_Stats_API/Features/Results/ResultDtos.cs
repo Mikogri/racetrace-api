@@ -48,6 +48,9 @@ public sealed record SessionResultDto(
     [JsonPropertyName("isPerfectRun")]
     public bool IsPerfectRun { get; init; }
 
+    [JsonPropertyName("sessionType")]
+    public string? SessionType { get; init; }
+
     [JsonPropertyName("finalGapToBest")]
     public decimal? FinalGapToBest => FinalGapToLeader;
 }

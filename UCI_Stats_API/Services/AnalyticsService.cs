@@ -1,4 +1,6 @@
 using UCI_Stats_API.Features.Metrics;
+using UCI_Stats_API.Features.Analytics;
+using UCI_Stats_API.Features.Results;
 using System.Text.Json.Nodes;
 using UCI_Stats_API.Infrastructure;
 using UCI_Stats_API.Models;
@@ -7,7 +9,6 @@ namespace UCI_Stats_API.Services;
 
 public sealed class AnalyticsService
 {
-    private static readonly int[] SpreadPositions = [3, 5, 10, 20];
 
     private readonly QueryValidationService _validator;
     private readonly DomainQueryService _domainQueries;
@@ -30,6 +31,17 @@ public sealed class AnalyticsService
         IQueryCollection queryString,
         CancellationToken cancellationToken)
     {
+        var requestedCategory = _validator.StringAny(queryString, "category", "categoryCode", "category_code");
+        var openCategories = RoundResultSelection.Categories(requestedCategory ?? "elite_men");
+        var isOpen = openCategories.Length > 1;
+        if (isOpen)
+        {
+            var values = queryString.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+            values.Remove("categoryCode");
+            values.Remove("category_code");
+            values["category"] = string.Join(",", openCategories);
+            queryString = new QueryCollection(values);
+        }
         var context = WithDefaultCategoryAndSeason(
             await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken));
         var finalContext = context with
@@ -37,16 +49,25 @@ public sealed class AnalyticsService
             SessionType = "FINAL",
             SessionTypes = ["FINAL"]
         };
-        var sessions = await _domainQueries.GetMatchingSessionsAsync(
-            finalContext,
+        // Home keeps its lightweight final-only query. Round Analytics loads only final + its last pre-final.
+        var includeAnalytics = !string.IsNullOrWhiteSpace(context.RoundId);
+        var loadContext = includeAnalytics ? context with { SessionType = null, SessionTypes = [] } : finalContext;
+        var matchingSessions = await _domainQueries.GetMatchingSessionsAsync(
+            loadContext,
             cancellationToken: cancellationToken);
-        if (sessions.Count == 0)
+        var sessions = matchingSessions.Where(session =>
+            PaceService.ParseSessionType(session.String("session_type"), session.String("name")) == PaceSessionType.Final).ToArray();
+        if (sessions.Length == 0)
         {
             return EmptyRoundProfile(finalContext);
         }
 
+        var loadSessions = includeAnalytics
+            ? sessions.Concat(sessions.Select(final => RoundRaceAnalytics.SelectPreFinal(matchingSessions, final)).OfType<JsonObject>())
+                .DistinctBy(session => session.String("id")).ToArray()
+            : sessions;
         var detail = await _domainQueries.GetRankingPreaggregatesAsync(
-            sessions,
+            loadSessions,
             cancellationToken: cancellationToken);
         RankingDataBundle data;
         IReadOnlyList<PacePrecomputedSessionData> paceSessions;
@@ -58,8 +79,8 @@ public sealed class AnalyticsService
         else
         {
             data = await _domainQueries.GetRankingDataAsync(
-                finalContext,
-                resolvedSessionIds: sessions.Select(session => session.String("id")!),
+                loadContext,
+                resolvedSessionIds: loadSessions.Select(session => session.String("id")!),
                 cancellationToken: cancellationToken);
             paceSessions = [];
         }
@@ -80,12 +101,11 @@ public sealed class AnalyticsService
         }
 
         var sessionId = selectedSession.String("id")!;
-        var results = data.FieldResults
-            .Where(result => string.Equals(
-                result.String("session_id"),
-                sessionId,
-                StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var selectedFinals = isOpen ? sessions.Where(session =>
+            SessionRound(session)?.String("id") == SessionRound(selectedSession)?.String("id")).ToArray() : [selectedSession];
+        var selectedIds = selectedFinals.Select(session => session.String("id")).ToHashSet();
+        var results = data.FieldResults.Where(result => selectedIds.Contains(result.String("session_id"))).ToArray();
+        if (isOpen) results = RoundResultSelection.Select(results, bestOnly: false);
         var classified = results
             .Where(IsClassifiedFinish)
             .OrderBy(result => result.Int("position"))
@@ -98,8 +118,28 @@ public sealed class AnalyticsService
             .DefaultIfEmpty()
             .Min();
         var round = SessionRound(selectedSession);
-        var category = PublicApiCodes.ToPublicCategory(
+        var category = isOpen ? requestedCategory! : PublicApiCodes.ToPublicCategory(
             finalContext.CategoryCodes.FirstOrDefault() ?? finalContext.CategoryCode) ?? "elite_men";
+        RoundRaceAnalyticsDto? analytics = null;
+        if (includeAnalytics)
+        {
+            var preFinals = selectedFinals.Select(final => RoundRaceAnalytics.SelectPreFinal(matchingSessions, final)).OfType<JsonObject>().ToArray();
+            var preFinalIds = preFinals.Select(session => session.String("id")).ToHashSet();
+            // Compact field rows omit rider identity; reuse the detailed rows already in the same package.
+            var detailedResults = data.Results.ToDictionary(result => result.String("id")!);
+            var analyticResults = results.Select(result => detailedResults.GetValueOrDefault(result.String("id")!, result)).ToArray();
+            if (isOpen) analyticResults = RoundResultSelection.Select(analyticResults, bestOnly: false);
+            var finalIds = results.Select(result => result.String("id")).ToHashSet();
+            var finalSplits = data.Splits.Where(split => finalIds.Contains(split.String("result_id"))).ToArray();
+            var finalData = data with { Sessions = selectedFinals, Results = results, FieldResults = results, Splits = finalSplits };
+            var observations = paceSessions.Count > 0
+                ? _pace.CalculateSessionPaceObservations(paceSessions.Where(session => selectedIds.Contains(session.SessionId)).ToArray())
+                : _pace.CalculateSessionPaceObservations(finalData);
+            var previousResults = data.FieldResults.Where(result => preFinalIds.Contains(result.String("session_id"))).ToArray();
+            if (isOpen) previousResults = RoundResultSelection.Select(previousResults, bestOnly: false);
+            analytics = RoundRaceAnalytics.Calculate(analyticResults, finalSplits, observations, previousResults,
+                preFinals.Length == 0 ? null : string.Join(" / ", preFinals.Select(RoundRaceAnalytics.PreFinalLabel).Distinct()));
+        }
 
         return new RoundProfileResponseDto(
             round?.Int("season_year") ?? finalContext.SeasonYear ?? _timeProvider.GetUtcNow().Year,
@@ -108,7 +148,11 @@ public sealed class AnalyticsService
             PublicDtoMapping.NullableLong(sessionId),
             classified.Select(result => ToRoundResult(result, leaderTime)).ToArray(),
             BuildFieldSpread(classified, leaderTime),
-            BuildTrackFingerprint(paceSessions, data, selectedSession));
+            BuildTrackFingerprint(paceSessions, data, selectedFinals) with
+            {
+                PositionSpread = BuildFieldProgression(classified, leaderTime),
+                PositionSpreadFullPosition = classified.Select(row => row.Int("position") ?? 0).DefaultIfEmpty().Max()
+            }) { Analytics = analytics };
     }
 
     public async Task<PressurePerformanceResponseDto> GetPressurePerformanceAsync(
@@ -210,7 +254,7 @@ public sealed class AnalyticsService
             SeasonYear = seasons.Count == 1 ? seasons[0] : null,
             CategoryCode = category,
             SeasonYears = seasons,
-            CategoryCodes = [category]
+            CategoryCodes = context.CategoryCodes.Count > 0 ? context.CategoryCodes : [category]
         };
     }
 
@@ -254,11 +298,19 @@ public sealed class AnalyticsService
             result.Decimal("top_speed"));
     }
 
-    private static FieldSpreadDto BuildFieldSpread(
+    internal static FieldSpreadDto BuildFieldSpread(
         IReadOnlyList<JsonObject> classified,
-        int leaderTime)
+        int leaderTime,
+        int[]? thresholds = null)
     {
-        var points = SpreadPositions
+        // P3 anchors the podium; the remaining cutoffs scale with classified finishers.
+        var positions = thresholds ?? new[] { 3 }
+            .Concat(new[] { 1m / 6, 1m / 3, 2m / 3 }
+                .Select(fraction => (int)Math.Round(classified.Count * fraction, MidpointRounding.AwayFromZero))
+                .Where(position => position > 3))
+            .Where(position => position <= classified.Count)
+            .Distinct().Order().ToArray();
+        var points = positions
             .Select(position => classified.FirstOrDefault(result => result.Int("position") == position))
             .Where(result => result?.Int("race_time_ms") is > 0)
             .Select(result =>
@@ -267,14 +319,30 @@ public sealed class AnalyticsService
                 var time = row.Int("race_time_ms")!.Value;
                 var position = row.Int("position") ?? 0;
                 var gap = Math.Max(0, time - leaderTime);
+                var thresholdIndex = Array.IndexOf(positions, position);
+                var previousPosition = thresholdIndex == 0 ? 1 : positions[thresholdIndex - 1];
+                var previousTime = previousPosition == 1
+                    ? leaderTime
+                    : classified.FirstOrDefault(item => item.Int("position") == previousPosition)?.Int("race_time_ms");
+                var incrementalMs = previousTime is > 0 ? (int?)Math.Max(0, time - previousTime.Value) : null;
                 return new FieldSpreadPointDto(
                     position,
                     Math.Round(time / 1000m, 3),
                     Math.Round(gap / 1000m, 3),
-                    leaderTime > 0 ? Math.Round(gap * 100m / leaderTime, 2) : 0m);
+                    leaderTime > 0 ? Math.Round(gap * 100m / leaderTime, 2) : 0m)
+                {
+                    PreviousPosition = previousPosition,
+                    IncrementalSpread = incrementalMs.HasValue ? Math.Round(incrementalMs.Value / 1000m, 3) : null,
+                    IncrementalSpreadPercent = incrementalMs.HasValue && leaderTime > 0
+                        ? Math.Round(incrementalMs.Value * 100m / leaderTime, 2) : null
+                };
             })
             .ToArray();
-        var p10 = points.FirstOrDefault(point => point.Position == 10)?.GapPercent;
+        // Classification is an existing P10 metric, independent of chart cutoffs.
+        var p10Time = classified.FirstOrDefault(result => result.Int("position") == 10)?.Int("race_time_ms");
+        decimal? p10 = p10Time is > 0 && leaderTime > 0
+            ? Math.Round(Math.Max(0, p10Time.Value - leaderTime) * 100m / leaderTime, 2)
+            : null;
         var classification = p10 switch
         {
             null => "unavailable",
@@ -285,25 +353,47 @@ public sealed class AnalyticsService
         return new FieldSpreadDto(classified.Count, classification, p10, points);
     }
 
+    internal static IReadOnlyList<FieldSpreadPointDto> BuildFieldProgression(
+        IReadOnlyList<JsonObject> classified, int leaderTime)
+    {
+        var lastPosition = classified.Select(row => row.Int("position") ?? 0).DefaultIfEmpty().Max();
+        if (lastPosition < 3) return [];
+        var thresholds = new[] { 3 }
+            .Concat(Enumerable.Range(1, lastPosition / 5).Select(index => index * 5))
+            .Append(lastPosition)
+            .Distinct().Order().ToArray();
+        var points = BuildFieldSpread(classified, leaderTime, thresholds).Points;
+        // Compare seconds per position so the final partial block has the same scale.
+        var rates = points.Select(point => point.IncrementalSpread is { } spread
+            ? (double?)(spread / (point.Position - point.PreviousPosition)) : null).ToArray();
+        for (var index = 3; index < points.Count; index++)
+        {
+            if (points[index].PreviousPosition < lastPosition / 2d) continue;
+            var baseline = rates.Take(index).OfType<double>().ToArray();
+            if (baseline.Length < 3) continue;
+            var median = Percentile(baseline, 0.5);
+            var deviation = Percentile(baseline.Select(rate => Math.Abs(rate - median)), 0.5);
+            var limit = Math.Max(0.001, Math.Max(4 * median, median + 6 * deviation));
+            // Never remove an interior jump followed by normal racing, or missing evidence.
+            if (rates.Skip(index).All(rate => rate.HasValue && rate.Value > limit))
+                return points.Take(index).ToArray();
+        }
+        return points;
+    }
+
     private TrackFingerprintDto BuildTrackFingerprint(
         IReadOnlyList<PacePrecomputedSessionData> paceSessions,
         RankingDataBundle data,
-        JsonObject session)
+        IReadOnlyList<JsonObject> sessions)
     {
-        var sessionId = session.String("id") ?? string.Empty;
-        var categories = new Dictionary<string, string?>
-        {
-            [sessionId] = session.Object("categories")?.String("code") ?? session.String("category_id")
-        };
+        var categories = sessions.ToDictionary(session => session.String("id")!,
+            session => session.Object("categories")?.String("code") ?? session.String("category_id"));
         var observations = paceSessions.Count > 0
             ? _pace.CalculateSimilarityObservations(
-                paceSessions.Where(item => string.Equals(
-                    item.SessionId,
-                    sessionId,
-                    StringComparison.OrdinalIgnoreCase)).ToArray(),
+                paceSessions.Where(item => categories.ContainsKey(item.SessionId)).ToArray(),
                 categories)
             : _pace.CalculateSimilarityObservations(data, categories)
-                .Where(item => string.Equals(item.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+                .Where(item => categories.ContainsKey(item.SessionId))
                 .ToArray();
         var spreads = observations
             .GroupBy(item => item.SectorIndex)

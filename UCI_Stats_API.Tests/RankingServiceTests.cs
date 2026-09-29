@@ -10,6 +10,43 @@ namespace UCI_Stats_API.Tests;
 public sealed class RankingServiceTests
 {
     [Fact]
+    public async Task SearchPreservesFullRankingPositionAndDoesNotCreatePromotion()
+    {
+        var validator = new QueryValidationService();
+        var domain = new DomainQueryService(null!);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var query = Query(new()
+        {
+            ["search"] = "Asa",
+            ["sortBy"] = "points",
+            ["comparison"] = "previousFilters"
+        });
+        var context = await domain.ParseMetricsContextAsync(query, validator, default);
+        var first = new JsonObject
+        {
+            ["rider_id"] = "1", ["points"] = 100,
+            ["rider"] = new JsonObject { ["first_name"] = "Other", ["last_name"] = "Rider" }
+        };
+        var second = new JsonObject
+        {
+            ["rider_id"] = "2", ["points"] = 50,
+            ["rider"] = new JsonObject { ["first_name"] = "Asa", ["last_name"] = "Vermette" }
+        };
+        cache.Set(RankingService.BuildSingleFlightKey(context, null, null, null),
+            new RankingSnapshot([first, second], [], [], [], []));
+        cache.Set(RankingService.BuildSingleFlightKey(context, null, "Asa", null),
+            new RankingSnapshot([second], [], [], [], []));
+        var service = new RankingService(validator, domain, null!, new RankingSingleFlight(), cache);
+
+        var response = await service.ListRankingAsync(query, default);
+
+        var rider = Assert.Single(response.Items);
+        Assert.Equal(2, rider.Position);
+        Assert.Equal(0, rider.PositionChange);
+        Assert.Equal(1, response.TotalItems);
+    }
+
+    [Fact]
     public void CompactRankingDataHydratesCalculatorInput()
     {
         var response = new JsonObject
@@ -532,7 +569,7 @@ public sealed class RankingServiceTests
         Assert.Equal("2026", previous["season"].ToString());
         Assert.Equal("elite_women", previous["category"].ToString());
         Assert.Equal("4,7", previous["trackId"].ToString());
-        Assert.Equal("rider", previous["search"].ToString());
+        Assert.Empty(previous["search"].ToString());
     }
 
     [Fact]
