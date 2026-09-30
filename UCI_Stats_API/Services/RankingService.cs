@@ -281,7 +281,8 @@ public sealed class RankingService
             matchingSessions,
             riderQuery,
             nation,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken,
+            includeSplits: false);
         if (preaggregated is not null)
         {
             preaggregated = DomainQueryService.RestrictToCategories(preaggregated, context);
@@ -391,12 +392,13 @@ public sealed class RankingService
             if (!_cache.TryGetValue<JsonObject[]>(pointsKey, out var rows))
             {
                 var sessions = await _domainQueries.GetMatchingSessionsAsync(context, cancellationToken: cancellationToken);
-                var preaggregated = await _domainQueries.GetRankingPreaggregatesAsync(sessions, cancellationToken: cancellationToken);
-                var data = preaggregated is not null
-                    ? DomainQueryService.RestrictToCategories(preaggregated, context).Data
-                    : await _domainQueries.GetRankingDataAsync(context,
+                rows = await _domainQueries.GetPointsSummaryAsync(sessions, cancellationToken);
+                if (rows is null)
+                {
+                    var data = await _domainQueries.GetRankingDataAsync(context,
                         resolvedSessionIds: sessions.Select(session => session.String("id")!), cancellationToken: cancellationToken);
-                rows = BuildPointsRows(data);
+                    rows = BuildPointsRows(data);
+                }
                 _cache.Set(pointsKey, rows, SnapshotLifetime);
             }
             return PointsPosition(rows!, riderId);

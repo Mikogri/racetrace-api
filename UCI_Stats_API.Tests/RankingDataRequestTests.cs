@@ -8,6 +8,44 @@ namespace UCI_Stats_API.Tests;
 public sealed class RankingDataRequestTests
 {
     [Fact]
+    public async Task RiderDetailsKeepFullTransport()
+    {
+        var client = new CapturingSupabaseClient();
+        var domain = new DomainQueryService(client);
+        await domain.GetRiderDetailDataAsync(new RiderMetricsContext(null, "EM", null, null, null, null, null, null, null, null, null), "18");
+        Assert.Equal("get_rider_detail_data", client.FunctionName);
+        Assert.Equal(18, client.Payload!.Int("p_rider_id"));
+    }
+
+    [Fact]
+    public async Task SlimPackagesCannotPoisonFullPackageCache()
+    {
+        using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var client = new CapturingSupabaseClient();
+        var domain = new DomainQueryService(client, packageCache: cache);
+        JsonObject[] sessions = [new() { ["id"] = 1 }];
+        await domain.GetRankingPreaggregatesAsync(sessions, includeSplits: false);
+        await domain.GetRankingPreaggregatesAsync(sessions);
+        await domain.GetRankingPreaggregatesAsync(sessions, includeSplits: false);
+        Assert.Equal(new[] { "get_ranking_metric_packages", "get_ranking_preaggregate_packages" }, client.PackageFunctions);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PointsSummaryRequiresCompleteCache(bool complete)
+    {
+        var client = new CapturingSupabaseClient { PointsComplete = complete };
+        var domain = new DomainQueryService(client);
+        var rows = await domain.GetPointsSummaryAsync([new JsonObject { ["id"] = 1 }], default);
+        if (!complete) { Assert.Null(rows); return; }
+        var row = Assert.Single(rows!);
+        Assert.Equal("A Rider", row.String("rider_name"));
+        Assert.Equal(0m, row.Decimal("points"));
+        Assert.Equal("2", row.String("rider_id"));
+    }
+
+    [Fact]
     public async Task OverlappingPackagesAreFetchedOnlyOnceAndRolesStaySeparate()
     {
         using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
@@ -61,6 +99,8 @@ public sealed class RankingDataRequestTests
         public string? FunctionName { get; private set; }
         public JsonObject? Payload { get; private set; }
         public List<string> PackageRequests { get; } = [];
+        public List<string> PackageFunctions { get; } = [];
+        public bool PointsComplete { get; init; }
 
         public Task<JsonNode?> RpcAsync(
             string functionName,
@@ -70,8 +110,16 @@ public sealed class RankingDataRequestTests
         {
             FunctionName = functionName;
             Payload = payload;
-            if (functionName == "get_ranking_preaggregate_packages")
+            if (functionName == "get_ranking_points_summary")
+                return Task.FromResult<JsonNode?>(new JsonObject
+                {
+                    ["complete"] = PointsComplete,
+                    ["rows"] = new JsonArray(new JsonObject { ["rider_id"] = "2", ["points"] = 0,
+                        ["rider"] = new JsonObject { ["first_name"] = "A", ["last_name"] = "Rider" } })
+                });
+            if (functionName is "get_ranking_preaggregate_packages" or "get_ranking_metric_packages")
             {
+                PackageFunctions.Add(functionName);
                 PackageRequests.Add(payload["p_session_ids"]!.ToJsonString());
                 return Task.FromResult<JsonNode?>(new JsonArray(payload["p_session_ids"]!.AsArray()
                     .Select(id => (JsonNode)new JsonObject { ["session_id"] = id!.DeepClone(), ["payload"] = new JsonObject { ["v"] = 2 } }).ToArray()));

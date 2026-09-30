@@ -438,7 +438,8 @@ public sealed class DomainQueryService
         string? riderQuery = null,
         string? nation = null,
         SupabaseRole role = SupabaseRole.Anon,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeSplits = true)
     {
         var sessionIds = sessions
             .Select(session => session.String("id"))
@@ -454,20 +455,21 @@ public sealed class DomainQueryService
         }
 
         var packages = new Dictionary<string, JsonObject>();
+        var packageKind = includeSplits ? "full" : "metrics";
         foreach (var id in sessionIds)
-            if (_packageCache?.TryGetValue<JsonObject>($"ranking-package:{role}:{id}", out var package) == true)
+            if (_packageCache?.TryGetValue<JsonObject>($"ranking-package:{packageKind}:{role}:{id}", out var package) == true)
                 packages[id] = package!;
         var missingIds = sessionIds.Where(id => !packages.ContainsKey(id)).ToArray();
         if (missingIds.Length > 0)
         {
             var response = await _supabase.RpcAsync(
-                "get_ranking_preaggregate_packages",
+                includeSplits ? "get_ranking_preaggregate_packages" : "get_ranking_metric_packages",
                 new JsonObject { ["p_session_ids"] = LongArray(missingIds) }, role, cancellationToken);
             foreach (var row in (response as JsonArray)?.OfType<JsonObject>() ?? [])
             {
                 if (row.String("session_id") is not { } id) continue;
                 packages[id] = row;
-                _packageCache?.Set($"ranking-package:{role}:{id}", row, TimeSpan.FromSeconds(30));
+                _packageCache?.Set($"ranking-package:{packageKind}:{role}:{id}", row, TimeSpan.FromSeconds(30));
             }
         }
         // Keep RPC ordering and clone payloads during merging; cached JSON must not be mutated.
@@ -576,6 +578,24 @@ public sealed class DomainQueryService
             role,
             cancellationToken);
         return RestrictToCategories(ParseRiderDetailDataBundle(response), filters);
+    }
+
+    internal async Task<JsonObject[]?> GetPointsSummaryAsync(
+        IReadOnlyList<JsonObject> sessions, CancellationToken cancellationToken)
+    {
+        var ids = sessions.Select(session => session.String("id")).OfType<string>().Distinct().ToArray();
+        if (ids.Length == 0) return [];
+        var response = await _supabase.RpcAsync("get_ranking_points_summary",
+            new JsonObject { ["p_session_ids"] = LongArray(ids) }, SupabaseRole.Anon, cancellationToken);
+        if (response is not JsonObject package || package.Array("rows") is not { } rows)
+            throw new ApiException(502, "POINTS_DATA_INVALID", "Supabase returned an invalid points summary.");
+        if (package.Bool("complete") != true) return null;
+        return rows.OfType<JsonObject>().Select(row => new JsonObject
+        {
+            ["rider_id"] = row.String("rider_id"),
+            ["rider_name"] = row.Object("rider")?.DisplayName(),
+            ["points"] = row.Decimal("points") ?? 0m
+        }).ToArray();
     }
 
     internal static RiderDetailDataBundle RestrictToCategories(
