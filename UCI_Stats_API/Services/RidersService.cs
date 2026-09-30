@@ -459,10 +459,8 @@ public sealed class RidersService
             overviewQuery,
             cancellationToken,
             snapshot);
-        var pressurePerformanceTask = _analytics.GetPressurePerformanceAsync(
-            riderId,
-            overviewQuery,
-            cancellationToken);
+        var pressurePerformance = _analytics.BuildPressurePerformance(
+            riderId, context, snapshot);
         var teamHistoryTask = _domainQueries.GetRiderTeamHistoryAsync(
             [riderId],
             cancellationToken: cancellationToken);
@@ -470,7 +468,6 @@ public sealed class RidersService
             statisticsTask,
             roundResultsTask,
             trackStatisticsTask,
-            pressurePerformanceTask,
             teamHistoryTask);
 
         var sessionResults = new JsonArray(
@@ -484,7 +481,7 @@ public sealed class RidersService
             (await roundResultsTask).Items,
             (await trackStatisticsTask).Items,
             sessionResults,
-            JsonSerializerProxy.ToJsonObject(await pressurePerformanceTask),
+            JsonSerializerProxy.ToJsonObject(pressurePerformance),
             RiderTeamHistoryMapper.ToPublicTeamHistoryJson(await teamHistoryTask))
         {
             ChartStatistics = RiderChartStatistics.Build(sessionResults.OfType<JsonObject>(),

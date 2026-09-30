@@ -6,6 +6,18 @@ namespace UCI_Stats_API.Tests;
 public sealed class FieldSpreadTests
 {
     [Fact]
+    public void ProgressionKeepsCutoffsInsideTiedPlaces()
+    {
+        var rows = Enumerable.Range(1, 80)
+            .Select(position => Row(position == 65 ? 64 : position,
+                100000 + (position == 65 ? 64 : position) * 1000)).ToArray();
+        var points = AnalyticsService.BuildFieldProgression(rows, 101000);
+        Assert.Equal(4m, points.Single(point => point.Position == 65).IncrementalSpread);
+        Assert.Equal(6m, points.Single(point => point.Position == 70).IncrementalSpread);
+        Assert.All(points, point => Assert.NotNull(point.IncrementalSpread));
+    }
+
+    [Fact]
     public void SpreadUsesPreviousThresholdRatherThanWinner()
     {
         var spread = AnalyticsService.BuildFieldSpread(

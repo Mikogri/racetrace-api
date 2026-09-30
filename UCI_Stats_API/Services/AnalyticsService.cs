@@ -179,9 +179,25 @@ public sealed class AnalyticsService
             riderId,
             sessions.Select(session => session.String("id")!),
             cancellationToken: cancellationToken);
-        var observations = _pace.CalculateSessionPaceObservations(
-            detail.PaceSessions,
-            riderId);
+        return BuildPressurePerformance(riderId, sessions, detail.PaceSessions);
+    }
+
+    internal PressurePerformanceResponseDto BuildPressurePerformance(
+        string riderId, RiderMetricsContext context, RankingSnapshot snapshot)
+    {
+        // Keep the standalone endpoint's default category, including unfiltered overview links.
+        var bundle = DomainQueryService.RestrictToCategories(new RiderDetailDataBundle(
+            new RankingDataBundle(snapshot.Sessions, [], [], [], new Dictionary<string, decimal>()),
+            snapshot.PrecomputedSessions ?? []), WithDefaultCategoryAndSeason(context, defaultSeason: false));
+        return BuildPressurePerformance(riderId, bundle.Data.Sessions, bundle.PaceSessions);
+    }
+
+    private PressurePerformanceResponseDto BuildPressurePerformance(
+        string riderId,
+        IReadOnlyList<JsonObject> sessions,
+        IReadOnlyList<PacePrecomputedSessionData> paceSessions)
+    {
+        var observations = _pace.CalculateSessionPaceObservations(paceSessions, riderId);
         var sessionsById = sessions
             .Where(session => !string.IsNullOrWhiteSpace(session.String("id")))
             .ToDictionary(session => session.String("id")!, StringComparer.OrdinalIgnoreCase);
@@ -310,20 +326,23 @@ public sealed class AnalyticsService
                 .Where(position => position > 3))
             .Where(position => position <= classified.Count)
             .Distinct().Order().ToArray();
+        // Competition ranks skip places after ties; a cutoff inside a tie uses that tied time.
+        var rankedTimes = classified.GroupBy(row => row.Int("position") ?? 0)
+            .Where(group => group.Key > 0)
+            .SelectMany(group => Enumerable.Range(group.Key, group.Count())
+                .Select(position => (Position: position, Time: group.First().Int("race_time_ms"))))
+            .ToDictionary(item => item.Position, item => item.Time);
         var points = positions
-            .Select(position => classified.FirstOrDefault(result => result.Int("position") == position))
-            .Where(result => result?.Int("race_time_ms") is > 0)
-            .Select(result =>
+            .Where(position => rankedTimes.GetValueOrDefault(position) is > 0)
+            .Select(position =>
             {
-                var row = result!;
-                var time = row.Int("race_time_ms")!.Value;
-                var position = row.Int("position") ?? 0;
+                var time = rankedTimes[position]!.Value;
                 var gap = Math.Max(0, time - leaderTime);
                 var thresholdIndex = Array.IndexOf(positions, position);
                 var previousPosition = thresholdIndex == 0 ? 1 : positions[thresholdIndex - 1];
                 var previousTime = previousPosition == 1
                     ? leaderTime
-                    : classified.FirstOrDefault(item => item.Int("position") == previousPosition)?.Int("race_time_ms");
+                    : rankedTimes.GetValueOrDefault(previousPosition);
                 var incrementalMs = previousTime is > 0 ? (int?)Math.Max(0, time - previousTime.Value) : null;
                 return new FieldSpreadPointDto(
                     position,
@@ -339,7 +358,7 @@ public sealed class AnalyticsService
             })
             .ToArray();
         // Classification is an existing P10 metric, independent of chart cutoffs.
-        var p10Time = classified.FirstOrDefault(result => result.Int("position") == 10)?.Int("race_time_ms");
+        var p10Time = rankedTimes.GetValueOrDefault(10);
         decimal? p10 = p10Time is > 0 && leaderTime > 0
             ? Math.Round(Math.Max(0, p10Time.Value - leaderTime) * 100m / leaderTime, 2)
             : null;

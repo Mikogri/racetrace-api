@@ -387,14 +387,39 @@ public sealed class RankingService
         var key = BuildSingleFlightKey(context, null, null, null);
         if (!_cache.TryGetValue<RankingSnapshot>(key, out var snapshot) || snapshot is null)
         {
-            snapshot = await BuildSnapshotAsync(context, cancellationToken);
+            var pointsKey = "points-position:" + key;
+            if (!_cache.TryGetValue<JsonObject[]>(pointsKey, out var rows))
+            {
+                var sessions = await _domainQueries.GetMatchingSessionsAsync(context, cancellationToken: cancellationToken);
+                var preaggregated = await _domainQueries.GetRankingPreaggregatesAsync(sessions, cancellationToken: cancellationToken);
+                var data = preaggregated is not null
+                    ? DomainQueryService.RestrictToCategories(preaggregated, context).Data
+                    : await _domainQueries.GetRankingDataAsync(context,
+                        resolvedSessionIds: sessions.Select(session => session.String("id")!), cancellationToken: cancellationToken);
+                rows = BuildPointsRows(data);
+                _cache.Set(pointsKey, rows, SnapshotLifetime);
+            }
+            return PointsPosition(rows!, riderId);
         }
 
-        return SortRows(snapshot.Rows, "points", descending: true)
+        return PointsPosition(snapshot.Rows, riderId);
+    }
+
+    internal static JsonObject[] BuildPointsRows(RankingDataBundle data) => data.Results
+        .GroupBy(result => result.String("rider_id") ?? string.Empty)
+        .Where(group => !string.IsNullOrWhiteSpace(group.Key))
+        .Select(group => new JsonObject
+        {
+            ["rider_id"] = group.Key,
+            ["rider_name"] = group.Select(result => result.Object("riders")).FirstOrDefault(rider => rider is not null)?.DisplayName(),
+            ["points"] = group.Sum(result => data.PointsByResultId.GetValueOrDefault(result.String("id") ?? string.Empty))
+        }).ToArray();
+
+    internal static int? PointsPosition(IReadOnlyList<JsonObject> rows, string riderId) =>
+        SortRows(rows, "points", descending: true)
             .Select((row, index) => new { RiderId = row.String("rider_id"), Position = index + 1 })
             .FirstOrDefault(item => string.Equals(item.RiderId, riderId, StringComparison.OrdinalIgnoreCase))?
             .Position;
-    }
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();

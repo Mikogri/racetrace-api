@@ -2,6 +2,7 @@ using UCI_Stats_API.Features.Metrics;
 using UCI_Stats_API.Features.Metadata;
 using UCI_Stats_API.Infrastructure.Supabase;
 using System.Globalization;
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json.Nodes;
 using UCI_Stats_API.Infrastructure;
 using UCI_Stats_API.Models;
@@ -17,6 +18,7 @@ public sealed class DomainQueryService
 
     private readonly ISupabaseRestClient _supabase;
     private readonly DisplayMetadataService _metadata;
+    private readonly IMemoryCache? _packageCache;
     private Task<DisplayMetadataDto>? _metadataTask;
 
     public const string ResultSelect = "*,riders(*),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,conditions(*),round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
@@ -30,10 +32,11 @@ public sealed class DomainQueryService
 
     public const string SessionSelect = "*,round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*))";
 
-    public DomainQueryService(ISupabaseRestClient supabase, DisplayMetadataService? metadata = null)
+    public DomainQueryService(ISupabaseRestClient supabase, DisplayMetadataService? metadata = null, IMemoryCache? packageCache = null)
     {
         _supabase = supabase;
         _metadata = metadata ?? new DisplayMetadataService(supabase);
+        _packageCache = packageCache;
     }
 
     public Task<RiderMetricsContext> ParseMetricsContextAsync(
@@ -450,14 +453,25 @@ public sealed class DomainQueryService
                 []);
         }
 
-        var response = await _supabase.RpcAsync(
-            "get_ranking_preaggregate_packages",
-            new JsonObject { ["p_session_ids"] = LongArray(sessionIds) },
-            role,
-            cancellationToken);
-        var cacheRows = response is JsonArray responseRows
-            ? responseRows.OfType<JsonObject>().ToArray()
-            : [];
+        var packages = new Dictionary<string, JsonObject>();
+        foreach (var id in sessionIds)
+            if (_packageCache?.TryGetValue<JsonObject>($"ranking-package:{role}:{id}", out var package) == true)
+                packages[id] = package!;
+        var missingIds = sessionIds.Where(id => !packages.ContainsKey(id)).ToArray();
+        if (missingIds.Length > 0)
+        {
+            var response = await _supabase.RpcAsync(
+                "get_ranking_preaggregate_packages",
+                new JsonObject { ["p_session_ids"] = LongArray(missingIds) }, role, cancellationToken);
+            foreach (var row in (response as JsonArray)?.OfType<JsonObject>() ?? [])
+            {
+                if (row.String("session_id") is not { } id) continue;
+                packages[id] = row;
+                _packageCache?.Set($"ranking-package:{role}:{id}", row, TimeSpan.FromSeconds(30));
+            }
+        }
+        // Keep RPC ordering and clone payloads during merging; cached JSON must not be mutated.
+        var cacheRows = packages.Values.OrderBy(row => PublicDtoMapping.Long(row.String("session_id"))).ToArray();
         if (cacheRows.Length == 0)
         {
             return null;
