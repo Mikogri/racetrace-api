@@ -55,7 +55,13 @@ internal sealed record PacePrecomputedSessionData(
     PaceFieldSummary? FinishStatistics,
     IReadOnlyList<PaceFieldSummary?> CumulativeStatistics,
     int? CompetitionClassPriority = null,
-    DateTimeOffset? SessionDate = null);
+    DateTimeOffset? SessionDate = null)
+{
+    // Prepared for the complete session/category, before selecting any rider.
+    public PaceFinishReference? PaceFinish { get; init; }
+}
+
+internal sealed record PaceFinishReference(double? TimeSeconds, double RemovedLossSeconds, PaceFieldSummary Statistics);
 
 internal enum PaceSectorStatus
 {
@@ -63,7 +69,9 @@ internal enum PaceSectorStatus
     Incident,
     RecoveredAfterIncident,
     AfterIncident,
-    Missing
+    Missing,
+    InvalidTiming,
+    PossibleIncident
 }
 
 internal sealed record PaceSectorResult(
@@ -73,7 +81,10 @@ internal sealed record PaceSectorResult(
     int? Rank,
     double? Percentile,
     double? PerformanceZ,
-    double? Score);
+    double? Score)
+{
+    public SectorAnomaly? Anomaly { get; init; }
+}
 
 internal sealed record RiderSessionPaceResult(
     string RiderId,
@@ -296,28 +307,17 @@ internal sealed class PaceOptions
     public double TimedTrainingWinBonus { get; init; } = 0.0;
     public double TrainingWinBonus { get; init; } = 0.0;
 
-    // Minimalna liczba wcześniejszych sektorów potrzebna do wykrycia incydentu.
-    // Wyższa opóźnia detekcję i ogranicza fałszywe alarmy; niższa reaguje wcześniej.
+    // Minimum baseline size for the legacy post-incident recovery fallback.
     public int MinimumPreviousSectorsForIncident { get; init; } = 1;
 
-    // Minimalna skrajność SlowZ podejrzanego sektora. Wyższa wymaga bardziej
-    // ekstremalnie wolnego czasu; niższa zwiększa czułość wykrywania incydentów.
-    public double IncidentSlowZThreshold { get; init; } = 4.5;
-
-    // Minimalny nagły spadek PerformanceZ względem wcześniejszych sektorów.
-    // Wyższa wartość wykrywa tylko gwałtowniejsze załamania tempa.
+    // Supporting stable-prefix guard for uncertain sustained slowdown, not the
+    // strong-incident gates (defined together in SectorIncidentDetector).
     public double IncidentPerformanceDropThreshold { get; init; } = 4.0;
 
-    // Minimalny spadek percentyla będący dodatkowym sygnałem incydentu. Wyższa
-    // wartość wymaga większej utraty pozycji w stawce; niższa jest bardziej czuła.
-    public double IncidentPercentileDropThreshold { get; init; } = 0.50;
-
-    // Minimalna strata względem mediany jako część czasu sektora, np. 0.10 to 10%.
-    // Wyższa ignoruje mniejsze względne straty; niższa częściej potwierdza incydent.
+    // Relative loss required by the uncertain sustained-slowdown guard.
     public double IncidentRelativeLossThreshold { get; init; } = 0.10;
 
-    // Minimalna bezwzględna strata do mediany sektora w sekundach. Wyższa wartość
-    // pomija krótsze błędy, a niższa pozwala wykrywać mniej kosztowne incydenty.
+    // Absolute-loss guard for displaced checkpoints and uncertain slowdown.
     public double MinimumIncidentLossSeconds { get; init; } = 3.0;
 
     // Określa, czy pozytywne i miarodajne sektory po incydencie mogą być liczone.
@@ -576,8 +576,8 @@ internal sealed class DownhillPaceCalculator
             .Select(values => ToFieldSummary(BuildFieldStatistics(values)))
             .ToArray();
         var classifiedFieldSize = validRuns.Count(run => run.IsClassified);
-        return validRuns
-            .Select(run => CalculatePrecomputedSession(new PacePrecomputedSessionData(
+        var precomputed = validRuns
+            .Select(run => new PacePrecomputedSessionData(
                 SessionId: string.Empty,
                 CourseKey: string.Empty,
                 CategoryId: null,
@@ -595,8 +595,62 @@ internal sealed class DownhillPaceCalculator
                 SpeedRank: CalculateRank(run.TopSpeed, speedStatistics, lowerIsBetter: false),
                 FinishStatistics: ToFieldSummary(fullRunStatistics),
                 CumulativeStatistics: cumulativeStatistics,
-                CompetitionClassPriority: session.CompetitionClassPriority)))
+                CompetitionClassPriority: session.CompetitionClassPriority))
             .ToArray();
+        return PrepareField(precomputed).Select(CalculatePrecomputedSession).ToArray();
+    }
+
+    /// <summary>Two passes: estimate losses, then build one corrected finish distribution.
+    /// Official runs and sector observations remain untouched. Partial fields must not
+    /// silently become the reference population for a rider detail or search result.</summary>
+    internal IReadOnlyList<PacePrecomputedSessionData> PrepareField(IReadOnlyList<PacePrecomputedSessionData> sessions)
+    {
+        var prepared = new List<PacePrecomputedSessionData>(sessions.Count);
+        foreach (var group in sessions.GroupBy(s => (s.SessionId, s.CategoryId)))
+        {
+            var field = group.ToArray();
+            if (field.All(s => s.PaceFinish is not null))
+            {
+                prepared.AddRange(field);
+                continue;
+            }
+            var classified = field.Where(s => s.Run.IsClassified &&
+                s.Run.Status?.ToUpperInvariant() is not ("DNS" or "DNF" or "DSQ") &&
+                IsValidTime(s.Run.FinishTimeSeconds)).ToArray();
+            if (classified.Length == 0 || field.Any(s =>
+                    (s.FinishStatistics?.Count ?? s.ClassifiedFieldSize) != classified.Length))
+            {
+                prepared.AddRange(field);
+                continue;
+            }
+            var losses = classified.ToDictionary(s => s.Run.RiderId, EstimateIncidentLoss);
+            var correctedTimes = classified.Select(s => s.Run.FinishTimeSeconds!.Value - losses[s.Run.RiderId]).ToArray();
+            var statistics = ToFieldSummary(BuildFieldStatistics(correctedTimes));
+            prepared.AddRange(field.Select(s => s with
+            {
+                PaceFinish = new(losses.ContainsKey(s.Run.RiderId)
+                    ? s.Run.FinishTimeSeconds - losses[s.Run.RiderId] : null,
+                    losses.GetValueOrDefault(s.Run.RiderId), statistics)
+            }));
+        }
+        return prepared;
+    }
+
+    private double EstimateIncidentLoss(PacePrecomputedSessionData session)
+    {
+        var sectors = session.Sectors.OrderBy(s => s.SectorIndex).ToArray();
+        // Never invent a missing finish, checkpoint or repair invalid timing.
+        if (sectors.Length < 3 || sectors.Any(s => !IsValidTime(s.TimeSeconds)) ||
+            Math.Abs(sectors.Sum(s => s.TimeSeconds!.Value) - session.Run.FinishTimeSeconds!.Value) > .01)
+            return 0;
+        var anomalies = SectorIncidentDetector.Analyze(sectors, _options);
+        if (anomalies.Any(a => a.Kind is SectorAnomalyKind.InvalidTiming or SectorAnomalyKind.PossibleIncident ||
+                (a.Kind == SectorAnomalyKind.LikelyIncident && !a.AllowsFinishCorrection)) ||
+            anomalies.Count(a => a.Kind == SectorAnomalyKind.Normal) < Math.Max(2, (sectors.Length + 1) / 2))
+            return 0;
+        var loss = anomalies.Where(a => a.Kind == SectorAnomalyKind.LikelyIncident)
+            .Sum(a => Math.Max(0, a.LossSeconds ?? 0));
+        return loss < session.Run.FinishTimeSeconds ? loss : 0;
     }
 
     public RiderSessionPaceResult CalculatePrecomputedSession(
@@ -614,7 +668,11 @@ internal sealed class DownhillPaceCalculator
                 sectorStatistics[index],
                 sector.Rank))
             .ToArray();
-        var incidentIndex = DetectIncident(raw);
+        var anomalies = SectorIncidentDetector.Analyze(
+            session.Sectors.OrderBy(s => s.SectorIndex).ToArray(), _options);
+        int? incidentIndex = Enumerable.Range(0, raw.Length)
+            .Where(i => anomalies[i].Kind == SectorAnomalyKind.LikelyIncident)
+            .Select(i => (int?)i).FirstOrDefault();
         var sectorResults = new List<PaceSectorResult>(raw.Length);
         var validScores = new List<WeightedScore>(raw.Length);
 
@@ -634,21 +692,30 @@ internal sealed class DownhillPaceCalculator
                 continue;
             }
 
-            if (incidentIndex == index)
+            if (anomalies[index].Kind == SectorAnomalyKind.InvalidTiming)
+            {
+                sectorResults.Add(ToSectorResult(index, sector, PaceSectorStatus.InvalidTiming, null));
+                continue;
+            }
+
+            if (anomalies[index].Kind == SectorAnomalyKind.LikelyIncident)
             {
                 sectorResults.Add(ToSectorResult(
                     index,
                     sector,
-                    PaceSectorStatus.Incident,
+                    index > 0 && sectorResults[^1].Status is PaceSectorStatus.Incident or PaceSectorStatus.AfterIncident
+                        ? PaceSectorStatus.AfterIncident : PaceSectorStatus.Incident,
                     null));
                 continue;
             }
 
-            var status = PaceSectorStatus.Valid;
+            var status = anomalies[index].Kind == SectorAnomalyKind.PossibleIncident
+                ? PaceSectorStatus.PossibleIncident : PaceSectorStatus.Valid;
             if (incidentIndex.HasValue && index > incidentIndex.Value)
             {
                 if (!_options.CountPositiveSectorsAfterIncident ||
-                    !IsRepresentativePostIncidentSector(raw, incidentIndex.Value, sector))
+                    !(anomalies[index] is { Kind: SectorAnomalyKind.Normal, ExpectedSeconds: not null } ||
+                      IsRepresentativePostIncidentSector(raw, incidentIndex.Value, sector)))
                 {
                     sectorResults.Add(ToSectorResult(
                         index,
@@ -669,6 +736,9 @@ internal sealed class DownhillPaceCalculator
                 validScores.Add(new WeightedScore(sector.Score.Value, durationWeight));
             }
         }
+
+        for (var i = 0; i < sectorResults.Count; i++)
+            sectorResults[i] = sectorResults[i] with { Anomaly = anomalies[i] };
 
         var sectorCoverage = raw.Length > 0
             ? (double)validScores.Count / raw.Length
@@ -698,9 +768,15 @@ internal sealed class DownhillPaceCalculator
         }
 
         var sectorPace = CalculateSectorPace(validScores);
+        // A reliably reconstructed isolated incident is excluded, not a missing
+        // observation counted against speed twice. Keep the measured sector-count
+        // requirement and original coverage/Confidence; never score the imputed sector.
+        var paceSectorCount = session.PaceFinish is { RemovedLossSeconds: > 0 }
+            ? raw.Length - anomalies.Count(a => a.Kind == SectorAnomalyKind.LikelyIncident)
+            : raw.Length;
         var evidenceAdjustedSectorPace = AdjustSectorPaceForEvidence(
             sectorPace,
-            sectorCoverage,
+            paceSectorCount > 0 ? (double)validScores.Count / paceSectorCount : 0,
             validScores.Count);
         double? speedScore = null;
         if (IsValidSpeed(run.TopSpeed) &&
@@ -717,7 +793,10 @@ internal sealed class DownhillPaceCalculator
             speedScore,
             evidenceAdjustedSectorPace,
             _options.TopSpeedPositiveGain);
-        var fullRunTimeScore = CalculateEffectiveFullRunTimeScore(
+        var fullRunTimeScore = session.PaceFinish is { } finish &&
+                (!incidentIndex.HasValue || finish.RemovedLossSeconds > 0)
+            ? CalculateFullRunTimeScore(finish.TimeSeconds, ToFieldStatistics(finish.Statistics))
+            : CalculateEffectiveFullRunTimeScore(
             run,
             incidentIndex,
             session.FinishStatistics,
@@ -726,11 +805,12 @@ internal sealed class DownhillPaceCalculator
             session.SessionType,
             evidenceAdjustedSectorPace,
             fullRunTimeScore);
-        var dominanceBonus = !run.IsClassified || session.FinishStatistics is null
+        var finishStatistics = session.PaceFinish?.Statistics ?? session.FinishStatistics;
+        var dominanceBonus = !run.IsClassified || finishStatistics is null
             ? 0
             : CalculateDominanceBonus(
-                run.FinishTimeSeconds,
-                ToFieldStatistics(session.FinishStatistics));
+                session.PaceFinish?.TimeSeconds ?? run.FinishTimeSeconds,
+                ToFieldStatistics(finishStatistics));
         var sessionPace = Clamp(
             sectorAndFullRunPace + speedBoost + dominanceBonus,
             0,
@@ -1314,59 +1394,6 @@ internal sealed class DownhillPaceCalculator
         return normalized * normalized * (3.0 - 2.0 * normalized);
     }
 
-    private int? DetectIncident(IReadOnlyList<RawSectorEvaluation> sectors)
-    {
-        var previousPerformance = new List<double>();
-        var previousPercentiles = new List<double>();
-
-        for (var index = 0; index < sectors.Count; index++)
-        {
-            var current = sectors[index];
-            if (!current.PerformanceZ.HasValue ||
-                !current.Percentile.HasValue ||
-                current.Time is null ||
-                current.Statistics is null)
-            {
-                continue;
-            }
-
-            if (previousPerformance.Count >= _options.MinimumPreviousSectorsForIncident)
-            {
-                var baselinePerformance = Median(previousPerformance.TakeLast(3));
-                var baselinePercentile = Median(previousPercentiles.TakeLast(3));
-                var performanceDrop = baselinePerformance - current.PerformanceZ.Value;
-                var percentileDrop = baselinePercentile - current.Percentile.Value;
-                var absoluteLoss = current.Time.Value - current.Statistics.Median;
-                var relativeLoss = absoluteLoss / current.Statistics.Median;
-
-                var extremelySlow = current.SlowZ >= _options.IncidentSlowZThreshold;
-                var suddenPerformanceDrop = performanceDrop >= _options.IncidentPerformanceDropThreshold;
-                var largeAbsoluteLoss = absoluteLoss >= _options.MinimumIncidentLossSeconds;
-                var hadStrongPreIncidentPace =
-                    baselinePercentile >= 0.70 ||
-                    baselinePerformance >= 0.5;
-                var additionalSignal =
-                    percentileDrop >= _options.IncidentPercentileDropThreshold ||
-                    relativeLoss >= _options.IncidentRelativeLossThreshold ||
-                    current.Percentile.Value <= 0.05;
-
-                if (extremelySlow &&
-                    suddenPerformanceDrop &&
-                    largeAbsoluteLoss &&
-                    hadStrongPreIncidentPace &&
-                    additionalSignal)
-                {
-                    return index;
-                }
-            }
-
-            previousPerformance.Add(current.PerformanceZ.Value);
-            previousPercentiles.Add(current.Percentile.Value);
-        }
-
-        return null;
-    }
-
     private bool IsRepresentativePostIncidentSector(
         IReadOnlyList<RawSectorEvaluation> sectors,
         int incidentIndex,
@@ -1450,7 +1477,9 @@ internal sealed class DownhillPaceCalculator
             1,
             (int)Math.Ceiling(scores.Count * _options.FastSectorFraction));
         var fastSectorMean = WeightedMean(scores
-            .OrderByDescending(score => score.Score)
+            // SQL/JSON log statistics may differ by ~1e-12. Treat these as ties
+            // when selecting sectors, retaining full precision for the weighted mean.
+            .OrderByDescending(score => Math.Round(score.Score, 9))
             .Take(fastSectorCount)
             .ToArray());
 

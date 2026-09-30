@@ -385,7 +385,34 @@ internal static class CompactMetricsPackageParser
                     session.Object("rounds")?.String("start_date"))));
         }
 
-        return new RiderDetailDataBundle(data, sessions);
+        // A detail response includes only one rider's public rows. Its small `i`
+        // population carries the classified field needed to prepare Pace fairly,
+        // without fetching rival identities/splits or duplicating the detector in SQL.
+        var cohort = new Dictionary<(string Session, string Rider), PacePrecomputedSessionData>();
+        foreach (var s in sessions) cohort[(s.SessionId, s.Run.RiderId)] = s;
+        var templates = sessions.GroupBy(s => s.SessionId).ToDictionary(g => g.Key, g => g.First());
+        foreach (var row in CompactRows(root, "i"))
+        {
+            var sessionId = CompactString(row, 0);
+            var riderId = CompactString(row, 1);
+            if (sessionId is null || riderId is null || !templates.TryGetValue(sessionId, out var template) ||
+                cohort.ContainsKey((sessionId, riderId)) || row[3] is not JsonArray timings) continue;
+            var byIndex = timings.OfType<JsonArray>().ToDictionary(s => CompactInt(s, 0) ?? -1);
+            var sectors = template.Sectors.Select(s => byIndex.TryGetValue(s.SectorIndex, out var timing)
+                ? s with { TimeSeconds = CompactDouble(timing, 1), Rank = CompactInt(timing, 2) }
+                : s with { TimeSeconds = null, Rank = null }).ToArray();
+            cohort[(sessionId, riderId)] = template with
+            {
+                Run = new PaceRiderRun(riderId, sectors.Select(s => s.TimeSeconds).ToArray(),
+                    FinishTimeSeconds: CompactDouble(row, 2)),
+                Sectors = sectors,
+                PaceFinish = null
+            };
+        }
+        var prepared = new DownhillPaceCalculator().PrepareField(cohort.Values.ToArray())
+            .ToDictionary(s => (s.SessionId, s.Run.RiderId));
+        return new RiderDetailDataBundle(data,
+            sessions.Select(s => prepared[(s.SessionId, s.Run.RiderId)]).ToArray());
     }
 
     private static PaceFieldSummary? ParseFieldSummary(JsonArray row, int offset)

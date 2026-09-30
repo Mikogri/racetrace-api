@@ -16,7 +16,8 @@ internal sealed record ConsistencyRunInput(
 internal sealed record ConsistencySectorTimeInput(
     string SectorKey,
     double? TimeSeconds,
-    bool IsOutlier = false);
+    bool IsOutlier = false,
+    bool IsInvalidTiming = false);
 
 internal sealed record SectorConsistencyResult(
     string CourseKey,
@@ -160,6 +161,7 @@ internal sealed class DownhillConsistencyCalculator
     {
         var candidates = sectors
             .Where(sector =>
+                sector.Status != PaceSectorStatus.InvalidTiming &&
                 sector.Time.HasValue &&
                 sector.Percentile.HasValue &&
                 IsValidTime(sector.Time.Value))
@@ -252,13 +254,15 @@ internal sealed class DownhillConsistencyCalculator
                                 candidate.SectorKey,
                                 sectorKey,
                                 StringComparison.OrdinalIgnoreCase));
-                        return new SectorAttempt(
+                        return sector?.IsInvalidTiming == true ? null : new SectorAttempt(
                             run.RunId,
                             _sessionWeights.GetWeight(run.SessionType),
                             sector?.TimeSeconds,
                             sector?.IsOutlier == true);
                     })
+                    .OfType<SectorAttempt>()
                     .ToArray();
+                if (attempts.Length < 2) continue;
                 var weightedTimes = attempts
                     .Where(attempt =>
                         attempt.TimeSeconds.HasValue &&

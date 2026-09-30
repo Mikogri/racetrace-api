@@ -32,7 +32,7 @@ public sealed class PaceService
         IReadOnlyList<PacePrecomputedSessionData> sessions,
         IReadOnlyDictionary<string, string?> categoriesBySessionId)
     {
-        return sessions
+        return _paceCalculator.PrepareField(sessions)
             .Where(session =>
                 _paceCalculator.GetConfiguredSessionWeight(session.SessionType) > 0 &&
                 !string.Equals(session.Run.Status, "DNS", StringComparison.OrdinalIgnoreCase) &&
@@ -117,7 +117,7 @@ public sealed class PaceService
         IReadOnlyList<PacePrecomputedSessionData> sessions,
         string? riderId = null)
     {
-        return sessions
+        return _paceCalculator.PrepareField(sessions)
             .Where(session =>
                 (string.IsNullOrWhiteSpace(riderId) || string.Equals(
                     session.Run.RiderId,
@@ -399,7 +399,7 @@ public sealed class PaceService
                 ResultSessionId(result)!,
                 result.String("rider_id")!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var applicableSessions = precomputedSessions
+        var applicableSessions = _paceCalculator.PrepareField(precomputedSessions)
             .Where(session =>
                 !DownhillPaceCalculator.IsDisqualified(session.Run.Status) &&
                 selectedSessionRiderKeys.Contains(
@@ -448,7 +448,8 @@ public sealed class PaceService
                             .Select((sector, index) => new ConsistencySectorTimeInput(
                                 $"sector:{index}",
                                 sector.Time,
-                                outlierProfile.SectorIndexes.Contains(index)))
+                                outlierProfile.SectorIndexes.Contains(index),
+                                IsInvalidTiming: sector.Status == PaceSectorStatus.InvalidTiming))
                             .ToArray(),
                         FinishRank: pair.First.Run.FinishRank,
                         FieldSize: pair.First.ClassifiedFieldSize > 0
@@ -822,7 +823,8 @@ public sealed class PaceService
                     .Select((time, index) => new ConsistencySectorTimeInput(
                         $"sector:{index}",
                         time,
-                        outlierProfile.SectorIndexes.Contains(index)))
+                        outlierProfile.SectorIndexes.Contains(index),
+                        IsInvalidTiming: paceResult?.Sectors[index].Status == PaceSectorStatus.InvalidTiming))
                     .ToArray();
 
                 return new ConsistencyRunInput(

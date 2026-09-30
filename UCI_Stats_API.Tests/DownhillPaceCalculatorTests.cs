@@ -278,7 +278,7 @@ public sealed class DownhillPaceCalculatorTests
     }
 
     [Fact]
-    public void IncidentUsesLastCleanCheckpointInsteadOfDamagedFinishTime()
+    public void IncidentUsesCorrectedFinishDistributionInsteadOfDamagedFinishTime()
     {
         var calculator = new DownhillPaceCalculator();
         var session = new PaceSessionData(
@@ -292,16 +292,17 @@ public sealed class DownhillPaceCalculatorTests
             ]);
 
         var result = Find(calculator.CalculateSession(session), "target");
-        var checkpointScore = calculator.CalculateFullRunTimeScore(
-            150,
-            [150, 153, 156, 159, 162]);
+        // Median relative pace from clean sectors is 50/52; field S4 median is 73.
+        var correctedFinish = 150 + 73 * (50.0 / 52);
+        var correctedScore = calculator.CalculateFullRunTimeScore(
+            correctedFinish, [correctedFinish, 224, 228, 232, 236]);
         var damagedFinishScore = calculator.CalculateFullRunTimeScore(
             320,
             [320, 224, 228, 232, 236]);
 
         Assert.Equal(3, result.IncidentSectorIndex);
         Assert.Equal(PaceSectorStatus.Incident, result.Sectors[3].Status);
-        Assert.Equal(checkpointScore, result.FullRunTimeScore);
+        Assert.Equal(correctedScore!.Value, result.FullRunTimeScore!.Value, 10);
         Assert.True(result.FullRunTimeScore > damagedFinishScore);
     }
 

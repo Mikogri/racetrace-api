@@ -11,8 +11,9 @@ internal sealed class ReadOnlyCacheHandler(string directory, bool offline) : Del
     {
         var path = request.RequestUri!.AbsolutePath;
         if (request.Method != HttpMethod.Get &&
-            !(request.Method == HttpMethod.Post && path.EndsWith("/rpc/get_ranking_data", StringComparison.Ordinal)))
-            throw new InvalidOperationException("Backtest permits GET and the read-only get_ranking_data RPC only.");
+            !(request.Method == HttpMethod.Post && new[] { "get_ranking_data", "get_ranking_metric_packages", "get_ranking_preaggregate_packages" }
+                .Any(rpc => path.EndsWith("/rpc/" + rpc, StringComparison.Ordinal))))
+            throw new InvalidOperationException("Backtest permits GET and explicitly allowed read-only ranking RPCs only.");
 
         var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
         var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{request.Method} {request.RequestUri} {body}")));

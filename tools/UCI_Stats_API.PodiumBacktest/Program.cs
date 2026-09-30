@@ -18,6 +18,16 @@ internal static class Program
 
     public static async Task Main(string[] args)
     {
+        if (args.Contains("--ranking-incident-comparison"))
+        {
+            await RankingIncidentComparison.RunAsync(args);
+            return;
+        }
+        if (args.Contains("--incident-audit"))
+        {
+            await IncidentAudit.RunAsync(args);
+            return;
+        }
         string Argument(string key, string fallback) => Array.IndexOf(args, key) is var index && index >= 0 ? args[index + 1] : fallback;
         var apiDirectory = Path.GetFullPath(Argument("--api", "UCI_Stats_API"));
         var output = Path.GetFullPath(Argument("--output", "artifacts/podium-backtest"));
