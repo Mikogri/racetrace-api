@@ -9,6 +9,42 @@ namespace UCI_Stats_API.Tests;
 public sealed class RoundRaceAnalyticsTests
 {
     [Fact]
+    public void ChaosUsesModerateCalibrationWithoutChangingComponentEvidence()
+    {
+        // Two of three riders swap ranks: footrule = 2/4, weight .4 => raw 20.
+        var chaos = Calculate().Chaos;
+        Assert.Equal(50m, chaos.Components.Single(c => c.Key == "positionChanges").Score);
+        Assert.Equal(0.4m, chaos.Components.Single(c => c.Key == "positionChanges").Weight);
+        Assert.Equal(33.6m, chaos.Score);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(5, 4.5)]
+    [InlineData(10, 12.4)]
+    [InlineData(15, 22.6)]
+    [InlineData(20, 33.6)]
+    [InlineData(25, 44.1)]
+    [InlineData(30, 53.2)]
+    [InlineData(31, 54.8)]
+    [InlineData(40, 66.1)]
+    [InlineData(100, 100)]
+    public void ChaosCalibrationMatchesAgreedScale(decimal raw, decimal expected) =>
+        Assert.Equal(expected, RoundRaceAnalytics.CalibrateChaos(raw));
+
+    [Fact]
+    public void ChaosCalibrationDoesNotReverseOrderingAndStaysBounded()
+    {
+        var previous = 0m;
+        for (var raw = 0m; raw <= 100m; raw += .1m)
+        {
+            var score = RoundRaceAnalytics.CalibrateChaos(raw);
+            Assert.InRange(score, previous, 100m);
+            previous = score;
+        }
+    }
+
+    [Fact]
     public void AnalyticsUsesPublicCamelCaseContractUnderApplicationSnakeCasePolicy()
     {
         var json = JsonSerializer.SerializeToNode(Calculate(), new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower })!;

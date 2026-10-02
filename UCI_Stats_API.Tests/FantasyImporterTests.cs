@@ -142,14 +142,35 @@ public sealed class FantasyImporterTests
     }
 
     [Fact]
+    public async Task BrowserSyncUsesExistingValidationMappingAndRoundAssociation()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"racetrace-fantasy-test-{Guid.NewGuid():N}");
+        var options = Options.Create(new FantasyImportOptions { SnapshotDirectory = "prices" });
+        var store = new FantasyPriceSnapshotStore(options, new TestEnvironment(directory), new FixedTime(FetchedAt), NullLogger<FantasyPriceSnapshotStore>.Instance);
+        var browser = new TestBrowserPage { Html = Fixture };
+        var importer = new PinkbikeFantasyImporter(new TestHttpFactory(), browser, new ImportSupabaseClient(), store, options, new FixedTime(FetchedAt), NullLogger<PinkbikeFantasyImporter>.Instance);
+        try
+        {
+            var result = await importer.SyncAsync(2026, "38");
+            Assert.Equal("headless-browser", result.AcquisitionMethod);
+            Assert.Equal("38", result.UpcomingRoundId);
+            Assert.Equal("123", result.Riders.Single(x => x.ExternalId == "2").RiderId);
+            browser.Html = "<html><title>Attention Required! | Cloudflare</title></html>";
+            await Assert.ThrowsAsync<InvalidDataException>(() => importer.SyncAsync(2026, "38"));
+            Assert.Equal(result.Id, (await store.GetLatestAsync(2026))!.Id);
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public async Task ManualImportSharesSyncLockAndFailedParsePreservesLastSnapshot()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"racetrace-fantasy-test-{Guid.NewGuid():N}");
         var options = Options.Create(new FantasyImportOptions { SnapshotDirectory = "prices" });
         var store = new FantasyPriceSnapshotStore(options, new TestEnvironment(directory), new FixedTime(FetchedAt), NullLogger<FantasyPriceSnapshotStore>.Instance);
         var database = new ImportSupabaseClient { Block = true };
-        var http = new TestHttpFactory();
-        var importer = new PinkbikeFantasyImporter(http, database, store, options, new FixedTime(FetchedAt), NullLogger<PinkbikeFantasyImporter>.Instance);
+        var http = new TestBrowserPage();
+        var importer = new PinkbikeFantasyImporter(new TestHttpFactory(), http, database, store, options, new FixedTime(FetchedAt), NullLogger<PinkbikeFantasyImporter>.Instance);
         Task<FantasyPriceSnapshot>? first = null;
         try
         {
@@ -184,14 +205,55 @@ public sealed class FantasyImporterTests
     private static PinkbikeFantasyRider SampleRider() => new("2", null, "Jackson Goldstone", "male", 340_000, 1945, false, FetchedAt, "unmapped", "Canada", []);
     private static FantasyPriceSnapshot Snapshot(IReadOnlyList<PinkbikeFantasyRider> riders) => new("sample", 2026, null, FetchedAt, riders, PinkbikeFantasyParser.SourceUrl, "test");
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider { public override DateTimeOffset GetUtcNow() => now; }
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    public async Task HttpIsTriedFirstAndBrowserOnlyAfterDownloadOrValidationFailure(bool validHttp, bool blockedHtml)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"racetrace-fantasy-test-{Guid.NewGuid():N}");
+        var options = Options.Create(new FantasyImportOptions { SnapshotDirectory = "prices" });
+        var store = new FantasyPriceSnapshotStore(options, new TestEnvironment(directory), new FixedTime(FetchedAt), NullLogger<FantasyPriceSnapshotStore>.Instance);
+        var http = new TestHttpFactory { Html = validHttp ? Fixture : blockedHtml ? "<html>Cloudflare</html>" : null };
+        var browser = new TestBrowserPage { Html = Fixture };
+        var importer = new PinkbikeFantasyImporter(http, browser, new ImportSupabaseClient(), store, options, new FixedTime(FetchedAt), NullLogger<PinkbikeFantasyImporter>.Instance);
+        try
+        {
+            var result = await importer.SyncAsync(2026, "38");
+            Assert.Equal(1, http.Calls);
+            Assert.Equal(validHttp ? 0 : 1, browser.Calls);
+            Assert.Equal(validHttp ? "http" : "headless-browser", result.AcquisitionMethod);
+            Assert.Equal(6, result.Riders.Count);
+            Assert.Equal(result.Id, (await store.GetLatestAsync(2026))!.Id);
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
     private sealed class TestHttpFactory : IHttpClientFactory
     {
+        public string? Html { get; init; }
         public int Calls { get; private set; }
-        public HttpClient CreateClient(string name) { Calls++; return new HttpClient(new DeniedHandler()); }
-        private sealed class DeniedHandler : HttpMessageHandler
+        public HttpClient CreateClient(string name) => new(new Handler(this));
+        private sealed class Handler(TestHttpFactory owner) : HttpMessageHandler
         {
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-                Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                owner.Calls++;
+                return Task.FromResult(owner.Html is null ? new HttpResponseMessage(HttpStatusCode.Forbidden)
+                    : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(owner.Html, System.Text.Encoding.UTF8, "text/html") });
+            }
+        }
+    }
+
+    private sealed class TestBrowserPage : PinkbikeBrowserPage
+    {
+        public string? Html { get; set; }
+        public int Calls { get; private set; }
+        public override Task<string> FetchAsync(CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (Html is not null) return Task.FromResult(Html);
+            throw new HttpRequestException("Pinkbike browser request returned HTTP 403.");
         }
     }
     private sealed class ImportSupabaseClient : ISupabaseRestClient

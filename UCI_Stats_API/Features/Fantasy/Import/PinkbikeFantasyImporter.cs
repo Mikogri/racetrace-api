@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -8,6 +8,7 @@ namespace UCI_Stats_API.Features.Fantasy.Import;
 
 public sealed class PinkbikeFantasyImporter(
     IHttpClientFactory httpClients,
+    PinkbikeBrowserPage browser,
     ISupabaseRestClient supabase,
     FantasyPriceSnapshotStore store,
     IOptions<FantasyImportOptions> options,
@@ -20,17 +21,35 @@ public sealed class PinkbikeFantasyImporter(
     public Task<FantasyPriceSnapshot> SyncAsync(int season, string? upcomingRoundId = null, CancellationToken cancellationToken = default) =>
         RunGuardedAsync(season, async token =>
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, PinkbikeFantasyParser.SourceUrl);
-            request.Headers.UserAgent.ParseAdd("RaceTrace/1.0 (Fantasy price synchronization)");
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
-            using var client = httpClients.CreateClient(HttpClientName);
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
-            response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentType?.MediaType != "text/html")
-                throw new InvalidDataException("Pinkbike returned a non-HTML response.");
-            await response.Content.LoadIntoBufferAsync(8_000_000, token);
-            var html = await response.Content.ReadAsStringAsync(token);
-            return await ImportCoreAsync(html, season, upcomingRoundId, "http", token);
+            string html;
+            var method = "http";
+            try
+            {
+                // Reserve most of the shared timeout for the browser fallback.
+                using var download = CancellationTokenSource.CreateLinkedTokenSource(token);
+                download.CancelAfter(TimeSpan.FromSeconds(Math.Min(10, Math.Clamp(options.Value.TimeoutSeconds, 5, 120) / 3.0)));
+                using var client = httpClients.CreateClient(HttpClientName);
+                using var request = new HttpRequestMessage(HttpMethod.Get, PinkbikeFantasyParser.SourceUrl);
+                request.Headers.UserAgent.ParseAdd("RaceTrace/1.0 (Fantasy price synchronization)");
+                request.Headers.Accept.ParseAdd("text/html");
+                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, download.Token);
+                response.EnsureSuccessStatusCode();
+                if (response.Content.Headers.ContentType?.MediaType != "text/html")
+                    throw new InvalidDataException("Pinkbike returned a non-HTML response.");
+                await response.Content.LoadIntoBufferAsync(8_000_000, download.Token);
+                html = await response.Content.ReadAsStringAsync(download.Token);
+                // HTTP 200 can still contain a challenge page or an unusable catalogue.
+                _ = PinkbikeFantasyParser.Parse(html, season, time.GetUtcNow(), options.Value.MinimumRiderCount);
+            }
+            catch (Exception exception) when (!token.IsCancellationRequested &&
+                exception is HttpRequestException or IOException or InvalidDataException or FormatException or OperationCanceledException)
+            {
+                logger.LogInformation("Pinkbike HTTP acquisition failed ({FailureType}); trying Chromium", exception.GetType().Name);
+                html = await browser.FetchAsync(token);
+                method = "headless-browser";
+            }
+            // Mapping/storage failures must not trigger another network acquisition.
+            return await ImportCoreAsync(html, season, upcomingRoundId, method, token);
         }, cancellationToken);
 
     // Explicit, audited imports of saved public HTML use the same lock, timeout and failure reporting.
@@ -50,7 +69,12 @@ public sealed class PinkbikeFantasyImporter(
         catch (Exception exception) when (exception is HttpRequestException or InvalidDataException or FormatException or OperationCanceledException or IOException)
         {
             logger.LogWarning(exception, "Pinkbike Fantasy sync failed for season {Season}; keeping the last successful snapshot", season);
-            var message = exception is OperationCanceledException ? "Fantasy price synchronization was cancelled or timed out." : "Could not synchronize Pinkbike prices. The last successful snapshot is preserved.";
+            var message = exception switch
+            {
+                OperationCanceledException => "Fantasy price synchronization was cancelled or timed out.",
+                HttpRequestException { StatusCode: HttpStatusCode.Forbidden } => "Pinkbike blocked browser access (HTTP 403 / verification required). The last successful prices are preserved.",
+                _ => "Could not synchronize Pinkbike prices. The last successful snapshot is preserved."
+            };
             await store.RecordAttemptAsync(season, message, CancellationToken.None);
             throw;
         }

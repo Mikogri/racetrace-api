@@ -106,6 +106,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<SeasonSummaryService>();
         services.AddScoped<PodiumPredictorService>();
+        services.AddSingleton<PinkbikeBrowserPage>();
         services.AddHttpClient(PinkbikeFantasyImporter.HttpClientName);
         services.AddSingleton<FantasyPriceSnapshotStore>();
         services.AddSingleton<FantasyPreparedStore>();

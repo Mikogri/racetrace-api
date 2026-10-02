@@ -44,7 +44,7 @@ internal static class RoundRaceAnalytics
                 positions.Length, positions.Count(rank => rank == 1), positions.Count(rank => rank <= 3),
                 positions.Length > 0 ? Round(positions.Average()) : null, SectorsForGain(margin));
         }
-        return new("round-analytics-v1", efficiencies, Chaos(starters, projected, observations, correlation),
+        return new("round-analytics-v2", efficiencies, Chaos(starters, projected, observations, correlation),
             correlation, margin, run, Distribution(classified, observations));
     }
 
@@ -174,9 +174,18 @@ internal static class RoundRaceAnalytics
         var present = components.Where(component => component.Score.HasValue).ToArray();
         // Without timing movement or a pre-final comparison, a DNF rate alone is not a chaos score.
         var score = starters.Length >= 3 && (changes.Length > 0 || reshuffle.HasValue)
-            ? Math.Round(present.Sum(component => component.Score!.Value * component.Weight) / present.Sum(component => component.Weight), 1)
+            ? CalibrateChaos(present.Sum(component => component.Score!.Value * component.Weight) / present.Sum(component => component.Weight))
             : (decimal?)null;
         return new(score, starters.Length, dnf, incidents, components);
+    }
+
+    // Fixed, monotonic calibration: halfway between the raw score and a stronger
+    // contrast curve. Component scores remain raw evidence, not recalibrated rates.
+    internal static decimal CalibrateChaos(decimal rawScore)
+    {
+        var raw = (double)Math.Clamp(rawScore, 0m, 100m);
+        var contrast = 100 * (1 - Math.Exp(-Math.Pow(raw / 25, 2)));
+        return Math.Round((decimal)((raw + contrast) / 2), 1);
     }
 
     private static double Footrule(double[] first, double[] second)
