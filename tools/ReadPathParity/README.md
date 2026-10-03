@@ -18,4 +18,6 @@ Useful options for `--parity`:
 - `--fixtures <ignored-directory>`: capture read responses, rejecting changes to an already captured response.
 - Add `--replay` to read those fixtures without networking. Missing fixtures fail the run; no network fallback.
 
-Keep snapshots, recordings and benchmark output in ignored scratch directories. Fixtures contain rider data, not request authorization headers. Live timing includes network and fixture recording overhead; offline replay includes file reads. Neither is an isolated SQL benchmark or frontend end-to-end measurement. The older `--stages`/service-only probe modes are retained for diagnostics; use `--parity` for the new flags and correctness comparisons.
+Keep snapshots, recordings and benchmark output in ignored scratch directories. Fixtures contain rider data, not request authorization headers. Live timing includes network and fixture recording overhead; offline replay includes file reads. Neither is an isolated SQL benchmark or frontend end-to-end measurement. Use `--parity` for the new flags and correctness comparisons.
+
+Known limitation: the retained legacy `--stages` mode needs explicit reflection overload signatures and currently raises `AmbiguousMatchException`. It is not used by the verified parity/benchmark workflow or production API.

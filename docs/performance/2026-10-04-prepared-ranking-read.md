@@ -14,7 +14,7 @@ Original reference: `b935d7642f1d877e624c2e6fa847fe4ae4834fb7`, compiled indepen
 - 64 full public responses compared with `JsonNode.DeepEquals`: 32 queries with database preaggregation and forced cache-miss fallback. Zero differences.
 - Coverage: four categories, one/multiple/all seasons, ranking pages 1–5, previous round/filter/default comparisons, search, country, competition class, session/date filters, DNF/DNS/DSQ/Finished, empty selections, rider overview without explicit category, historical teams and all overview tabs.
 - Four representative queries repeated three times per version: zero differences. Stored HTTP fixtures reject source-data drift and replay offline; another 12 responses per version matched exactly.
-- Release test suite: 705 passed, zero failed/skipped (before final independent review).
+- Release test suite: 709 passed, zero failed/skipped after the independent review's malformed-envelope fix.
 - Database rollback assertions: revision changes on source refresh; stale prepared writes are rejected; old/missing versions and status filters return incomplete; anon/authenticated cannot save prepared packages.
 - 482 existing cached sessions, all 482 prepared with `pace-field-v1`. No official times, results, points or scoring formulas changed.
 
@@ -60,3 +60,13 @@ Security advisor found no new finding naming the new functions. The pre-existing
 - Tests include post-implementation coverage additions; not every test was written first. Parser legacy-shape and malformed/missing fallback regressions were verified failing before their fixes.
 
 The implementation initially remains on `codex/prepared-ranking-read`; this report does not claim the user's running API or GitHub has been updated.
+
+## Independent review
+
+One important issue found and fixed: exact result/aggregate/finish membership plus complete finite numeric summaries are required before accepting a prepared envelope. Three reproductions failed before the fix and pass after it; an entirely-null unavailable finish remains valid.
+
+After that fix: all 64 full live responses and all 12 offline replay responses matched the independent original baseline again; Release build and all 709 tests passed. `git diff --check` and the updated code graph also passed/completed.
+
+Deferred minor: the legacy developer-only `--stages` probe uses name-only reflection, now ambiguous with the new overloads. Do not use that mode until its signatures are updated. The production API and verified `--parity` mode do not use it.
+
+Pre-existing source-refresh race behavior was not redesigned. Atomic prepared-save rejection and invalidation were tested; a concurrent multi-writer stress test of the old source rebuild was not performed. Benchmark results are not production guarantees. Reproducibility artifacts are retained locally under ignored `artifacts/prepared-ranking-read-2026-10-04` after execution; they are not published.

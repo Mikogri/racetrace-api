@@ -441,14 +441,36 @@ internal static class CompactMetricsPackageParser
     internal static bool HasCompletePreparedFinishes(JsonObject package)
     {
         if (package["r"] is not JsonArray results) return false;
-        var rows = results.OfType<JsonArray>().ToDictionary(r => CompactString(r, 0)!);
+        var resultRows = results.OfType<JsonArray>().ToArray();
+        if (resultRows.Length != results.Count) return false;
+        var rows = resultRows.ToDictionary(r => CompactString(r, 0)!);
+        var aggregates = CompactRows([package], "a").ToArray();
+        if (aggregates.Length != results.Count ||
+            aggregates.Select(a => CompactString(a, 0)).Distinct().Count() != results.Count)
+            return false;
         var finishes = CompactRows([package], "pf").ToArray();
-        if (finishes.Any(row => row.Count != 11)) return false;
+        if (finishes.Length != results.Count || finishes.Any(row => !IsValidPreparedFinish(row))) return false;
         var keys = finishes.Select(row => (CompactString(row, 0), CompactString(row, 1))).ToHashSet();
         if (keys.Count != finishes.Length) return false;
-        return CompactRows([package], "a").All(aggregate =>
+        return aggregates.All(aggregate =>
             rows.TryGetValue(CompactString(aggregate, 0) ?? "", out var result) &&
+            CompactString(aggregate, 1) == CompactString(result, 2) &&
             keys.Contains((CompactString(aggregate, 1), CompactString(result, 1))));
+    }
+
+    private static bool IsValidPreparedFinish(JsonArray row)
+    {
+        if (row.Count != 11 || CompactString(row, 0) is null || CompactString(row, 1) is null)
+            return false;
+        // No classified field/reference is a valid explicit absence, not a partial summary.
+        if (row.Skip(2).All(value => value is null)) return true;
+        if (CompactInt(row, 4) is not > 0) return false;
+        for (var index = 2; index < row.Count; index++)
+        {
+            if (index is 2 or 9 or 10 && row[index] is null) continue;
+            if (CompactDouble(row, index) is not { } value || !double.IsFinite(value)) return false;
+        }
+        return true;
     }
 
     private static PaceFieldSummary? ParseFieldSummary(JsonArray row, int offset)

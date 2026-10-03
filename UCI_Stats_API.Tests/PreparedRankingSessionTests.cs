@@ -8,6 +8,15 @@ namespace UCI_Stats_API.Tests;
 public sealed class PreparedRankingSessionTests
 {
     [Fact]
+    public void UnavailableFinishReferenceIsExplicitlyNullAndStillComplete()
+    {
+        var package = JsonNode.Parse("""
+        {"r":[[1,18,10]],"a":[[1,10]],"pf":[[10,18,null,null,null,null,null,null,null,null,null]]}
+        """)!.AsObject();
+        Assert.True(CompactMetricsPackageParser.HasCompletePreparedFinishes(package));
+    }
+
+    [Fact]
     public void PreparedFinishSurvivesWithoutTransferringRivalPopulation()
     {
         var package = JsonNode.Parse("""

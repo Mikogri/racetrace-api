@@ -12,6 +12,9 @@ public sealed class PreparedReadRequestTests
 {
     [Theory]
     [InlineData("{\"r\":[[1,18,10]],\"a\":[[1,10]],\"pf\":[]}", 200)]
+    [InlineData("{\"r\":[[1,18,10]],\"a\":[],\"pf\":[]}", 200)]
+    [InlineData("{\"r\":[[1,18,10]],\"a\":[[1,10]],\"pf\":[[10,18,249,1,2,null,5.5,0.02,1,249,269]]}", 200)]
+    [InlineData("{\"r\":[[1,18,10]],\"a\":[[1,11]],\"pf\":[[11,18,null,null,null,null,null,null,null,null,null]]}", 200)]
     [InlineData("{}", 404)]
     public async Task IncompletePreparedEnvelopeFallsBack(string payload, int statusCode)
     {
