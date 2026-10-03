@@ -791,7 +791,7 @@ public sealed class RankingService
 
         return ordered
             .ThenBy(row => row.String("rider_name") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => ParseLong(row.String("rider_id")))
+            .ThenBy(row => PublicDtoMapping.Long(row.String("rider_id")))
             .ToArray();
     }
 
@@ -814,13 +814,13 @@ public sealed class RankingService
         var team = rider.Array("teams")?.OfType<JsonObject>().FirstOrDefault();
         return new RankingRiderDto(
             row.Int("rank") ?? 0,
-            ParseLong(row.String("rider_id")),
+            PublicDtoMapping.Long(row.String("rider_id")),
             rider.String("uci_id"),
             rider.String("first_name"),
             rider.String("last_name"),
             rider.DisplayName(),
             rider.String("nation"),
-            NullableLong(team?.String("id")),
+            PublicDtoMapping.NullableLong(team?.String("id")),
             team?.String("name") ?? row.String("team_name"),
             row.Decimal("points") ?? 0m,
             row.Decimal("rating"),
@@ -983,11 +983,6 @@ public sealed class RankingService
             round?.String("start_date") ?? session.String("session_date"));
     }
 
-    private static long ParseLong(string? value) =>
-        long.TryParse(value, out var parsed) ? parsed : 0;
-
-    private static long? NullableLong(string? value) =>
-        long.TryParse(value, out var parsed) ? parsed : null;
 }
 
 internal sealed record RankingSnapshot(

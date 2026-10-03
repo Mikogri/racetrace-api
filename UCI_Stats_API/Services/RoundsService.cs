@@ -257,8 +257,8 @@ public sealed class RoundsService
         var response = await _supabase.GetAsync(query, count: true, cancellationToken: cancellationToken);
         DomainQueryService.NormalizeSessionEmbeds(response.Data);
         var items = response.Data.Select(session => new CommonSessionDto(
-            ParseLong(session.String("id")),
-            ParseLong(session.String("round_id") ?? session.Object("rounds")?.String("id")),
+            PublicDtoMapping.Long(session.String("id")),
+            PublicDtoMapping.Long(session.String("round_id") ?? session.Object("rounds")?.String("id")),
             PublicApiCodes.ToPublicSessionType(session.String("session_type")),
             PublicApiCodes.ToPublicCategory(session.Object("categories")?.String("code")),
             ParseDate(session.String("session_date")),
@@ -493,8 +493,8 @@ public sealed class RoundsService
     {
         var track = round.Object("tracks");
         var competitionClass = round.Object("competition_class") ?? round.Object("competition_levels");
-        var roundId = ParseLong(round.String("id"));
-        var trackId = ParseLong(round.String("track_id") ?? track?.String("id"));
+        var roundId = PublicDtoMapping.Long(round.String("id"));
+        var trackId = PublicDtoMapping.Long(round.String("track_id") ?? track?.String("id"));
         return new RoundListItemDto(
             roundId,
             round.Int("round_number"),
@@ -509,7 +509,7 @@ public sealed class RoundsService
             ParseDate(round.String("start_date")),
             ParseDate(round.String("end_date")),
             RoundStatus(round),
-            NullableLong(round.String("competition_class_id") ?? round.String("competition_level_id") ?? competitionClass?.String("id")),
+            PublicDtoMapping.NullableLong(round.String("competition_class_id") ?? round.String("competition_level_id") ?? competitionClass?.String("id")),
             competitionClass?.String("code"),
             competitionClass?.String("name"),
             competitionClass?.Int("priority"));
@@ -573,10 +573,6 @@ public sealed class RoundsService
             ? parsed.Value.AddDays(1)
             : parsed;
     }
-
-    private static long ParseLong(string? value) => long.TryParse(value, out var parsed) ? parsed : 0;
-
-    private static long? NullableLong(string? value) => long.TryParse(value, out var parsed) ? parsed : null;
 
     private async Task AttachRoundStatusesAsync(
         IReadOnlyList<JsonObject> rounds,
