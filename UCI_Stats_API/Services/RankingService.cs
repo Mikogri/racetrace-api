@@ -392,13 +392,7 @@ public sealed class RankingService
             if (!_cache.TryGetValue<JsonObject[]>(pointsKey, out var rows))
             {
                 var sessions = await _domainQueries.GetMatchingSessionsAsync(context, cancellationToken: cancellationToken);
-                rows = await _domainQueries.GetPointsSummaryAsync(sessions, cancellationToken);
-                if (rows is null)
-                {
-                    var data = await _domainQueries.GetRankingDataAsync(context,
-                        resolvedSessionIds: sessions.Select(session => session.String("id")!), cancellationToken: cancellationToken);
-                    rows = BuildPointsRows(data);
-                }
+                rows = await _domainQueries.GetPointsSummaryAsync(context, sessions, cancellationToken);
                 _cache.Set(pointsKey, rows, SnapshotLifetime);
             }
             return PointsPosition(rows!, riderId);
@@ -406,16 +400,6 @@ public sealed class RankingService
 
         return PointsPosition(snapshot.Rows, riderId);
     }
-
-    internal static JsonObject[] BuildPointsRows(RankingDataBundle data) => data.Results
-        .GroupBy(result => result.String("rider_id") ?? string.Empty)
-        .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-        .Select(group => new JsonObject
-        {
-            ["rider_id"] = group.Key,
-            ["rider_name"] = group.Select(result => result.Object("riders")).FirstOrDefault(rider => rider is not null)?.DisplayName(),
-            ["points"] = group.Sum(result => data.PointsByResultId.GetValueOrDefault(result.String("id") ?? string.Empty))
-        }).ToArray();
 
     internal static int? PointsPosition(IReadOnlyList<JsonObject> rows, string riderId) =>
         SortRows(rows, "points", descending: true)

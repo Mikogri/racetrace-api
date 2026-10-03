@@ -1,6 +1,6 @@
 # Przyspieszenie odczytu preagregacji: Rider Details i Ranking
 
-Status: projekt do zatwierdzenia przed implementacją.
+Status: projekt zatwierdzony przez użytkownika 2026-10-03; warunek: wyniki kalkulacji bez zmian.
 
 ## Cel i zakres
 
