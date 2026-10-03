@@ -37,6 +37,12 @@ public sealed class MetricsService
     }
 
     internal IReadOnlyDictionary<string, RiderPerformanceMetricValues> CalculatePrecomputedPerformanceByRider(
+        RankingReadData data,
+        IReadOnlyList<PacePrecomputedSessionData> precomputedSessions,
+        IReadOnlyList<JsonObject>? availableSessions = null)
+        => _pace.CalculatePrecomputed(data.Results, precomputedSessions, availableSessions);
+
+    internal IReadOnlyDictionary<string, RiderPerformanceMetricValues> CalculatePrecomputedPerformanceByRider(
         IReadOnlyList<JsonObject> results,
         IReadOnlyList<PacePrecomputedSessionData> precomputedSessions,
         IReadOnlyList<JsonObject>? availableSessions = null)

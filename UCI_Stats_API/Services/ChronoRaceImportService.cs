@@ -1132,11 +1132,8 @@ public sealed class ChronoRaceImportService
 
         try
         {
-            await _supabase.RpcAsync(
-                "refresh_ranking_session_preaggregate",
-                new JsonObject { ["p_session_id"] = parsedSessionId },
-                SupabaseRole.Service,
-                cancellationToken);
+            if (!await new RankingPreaggregationService(_supabase).RefreshAsync(sessionId, cancellationToken))
+                warnings.Add("Prepared metrics were not saved because the source session changed. Reads will use the compatibility path.");
         }
         catch (SupabaseApiException)
         {

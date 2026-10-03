@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddRaceTraceConfiguration(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<SupabaseOptions>(configuration.GetSection(SupabaseOptions.SectionName));
+        services.Configure<ReadOptimizationOptions>(configuration.GetSection("ReadOptimizations"));
         services.Configure<ApiAccessOptions>(configuration.GetSection(ApiAccessOptions.SectionName));
         services.Configure<AdminOptions>(configuration.GetSection(AdminOptions.SectionName));
         services.Configure<PointSystemSeedOptions>(configuration.GetSection(PointSystemSeedOptions.SectionName));

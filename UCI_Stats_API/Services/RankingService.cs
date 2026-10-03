@@ -117,7 +117,7 @@ public sealed class RankingService
         var requestedComparison = _validator.String(queryString, "comparison");
         JsonObject[]? comparisonRows = null;
         if (string.Equals(requestedComparison, "previousRound", StringComparison.OrdinalIgnoreCase) &&
-            TryWithoutLatestRound(snapshot.Sessions, snapshot.FieldResults, out var previousSessions))
+            TryWithoutLatestRound(snapshot, out var previousSessions))
         {
             var previousSnapshot = await BuildSnapshotAsync(
                 context,
@@ -136,7 +136,7 @@ public sealed class RankingService
 
             if (SameSessionSet(snapshot.Sessions, defaultSnapshot.Sessions) &&
                 SameRiderSet(rows, defaultRows) &&
-                TryWithoutLatestRound(snapshot.Sessions, snapshot.FieldResults, out var defaultPreviousSessions))
+                TryWithoutLatestRound(snapshot, out var defaultPreviousSessions))
             {
                 var previousSnapshot = await BuildSnapshotAsync(
                     context,
@@ -289,6 +289,15 @@ public sealed class RankingService
         }
 
         RankingDataBundle bundle;
+        if (preaggregated?.ReadData is { } read)
+        {
+            var performance = _metrics.CalculatePrecomputedPerformanceByRider(read,preaggregated.PaceSessions,matchingSessions);
+            var typedRows = read.Results.GroupBy(r => r.String("rider_id") ?? string.Empty)
+                .Where(g => !string.IsNullOrWhiteSpace(g.Key))
+                .Select(g => BuildRow(g.Key,g.ToArray(),read.PointsByResultId,performance,null)).ToArray();
+            var legacy = read.ToLegacy();
+            return new RankingSnapshot(typedRows,legacy.Results,legacy.FieldResults,legacy.Splits,matchingSessions,preaggregated.PaceSessions,read);
+        }
         IReadOnlyList<PacePrecomputedSessionData>? precomputedSessions;
         IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId;
         if (preaggregated is not null)
@@ -424,6 +433,14 @@ public sealed class RankingService
         IReadOnlyDictionary<string, decimal> pointsByResultId,
         IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId,
         JsonArray? fallbackTeamHistory)
+        => BuildRow(riderId,results.Select(RankingReadResult.FromLegacy).ToArray(),pointsByResultId,performanceByRiderId,fallbackTeamHistory);
+
+    private JsonObject BuildRow(
+        string riderId,
+        IReadOnlyList<RankingReadResult> results,
+        IReadOnlyDictionary<string, decimal> pointsByResultId,
+        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId,
+        JsonArray? fallbackTeamHistory)
     {
         var rider = results
             .Select(result => result.Object("riders"))
@@ -446,7 +463,7 @@ public sealed class RankingService
             rider["teams"] = teamHistory;
         }
         var finalResults = results
-            .Where(DomainQueryService.IsFinalResult)
+            .Where(r => r.Session is not null && DomainQueryService.IsFinalSession(r.Session))
             .Where(HasStarted)
             .ToArray();
         var participationRates = CalculateParticipationRates(results);
@@ -512,11 +529,17 @@ public sealed class RankingService
     }
 
     private static string? ResultSessionId(JsonObject result)
+        => ResultSessionId(RankingReadResult.FromLegacy(result));
+
+    private static string? ResultSessionId(RankingReadResult result)
     {
         return result.String("session_id") ?? result.Object("sessions")?.String("id");
     }
 
     private static string? ResultRoundId(JsonObject result)
+        => ResultRoundId(RankingReadResult.FromLegacy(result));
+
+    private static string? ResultRoundId(RankingReadResult result)
     {
         var session = result.Object("sessions");
         return session?.String("round_id") ??
@@ -526,6 +549,9 @@ public sealed class RankingService
     }
 
     internal static bool HasStarted(JsonObject result)
+        => HasStarted(RankingReadResult.FromLegacy(result));
+
+    private static bool HasStarted(RankingReadResult result)
     {
         return !string.Equals(
             result.String("status")?.Trim(),
@@ -535,10 +561,14 @@ public sealed class RankingService
 
     internal static RankingParticipationRates CalculateParticipationRates(
         IReadOnlyList<JsonObject> results)
+        => CalculateParticipationRates(results.Select(RankingReadResult.FromLegacy).ToArray());
+
+    private static RankingParticipationRates CalculateParticipationRates(
+        IReadOnlyList<RankingReadResult> results)
     {
         var startedResults = results.Where(HasStarted).ToArray();
         var qualifiedFinalResults = results
-            .Where(DomainQueryService.IsFinalResult)
+            .Where(r => r.Session is not null && DomainQueryService.IsFinalSession(r.Session))
             .ToArray();
         var qualifiedFinalSessions = qualifiedFinalResults
             .Select(ResultSessionId)
@@ -812,6 +842,17 @@ public sealed class RankingService
         IReadOnlyList<JsonObject> sessions,
         IReadOnlyList<JsonObject> results,
         out IReadOnlyList<JsonObject> previousSessions)
+        => TryWithoutLatestRound(sessions,results.Select(RankingReadResult.FromLegacy).ToArray(),out previousSessions);
+
+    private static bool TryWithoutLatestRound(RankingSnapshot snapshot, out IReadOnlyList<JsonObject> previousSessions)
+        => snapshot.ReadData is { } data
+            ? TryWithoutLatestRound(snapshot.Sessions,data.FieldResults,out previousSessions)
+            : TryWithoutLatestRound(snapshot.Sessions,snapshot.FieldResults,out previousSessions);
+
+    private static bool TryWithoutLatestRound(
+        IReadOnlyList<JsonObject> sessions,
+        IReadOnlyList<RankingReadResult> results,
+        out IReadOnlyList<JsonObject> previousSessions)
     {
         var resultSessionIds = results
             .Select(ResultSessionId)
@@ -955,7 +996,8 @@ internal sealed record RankingSnapshot(
     IReadOnlyList<JsonObject> FieldResults,
     IReadOnlyList<JsonObject> Splits,
     IReadOnlyList<JsonObject> Sessions,
-    IReadOnlyList<PacePrecomputedSessionData>? PrecomputedSessions = null);
+    IReadOnlyList<PacePrecomputedSessionData>? PrecomputedSessions = null,
+    RankingReadData? ReadData = null);
 
 internal sealed record RankingParticipationRates(
     int FinalsCount,

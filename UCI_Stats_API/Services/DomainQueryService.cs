@@ -19,6 +19,7 @@ public sealed class DomainQueryService
     private readonly ISupabaseRestClient _supabase;
     private readonly DisplayMetadataService _metadata;
     private readonly IMemoryCache? _packageCache;
+    private readonly Dictionary<JsonObject, IReadOnlyList<PacePrecomputedSessionData>> _preparedPackages = new(ReferenceEqualityComparer.Instance);
     private Task<DisplayMetadataDto>? _metadataTask;
     private readonly object _teamHistoryLock = new();
     private readonly Dictionary<(string Ids, DateOnly? From, DateOnly? To), Task<IReadOnlyList<JsonObject>>> _teamHistoryReads = [];
@@ -34,11 +35,18 @@ public sealed class DomainQueryService
 
     public const string SessionSelect = "*,round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*))";
 
-    public DomainQueryService(ISupabaseRestClient supabase, DisplayMetadataService? metadata = null, IMemoryCache? packageCache = null)
+    private readonly UCI_Stats_API.Configuration.ReadOptimizationOptions _readOptions;
+    private readonly ILogger<DomainQueryService>? _logger;
+
+    public DomainQueryService(ISupabaseRestClient supabase, DisplayMetadataService? metadata = null, IMemoryCache? packageCache = null,
+        Microsoft.Extensions.Options.IOptions<UCI_Stats_API.Configuration.ReadOptimizationOptions>? readOptions = null,
+        ILogger<DomainQueryService>? logger = null)
     {
         _supabase = supabase;
         _metadata = metadata ?? new DisplayMetadataService(supabase);
         _packageCache = packageCache;
+        _readOptions = readOptions?.Value ?? new();
+        _logger = logger;
     }
 
     public Task<RiderMetricsContext> ParseMetricsContextAsync(
@@ -491,6 +499,30 @@ public sealed class DomainQueryService
             return null;
         }
 
+        if (_readOptions.TypedRanking && !includeSplits)
+        {
+            var payloads = cacheRows.Select(row => row["payload"]).OfType<JsonObject>().ToArray();
+            var read = CompactMetricsPackageParser.ParseRankingReadData(payloads);
+            var pace = new List<PacePrecomputedSessionData>();
+            foreach (var payload in payloads)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                // Packages are immutable and revision-specific. Scoped reuse never outlives the request.
+                lock (_preparedPackages)
+                {
+                    if (!_preparedPackages.TryGetValue(payload, out var prepared))
+                    {
+                        prepared = CompactMetricsPackageParser.ParsePreparedRankingRead([payload]).PaceSessions;
+                        _preparedPackages[payload] = prepared;
+                    }
+                    pace.AddRange(prepared);
+                }
+            }
+            read = read with { Results = read.Results.Where(r => MatchesRankingRider(r.Rider, riderQuery, nation)).ToArray() };
+            var selectedRiderIds = read.Results.Select(r => r.String("rider_id")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return new RiderDetailDataBundle(read.ToLegacy(), pace.Where(p => selectedRiderIds.Contains(p.Run.RiderId)).ToArray(), read);
+        }
+
         var parsed = CompactMetricsPackageParser.ParseRiderDetailDataBundle(cacheRows
             .Select(row => row["payload"])
             .OfType<JsonObject>().ToArray());
@@ -550,6 +582,35 @@ public sealed class DomainQueryService
         var payload = BuildMetricsRpcPayload(filters, resolvedSessionIds);
         payload["p_rider_id"] = LongNode(riderId);
 
+        if (_readOptions.PreparedRiderDetails && string.IsNullOrWhiteSpace(filters.Status))
+        {
+            var preparedPayload = payload.DeepClone().AsObject();
+            preparedPayload["p_algorithm_version"] = RankingPreaggregationService.AlgorithmVersion;
+            JsonNode? prepared = null;
+            try
+            {
+                prepared = await _supabase.RpcAsync("get_prepared_rider_detail_data", preparedPayload, role, cancellationToken);
+            }
+            catch (SupabaseApiException ex) when (ex.StatusCode == 404)
+            {
+                _logger?.LogWarning("Prepared rider detail RPC unavailable; using legacy read.");
+            }
+
+            if (prepared is JsonObject envelope && envelope.Bool("complete") == true && envelope["payload"] is JsonObject data)
+            {
+                try
+                {
+                    if (CompactMetricsPackageParser.HasCompletePreparedFinishes(data))
+                        return RestrictToCategories(ParseRiderDetailDataBundle(data), filters);
+                }
+                catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException or ArgumentException or IndexOutOfRangeException)
+                {
+                    _logger?.LogWarning("Invalid prepared rider detail payload ({ErrorType}); using legacy read.", ex.GetType().Name);
+                }
+                _logger?.LogWarning("Incomplete prepared rider detail payload; using legacy read.");
+            }
+        }
+
         var response = await _supabase.RpcAsync(
             "get_rider_detail_data",
             payload,
@@ -585,6 +646,16 @@ public sealed class DomainQueryService
         RiderDetailDataBundle bundle,
         RiderMetricsContext filters)
     {
+        if (bundle.ReadData is { } read)
+        {
+            var categories = RequestedCategoryCodes(filters);
+            if (categories.Count == 0) return bundle;
+            var sessions = read.Sessions.Where(s => categories.Contains(CanonicalCategoryCode(s.Object("categories")?.String("code")))).ToArray();
+            var ids = sessions.Select(s => s.String("id")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            read = read with { Sessions = sessions, Results = read.Results.Where(r => ids.Contains(r.String("session_id"))).ToArray(),
+                FieldResults = read.FieldResults.Where(r => ids.Contains(r.String("session_id"))).ToArray() };
+            return new RiderDetailDataBundle(read.ToLegacy(),bundle.PaceSessions.Where(p => ids.Contains(p.SessionId)).ToArray(),read);
+        }
         var data = RestrictToCategories(bundle.Data, filters);
         if (ReferenceEquals(data, bundle.Data))
         {
@@ -1483,6 +1554,9 @@ public sealed class DomainQueryService
     }
 
     public static JsonArray BuildTeamHistory(IEnumerable<JsonObject> results)
+        => BuildTeamHistory(results.Select(RankingReadResult.FromLegacy));
+
+    internal static JsonArray BuildTeamHistory(IEnumerable<RankingReadResult> results)
     {
         var teams = results
             .Where(result => result.Object("teams") is not null)
@@ -1603,6 +1677,9 @@ public sealed class DomainQueryService
             : null;
 
     internal static string? ResultDate(JsonObject result)
+        => ResultDate(RankingReadResult.FromLegacy(result));
+
+    private static string? ResultDate(RankingReadResult result)
     {
         var session = result.Object("sessions");
         return session?.String("session_date") ?? session?.Object("rounds")?.String("start_date");
@@ -1611,4 +1688,5 @@ public sealed class DomainQueryService
 
 internal sealed record RiderDetailDataBundle(
     RankingDataBundle Data,
-    IReadOnlyList<PacePrecomputedSessionData> PaceSessions);
+    IReadOnlyList<PacePrecomputedSessionData> PaceSessions,
+    RankingReadData? ReadData = null);

@@ -61,7 +61,7 @@ public sealed class ChronoRaceBatchImportTests
         Assert.Equal(2, supabase.PostedRows["results"].Count);
         Assert.Equal(2, supabase.PostedRows["time_splits"].Count);
         Assert.Equal(
-            ["refresh_rider_team_history", "refresh_ranking_session_preaggregate"],
+            ["refresh_rider_team_history", "refresh_ranking_session_preaggregate", "save_prepared_ranking_session"],
             supabase.RpcCalls);
         Assert.All(supabase.PostedRows["time_splits"], row =>
             Assert.Equal("401", row.String("result_id")));
@@ -91,7 +91,7 @@ public sealed class ChronoRaceBatchImportTests
         Assert.Equal([1, 2], supabase.PostedRows["time_splits"]
             .Where(row => row.String("result_id") == "401")
             .Select(row => row.Int("split_index")));
-        Assert.Equal(["refresh_ranking_session_preaggregate"], supabase.RpcCalls);
+        Assert.Equal(["refresh_ranking_session_preaggregate", "save_prepared_ranking_session"], supabase.RpcCalls);
     }
 
     [Fact]
@@ -301,6 +301,7 @@ public sealed class ChronoRaceBatchImportTests
                 "rounds" => new JsonObject { ["id"] = "5" },
                 "round_categories" => new JsonObject { ["round_id"] = "5", ["category_id"] = "4" },
                 "sessions" => new JsonObject { ["id"] = "6" },
+                "ranking_session_preaggregates" => new JsonObject { ["source_revision"] = Guid.Empty.ToString(), ["payload"] = new JsonObject() },
                 _ => throw new NotSupportedException($"Unexpected single GET table '{query.Table}'.")
             };
             return Task.FromResult<JsonObject?>(row);
@@ -377,10 +378,11 @@ public sealed class ChronoRaceBatchImportTests
                 {
                     "refresh_rider_team_history",
                     "refresh_ranking_session_preaggregate",
+                      "save_prepared_ranking_session",
                     "recalculate_session_points"
                 });
             Assert.Equal(SupabaseRole.Service, role);
-            return Task.FromResult<JsonNode?>(null);
+            return Task.FromResult<JsonNode?>(functionName == "save_prepared_ranking_session" ? JsonValue.Create(true) : null);
         }
 
         private static JsonObject WithId(JsonObject payload, string id)

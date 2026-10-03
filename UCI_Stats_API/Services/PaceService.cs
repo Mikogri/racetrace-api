@@ -377,13 +377,19 @@ public sealed class PaceService
         IReadOnlyList<JsonObject> selectedResults,
         IReadOnlyList<PacePrecomputedSessionData> precomputedSessions,
         IReadOnlyList<JsonObject>? availableSessions = null)
+        => CalculatePrecomputed(selectedResults.Select(RankingReadResult.FromLegacy).ToArray(), precomputedSessions, availableSessions);
+
+    internal IReadOnlyDictionary<string, RiderPerformanceMetricValues> CalculatePrecomputed(
+        IReadOnlyList<RankingReadResult> selectedResults,
+        IReadOnlyList<PacePrecomputedSessionData> precomputedSessions,
+        IReadOnlyList<JsonObject>? availableSessions = null)
     {
         var resultsByRiderId = selectedResults
             .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")))
             .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 group => group.Key,
-                group => (IReadOnlyList<JsonObject>)group.ToArray(),
+                group => (IReadOnlyList<RankingReadResult>)group.ToArray(),
                 StringComparer.OrdinalIgnoreCase);
         if (resultsByRiderId.Count == 0)
         {
@@ -394,9 +400,9 @@ public sealed class PaceService
             .Where(result =>
                 !DownhillPaceCalculator.IsDisqualified(result.String("status")) &&
                 !string.IsNullOrWhiteSpace(result.String("rider_id")) &&
-                !string.IsNullOrWhiteSpace(ResultSessionId(result)))
+                !string.IsNullOrWhiteSpace((result.String("session_id") ?? result.Session?.String("id"))))
             .Select(result => ConsistencyPaceKey(
-                ResultSessionId(result)!,
+                (result.String("session_id") ?? result.Session?.String("id"))!,
                 result.String("rider_id")!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var applicableSessions = _paceCalculator.PrepareField(precomputedSessions)
@@ -521,6 +527,12 @@ public sealed class PaceService
         IReadOnlyList<string> riderIds,
         IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> selectedResultsByRiderId,
         IReadOnlyList<JsonObject>? availableSessions)
+        => BuildAvailableFinalCounts(riderIds, selectedResultsByRiderId.ToDictionary(p => p.Key, p => (IReadOnlyList<RankingReadResult>)p.Value.Select(RankingReadResult.FromLegacy).ToArray(), StringComparer.OrdinalIgnoreCase), availableSessions);
+
+    private static IReadOnlyDictionary<string, int?> BuildAvailableFinalCounts(
+        IReadOnlyList<string> riderIds,
+        IReadOnlyDictionary<string, IReadOnlyList<RankingReadResult>> selectedResultsByRiderId,
+        IReadOnlyList<JsonObject>? availableSessions)
     {
         if (availableSessions is null)
         {
@@ -542,7 +554,7 @@ public sealed class PaceService
             riderId =>
             {
                 var categoryIds = selectedResultsByRiderId
-                    .GetValueOrDefault(riderId, Array.Empty<JsonObject>())
+                    .GetValueOrDefault(riderId, Array.Empty<RankingReadResult>())
                     .Select(ResultCategoryId)
                     .Where(categoryId => !string.IsNullOrWhiteSpace(categoryId))
                     .Select(categoryId => categoryId!)
@@ -561,19 +573,30 @@ public sealed class PaceService
         IReadOnlyList<string> riderIds,
         IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> selectedResultsByRiderId,
         IReadOnlyList<JsonObject>? availableSessions)
+        => BuildNonFinalistFlags(riderIds, selectedResultsByRiderId.ToDictionary(p => p.Key, p => (IReadOnlyList<RankingReadResult>)p.Value.Select(RankingReadResult.FromLegacy).ToArray(), StringComparer.OrdinalIgnoreCase), availableSessions);
+
+    private static IReadOnlyDictionary<string, bool> BuildNonFinalistFlags(
+        IReadOnlyList<string> riderIds,
+        IReadOnlyDictionary<string, IReadOnlyList<RankingReadResult>> selectedResultsByRiderId,
+        IReadOnlyList<JsonObject>? availableSessions)
     {
         return riderIds.ToDictionary(
             riderId => riderId,
             riderId => IsNonFinalist(
                 selectedResultsByRiderId.GetValueOrDefault(
                     riderId,
-                    Array.Empty<JsonObject>()),
+                    Array.Empty<RankingReadResult>()),
                 availableSessions),
             StringComparer.OrdinalIgnoreCase);
     }
 
     internal static bool IsNonFinalist(
         IReadOnlyList<JsonObject> riderResults,
+        IReadOnlyList<JsonObject>? availableSessions)
+        => IsNonFinalist(riderResults.Select(RankingReadResult.FromLegacy).ToArray(), availableSessions);
+
+    internal static bool IsNonFinalist(
+        IReadOnlyList<RankingReadResult> riderResults,
         IReadOnlyList<JsonObject>? availableSessions)
     {
         if (availableSessions is null)
@@ -629,7 +652,7 @@ public sealed class PaceService
             string.Equals(SessionRoundCategoryKey(session), key, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string? ResultRoundCategoryKey(JsonObject result)
+    private static string? ResultRoundCategoryKey(RankingReadResult result)
     {
         var session = result.Object("sessions");
         return session is null ? null : SessionRoundCategoryKey(session);
@@ -650,7 +673,9 @@ public sealed class PaceService
             : $"{roundId}\u001f{categoryId}";
     }
 
-    private static string? ResultCategoryId(JsonObject result)
+    private static string? ResultCategoryId(JsonObject result) => ResultCategoryId(RankingReadResult.FromLegacy(result));
+
+    private static string? ResultCategoryId(RankingReadResult result)
     {
         var session = result.Object("sessions");
         return session?.String("category_id") ??
@@ -985,6 +1010,9 @@ public sealed class PaceService
     }
 
     internal static string BuildCourseKey(JsonObject result)
+        => BuildCourseKey(RankingReadResult.FromLegacy(result));
+
+    internal static string BuildCourseKey(RankingReadResult result)
     {
         var session = result.Object("sessions");
         var round = session?.Object("rounds") ?? session?.Object("round_categories")?.Object("rounds");
@@ -1006,7 +1034,7 @@ public sealed class PaceService
             return $"track:{trackId}:season:{seasonYear}:category:{categoryId}";
         }
 
-        return $"session:{ResultSessionId(result) ?? result.String("id") ?? "unknown"}";
+        return $"session:{result.String("session_id") ?? session?.String("id") ?? result.String("id") ?? "unknown"}";
     }
 
     private RiderPerformanceMetricValues ToMetric(
