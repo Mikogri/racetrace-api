@@ -521,4 +521,3 @@ GRANT EXECUTE ON FUNCTION public.get_ranking_points_raw_summary(integer[],bigint
 
 NOTIFY pgrst, 'reload schema';
 COMMIT;
-
