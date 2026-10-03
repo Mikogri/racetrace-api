@@ -20,6 +20,8 @@ public sealed class DomainQueryService
     private readonly DisplayMetadataService _metadata;
     private readonly IMemoryCache? _packageCache;
     private Task<DisplayMetadataDto>? _metadataTask;
+    private readonly object _teamHistoryLock = new();
+    private readonly Dictionary<(string Ids, DateOnly? From, DateOnly? To), Task<IReadOnlyList<JsonObject>>> _teamHistoryReads = [];
 
     public const string ResultSelect = "*,riders(*),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,conditions(*),round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
 
@@ -472,7 +474,7 @@ public sealed class DomainQueryService
                 _packageCache?.Set($"ranking-package:{packageKind}:{role}:{id}", row, TimeSpan.FromSeconds(30));
             }
         }
-        // Keep RPC ordering and clone payloads during merging; cached JSON must not be mutated.
+        // Keep RPC ordering; the parser reads cached rows without creating a merged JSON copy.
         var cacheRows = packages.Values.OrderBy(row => PublicDtoMapping.Long(row.String("session_id"))).ToArray();
         if (cacheRows.Length == 0)
         {
@@ -489,10 +491,9 @@ public sealed class DomainQueryService
             return null;
         }
 
-        var merged = MergeCompactPackages(cacheRows
+        var parsed = CompactMetricsPackageParser.ParseRiderDetailDataBundle(cacheRows
             .Select(row => row["payload"])
-            .OfType<JsonObject>());
-        var parsed = ParseRiderDetailDataBundle(merged);
+            .OfType<JsonObject>().ToArray());
         if (string.IsNullOrWhiteSpace(riderQuery) && string.IsNullOrWhiteSpace(nation))
         {
             return parsed;
@@ -510,29 +511,6 @@ public sealed class DomainQueryService
             parsed.PaceSessions
                 .Where(session => riderIds.Contains(session.Run.RiderId))
                 .ToArray());
-    }
-
-    private static JsonObject MergeCompactPackages(IEnumerable<JsonObject> packages)
-    {
-        var merged = new JsonObject { ["v"] = 2 };
-        foreach (var property in new[] { "s", "r", "f", "x", "d", "t", "a", "q", "g", "h" })
-        {
-            merged[property] = new JsonArray();
-        }
-
-        foreach (var package in packages)
-        {
-            foreach (var property in new[] { "s", "r", "f", "x", "d", "t", "a", "q", "g", "h" })
-            {
-                var target = merged[property]!.AsArray();
-                foreach (var item in package[property]?.AsArray() ?? [])
-                {
-                    target.Add(item?.DeepClone());
-                }
-            }
-        }
-
-        return merged;
     }
 
     internal static bool MatchesRankingRider(JsonObject? rider, string? riderQuery, string? nation)
@@ -580,16 +558,21 @@ public sealed class DomainQueryService
         return RestrictToCategories(ParseRiderDetailDataBundle(response), filters);
     }
 
-    internal async Task<JsonObject[]?> GetPointsSummaryAsync(
-        IReadOnlyList<JsonObject> sessions, CancellationToken cancellationToken)
+    internal async Task<JsonObject[]> GetPointsSummaryAsync(
+        RiderMetricsContext filters, IReadOnlyList<JsonObject> sessions, CancellationToken cancellationToken)
     {
         var ids = sessions.Select(session => session.String("id")).OfType<string>().Distinct().ToArray();
         if (ids.Length == 0) return [];
         var response = await _supabase.RpcAsync("get_ranking_points_summary",
             new JsonObject { ["p_session_ids"] = LongArray(ids) }, SupabaseRole.Anon, cancellationToken);
+        if (response is JsonObject cached && cached.Bool("complete") == false)
+            response = await _supabase.RpcAsync("get_ranking_points_raw_summary",
+                BuildMetricsRpcPayload(filters, ids),
+                SupabaseRole.Anon, cancellationToken);
         if (response is not JsonObject package || package.Array("rows") is not { } rows)
             throw new ApiException(502, "POINTS_DATA_INVALID", "Supabase returned an invalid points summary.");
-        if (package.Bool("complete") != true) return null;
+        if (package.Bool("complete") != true)
+            throw new ApiException(502, "POINTS_DATA_INVALID", "Supabase returned an incomplete points summary.");
         return rows.OfType<JsonObject>().Select(row => new JsonObject
         {
             ["rider_id"] = row.String("rider_id"),
@@ -950,6 +933,40 @@ public sealed class DomainQueryService
             return [];
         }
 
+        // Scoped to this HTTP request, not a cross-request cache. Import reads must
+        // remain fresh because privileged callers may update history in the same scope.
+        if (role != SupabaseRole.Anon)
+            return await LoadRiderTeamHistoryAsync(ids, fromDate, toDate, role, cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var key = (string.Join('\u001f', ids), fromDate, toDate);
+        Task<IReadOnlyList<JsonObject>> pending;
+        lock (_teamHistoryLock)
+        {
+            if (!_teamHistoryReads.TryGetValue(key, out pending!))
+            {
+                pending = LoadRiderTeamHistoryAsync(ids, fromDate, toDate, role, cancellationToken);
+                _teamHistoryReads[key] = pending;
+            }
+        }
+        try
+        {
+            var history = await pending.WaitAsync(cancellationToken);
+            return history.Select(row => row.DeepClone().AsObject()).ToArray();
+        }
+        catch
+        {
+            if (pending.IsFaulted || pending.IsCanceled)
+                lock (_teamHistoryLock)
+                    if (_teamHistoryReads.TryGetValue(key, out var current) && ReferenceEquals(current, pending))
+                        _teamHistoryReads.Remove(key);
+            throw;
+        }
+    }
+
+    private async Task<IReadOnlyList<JsonObject>> LoadRiderTeamHistoryAsync(
+        string[] ids, DateOnly? fromDate, DateOnly? toDate, SupabaseRole role, CancellationToken cancellationToken)
+    {
         var rows = new List<JsonObject>();
         foreach (var batch in ids.Chunk(RiderFilterBatchSize))
         {

@@ -17,9 +17,14 @@ internal static class CompactMetricsPackageParser
                 "RANKING_DATA_INVALID",
                 "Supabase returned an invalid ranking data package.");
 
+        return ParseRankingDataBundle([root]);
+    }
+
+    private static RankingDataBundle ParseRankingDataBundle(IReadOnlyList<JsonObject> packages)
+    {
         var sessions = new List<JsonObject>();
         var sessionsById = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in CompactRows(root, "s"))
+        foreach (var row in CompactRows(packages, "s"))
         {
             var id = CompactString(row, 0);
             if (string.IsNullOrWhiteSpace(id))
@@ -81,7 +86,7 @@ internal static class CompactMetricsPackageParser
         }
 
         var ridersById = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in CompactRows(root, "d"))
+        foreach (var row in LastRowsById(packages, "d"))
         {
             var id = CompactString(row, 0);
             if (string.IsNullOrWhiteSpace(id))
@@ -124,7 +129,7 @@ internal static class CompactMetricsPackageParser
         }
 
         var teamsById = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in CompactRows(root, "t"))
+        foreach (var row in LastRowsById(packages, "t"))
         {
             var id = CompactString(row, 0);
             if (string.IsNullOrWhiteSpace(id))
@@ -142,7 +147,7 @@ internal static class CompactMetricsPackageParser
 
         var results = new List<JsonObject>();
         var pointsByResultId = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in CompactRows(root, "r"))
+        foreach (var row in CompactRows(packages, "r"))
         {
             var resultId = CompactString(row, 0);
             var riderId = CompactString(row, 1);
@@ -210,7 +215,7 @@ internal static class CompactMetricsPackageParser
             pointsByResultId[resultId] = awardedPoints;
         }
 
-        var compactFieldRows = CompactRows(root, "f").ToArray();
+        var compactFieldRows = CompactRows(packages, "f").ToArray();
         IReadOnlyList<JsonObject> fieldResults = compactFieldRows.Length == 0
             ? results
             : compactFieldRows
@@ -233,7 +238,7 @@ internal static class CompactMetricsPackageParser
                 })
                 .ToArray();
 
-        var splits = CompactRows(root, "x")
+        var splits = CompactRows(packages, "x")
             .Select(row => new JsonObject
             {
                 ["result_id"] = CompactClone(row, 0),
@@ -261,20 +266,25 @@ internal static class CompactMetricsPackageParser
                 StatusCodes.Status502BadGateway,
                 "RIDER_DETAIL_DATA_INVALID",
                 "Supabase returned an invalid rider-detail data package.");
-        var data = ParseRankingDataBundle(root);
+        return ParseRiderDetailDataBundle([root]);
+    }
+
+    internal static RiderDetailDataBundle ParseRiderDetailDataBundle(IReadOnlyList<JsonObject> packages)
+    {
+        var data = ParseRankingDataBundle(packages);
         var resultsById = data.Results
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
             .ToDictionary(
                 result => result.String("id")!,
                 result => result,
                 StringComparer.OrdinalIgnoreCase);
-        var compactSessionStatistics = CompactRows(root, "h")
+        var compactSessionStatistics = CompactRows(packages, "h")
             .Where(row => !string.IsNullOrWhiteSpace(CompactString(row, 0)))
             .ToDictionary(
                 row => CompactString(row, 0)!,
                 row => row,
                 StringComparer.OrdinalIgnoreCase);
-        var compactSectorStatistics = CompactRows(root, "g")
+        var compactSectorStatistics = CompactRows(packages, "g")
             .Where(row =>
                 !string.IsNullOrWhiteSpace(CompactString(row, 0)) &&
                 CompactInt(row, 1).HasValue)
@@ -284,7 +294,7 @@ internal static class CompactMetricsPackageParser
                 StringComparer.OrdinalIgnoreCase);
         var hasCompactStatistics = compactSessionStatistics.Count > 0 ||
             compactSectorStatistics.Count > 0;
-        var sectorRowsByResultId = CompactRows(root, "q")
+        var sectorRowsByResultId = CompactRows(packages, "q")
             .Where(row => !string.IsNullOrWhiteSpace(CompactString(row, 0)))
             .GroupBy(row => CompactString(row, 0)!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
@@ -293,7 +303,7 @@ internal static class CompactMetricsPackageParser
                 StringComparer.OrdinalIgnoreCase);
 
         var sessions = new List<PacePrecomputedSessionData>();
-        foreach (var aggregateRow in CompactRows(root, "a")
+        foreach (var aggregateRow in CompactRows(packages, "a")
             .Where(row =>
                 !string.IsNullOrWhiteSpace(CompactString(row, 0)) &&
                 !string.IsNullOrWhiteSpace(CompactString(row, 1))))
@@ -391,7 +401,7 @@ internal static class CompactMetricsPackageParser
         var cohort = new Dictionary<(string Session, string Rider), PacePrecomputedSessionData>();
         foreach (var s in sessions) cohort[(s.SessionId, s.Run.RiderId)] = s;
         var templates = sessions.GroupBy(s => s.SessionId).ToDictionary(g => g.Key, g => g.First());
-        foreach (var row in CompactRows(root, "i"))
+        foreach (var row in CompactRows(packages, "i"))
         {
             var sessionId = CompactString(row, 0);
             var riderId = CompactString(row, 1);
@@ -450,10 +460,21 @@ internal static class CompactMetricsPackageParser
             ? parsed
             : null;
 
-    private static IEnumerable<JsonArray> CompactRows(JsonObject root, string property) =>
-        root[property] is JsonArray rows
+    private static IEnumerable<JsonArray> CompactRows(IReadOnlyList<JsonObject> packages, string property) =>
+        packages.SelectMany(root => root[property] is JsonArray rows
             ? rows.OfType<JsonArray>()
-            : [];
+            : []);
+
+    // Identity dictionaries have always used the last row across the whole package set.
+    // Resolve duplicates before allocating expanded JSON, without mutating cached payloads.
+    private static IEnumerable<JsonArray> LastRowsById(IReadOnlyList<JsonObject> packages, string property)
+    {
+        var rows = new Dictionary<string, JsonArray>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in CompactRows(packages, property))
+            if (CompactString(row, 0) is { } id && !string.IsNullOrWhiteSpace(id))
+                rows[id] = row;
+        return rows.Values;
+    }
 
     private static JsonNode? CompactClone(JsonArray row, int index) =>
         index < row.Count ? row[index]?.DeepClone() : null;
