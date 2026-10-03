@@ -190,6 +190,8 @@ public sealed class UciMtbWorldSeriesSupplementTests
             CancellationToken cancellationToken = default)
         {
             Roles.Add(role);
+            if (query.Table == "ranking_session_preaggregates")
+                return Task.FromResult<JsonObject?>(new JsonObject { ["source_revision"] = Guid.Empty.ToString(), ["payload"] = new JsonObject() });
             Assert.Equal("sessions", query.Table);
             return Task.FromResult<JsonObject?>(new JsonObject { ["id"] = 25 });
         }
@@ -243,12 +245,12 @@ public sealed class UciMtbWorldSeriesSupplementTests
             Roles.Add(role);
             Assert.Contains(
                 functionName,
-                new[] { "recalculate_session_points", "refresh_ranking_session_preaggregate" });
+                new[] { "recalculate_session_points", "refresh_ranking_session_preaggregate", "save_prepared_ranking_session" });
             if (functionName == "recalculate_session_points")
             {
                 PointsRecalculated = true;
             }
-            return Task.FromResult<JsonNode?>(null);
+            return Task.FromResult<JsonNode?>(functionName == "save_prepared_ranking_session" ? JsonValue.Create(true) : null);
         }
     }
 }

@@ -179,13 +179,7 @@ public sealed class ChronoRaceRoundFormImportService
 
             foreach (var sessionIdValue in sessionIds)
             {
-				var sessionId = long.Parse(sessionIdValue);
-
-                await _supabase.RpcAsync(
-                    "refresh_ranking_session_preaggregate",
-                    new JsonObject { ["p_session_id"] = sessionId },
-                    SupabaseRole.Service,
-                    cancellationToken);
+                await new RankingPreaggregationService(_supabase).RefreshAsync(sessionIdValue, cancellationToken);
             }
 
 			if (sessionIds.Length > 0)

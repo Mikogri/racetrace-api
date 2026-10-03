@@ -139,12 +139,10 @@ public sealed class PointsService
         {
             try
             {
-                await _supabase.RpcAsync(
-                    "refresh_ranking_session_preaggregate",
-                    new JsonObject { ["p_session_id"] = long.Parse(sessionId) },
-                    SupabaseRole.Service,
-                    cancellationToken);
-                refreshed.Add(sessionId);
+                if (await new RankingPreaggregationService(_supabase).RefreshAsync(sessionId, cancellationToken))
+                    refreshed.Add(sessionId);
+                else
+                    failed.Add(sessionId);
             }
             catch (SupabaseApiException)
             {
@@ -202,7 +200,9 @@ public sealed class PointsService
         foreach (var batch in sessionIds.Chunk(100))
         {
             var response = await _supabase.GetAsync(
-                new SupabaseQuery("ranking_session_preaggregates").Select("session_id").In("session_id", batch),
+                new SupabaseQuery("ranking_session_preaggregates").Select("session_id")
+                    .Filter("prepared_version", "eq", RankingPreaggregationService.AlgorithmVersion)
+                    .Filter("prepared_payload", "not.is", "null").In("session_id", batch),
                 role: SupabaseRole.Service,
                 cancellationToken: cancellationToken);
             foreach (var row in response.Data)
@@ -220,11 +220,7 @@ public sealed class PointsService
     private async Task TryRecalculateSessionAsync(string sessionId, JsonArray recalculated, CancellationToken cancellationToken)
     {
         var result = await _pointAwards.RecalculateSessionAsync(sessionId, cancellationToken);
-        await _supabase.RpcAsync(
-            "refresh_ranking_session_preaggregate",
-            new JsonObject { ["p_session_id"] = long.Parse(sessionId) },
-            SupabaseRole.Service,
-            cancellationToken);
+        await new RankingPreaggregationService(_supabase).RefreshAsync(sessionId, cancellationToken);
         recalculated.Add(new JsonObject
         {
             ["session_id"] = sessionId,

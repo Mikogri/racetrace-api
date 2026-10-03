@@ -21,6 +21,9 @@ internal static class CompactMetricsPackageParser
     }
 
     private static RankingDataBundle ParseRankingDataBundle(IReadOnlyList<JsonObject> packages)
+        => ParseRankingReadData(packages).ToLegacy();
+
+    internal static RankingReadData ParseRankingReadData(IReadOnlyList<JsonObject> packages)
     {
         var sessions = new List<JsonObject>();
         var sessionsById = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
@@ -145,7 +148,7 @@ internal static class CompactMetricsPackageParser
             };
         }
 
-        var results = new List<JsonObject>();
+        var results = new List<RankingReadResult>();
         var pointsByResultId = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in CompactRows(packages, "r"))
         {
@@ -196,7 +199,7 @@ internal static class CompactMetricsPackageParser
                 };
             }
             var awardedPoints = CompactDecimal(row, 8) ?? 0m;
-            results.Add(new JsonObject
+            results.Add(new RankingReadResult(new JsonObject
             {
                 ["id"] = CompactClone(row, 0),
                 ["rider_id"] = CompactClone(row, 1),
@@ -206,24 +209,21 @@ internal static class CompactMetricsPackageParser
                 ["position"] = CompactClone(row, 5),
                 ["is_classified"] = CompactClone(row, 6),
                 ["status"] = CompactClone(row, 7),
-                ["awarded_points"] = awardedPoints,
-                ["riders"] = rider?.DeepClone(),
-                ["teams"] = team?.DeepClone(),
-                ["sessions"] = session?.DeepClone()
-            });
+                ["awarded_points"] = awardedPoints
+            }, rider, team, session));
 
             pointsByResultId[resultId] = awardedPoints;
         }
 
         var compactFieldRows = CompactRows(packages, "f").ToArray();
-        IReadOnlyList<JsonObject> fieldResults = compactFieldRows.Length == 0
+        IReadOnlyList<RankingReadResult> fieldResults = compactFieldRows.Length == 0
             ? results
             : compactFieldRows
                 .Select(row =>
                 {
                     var sessionId = CompactString(row, 2);
                     sessionsById.TryGetValue(sessionId ?? string.Empty, out var session);
-                    return new JsonObject
+                    return new RankingReadResult(new JsonObject
                     {
                         ["id"] = CompactClone(row, 0),
                         ["rider_id"] = CompactClone(row, 1),
@@ -232,9 +232,8 @@ internal static class CompactMetricsPackageParser
                         ["top_speed"] = CompactClone(row, 4),
                         ["position"] = CompactClone(row, 5),
                         ["is_classified"] = CompactClone(row, 6),
-                        ["status"] = CompactClone(row, 7),
-                        ["sessions"] = session?.DeepClone()
-                    };
+                        ["status"] = CompactClone(row, 7)
+                    }, null, null, session, IncludeRiderMetadata: false);
                 })
                 .ToArray();
 
@@ -250,7 +249,7 @@ internal static class CompactMetricsPackageParser
             })
             .ToArray();
 
-        return new RankingDataBundle(
+        return new RankingReadData(
             sessions,
             results,
             fieldResults,
@@ -271,7 +270,13 @@ internal static class CompactMetricsPackageParser
 
     internal static RiderDetailDataBundle ParseRiderDetailDataBundle(IReadOnlyList<JsonObject> packages)
     {
-        var data = ParseRankingDataBundle(packages);
+        var read = ParsePreparedRankingRead(packages);
+        return new RiderDetailDataBundle(read.Data.ToLegacy(), read.PaceSessions);
+    }
+
+    internal static (RankingReadData Data, IReadOnlyList<PacePrecomputedSessionData> PaceSessions) ParsePreparedRankingRead(IReadOnlyList<JsonObject> packages)
+    {
+        var data = ParseRankingReadData(packages);
         var resultsById = data.Results
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
             .ToDictionary(
@@ -419,10 +424,53 @@ internal static class CompactMetricsPackageParser
                 PaceFinish = null
             };
         }
+        var savedFinishes = CompactRows(packages, "pf")
+            .ToDictionary(r => (CompactString(r, 0)!, CompactString(r, 1)!),
+                r => ParseFieldSummary(r, 4) is { } summary
+                    ? new PaceFinishReference(CompactDouble(r, 2), CompactDouble(r, 3) ?? 0, summary)
+                    : null);
+        foreach (var key in cohort.Keys)
+            if (savedFinishes.TryGetValue(key, out var finish))
+                cohort[key] = cohort[key] with { PaceFinish = finish };
         var prepared = new DownhillPaceCalculator().PrepareField(cohort.Values.ToArray())
             .ToDictionary(s => (s.SessionId, s.Run.RiderId));
-        return new RiderDetailDataBundle(data,
+        return (data,
             sessions.Select(s => prepared[(s.SessionId, s.Run.RiderId)]).ToArray());
+    }
+
+    internal static bool HasCompletePreparedFinishes(JsonObject package)
+    {
+        if (package["r"] is not JsonArray results) return false;
+        var resultRows = results.OfType<JsonArray>().ToArray();
+        if (resultRows.Length != results.Count) return false;
+        var rows = resultRows.ToDictionary(r => CompactString(r, 0)!);
+        var aggregates = CompactRows([package], "a").ToArray();
+        if (aggregates.Length != results.Count ||
+            aggregates.Select(a => CompactString(a, 0)).Distinct().Count() != results.Count)
+            return false;
+        var finishes = CompactRows([package], "pf").ToArray();
+        if (finishes.Length != results.Count || finishes.Any(row => !IsValidPreparedFinish(row))) return false;
+        var keys = finishes.Select(row => (CompactString(row, 0), CompactString(row, 1))).ToHashSet();
+        if (keys.Count != finishes.Length) return false;
+        return aggregates.All(aggregate =>
+            rows.TryGetValue(CompactString(aggregate, 0) ?? "", out var result) &&
+            CompactString(aggregate, 1) == CompactString(result, 2) &&
+            keys.Contains((CompactString(aggregate, 1), CompactString(result, 1))));
+    }
+
+    private static bool IsValidPreparedFinish(JsonArray row)
+    {
+        if (row.Count != 11 || CompactString(row, 0) is null || CompactString(row, 1) is null)
+            return false;
+        // No classified field/reference is a valid explicit absence, not a partial summary.
+        if (row.Skip(2).All(value => value is null)) return true;
+        if (CompactInt(row, 4) is not > 0) return false;
+        for (var index = 2; index < row.Count; index++)
+        {
+            if (index is 2 or 9 or 10 && row[index] is null) continue;
+            if (CompactDouble(row, index) is not { } value || !double.IsFinite(value)) return false;
+        }
+        return true;
     }
 
     private static PaceFieldSummary? ParseFieldSummary(JsonArray row, int offset)
