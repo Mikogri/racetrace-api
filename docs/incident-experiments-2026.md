@@ -64,7 +64,7 @@ Korekta usuwa nadwyżkę względem **własnego przewidywanego tempa**, nie cały
 Z katalogu głównego repozytorium API:
 
 ```powershell
-python tools/incident-experiments.py --input artifacts/incident-audit/inputs-2026.json --baseline artifacts/incident-audit/current.json --labels tools/UCI_Stats_API.PodiumBacktest/Fixtures/incidents-2026.csv --output artifacts/incident-experiments
+python tools/incident-experiments.py --input artifacts/incident-audit/inputs-2026.json --baseline artifacts/incident-audit/current.json --labels tools/racetrace-api.PodiumBacktest/Fixtures/incidents-2026.csv --output artifacts/incident-experiments
 ```
 
 Python, tylko biblioteka standardowa. Każde uruchomienie wykonuje kontrole: równy wolny/szybki przejazd, drobna strata, samotna strata 5 s, brak pomiarów, spadek pozycji bez istotnej straty, stabilna grupa porównawcza oraz zakaz rekonstrukcji DNF, błędnego pomiaru i straty bez powrotu tempa.

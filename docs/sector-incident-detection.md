@@ -31,7 +31,7 @@
 
 `PacePrecomputedSessionData.PaceFinish` holds an immutable calculation-only reference. `Run.FinishTimeSeconds`, finishing positions, points and displayed result times remain original. Preparation happens before rider/search filtering; filtering cannot shrink the reference field. Partial legacy packets retain the legacy checkpoint fallback rather than pretending a partial population is complete.
 
-The additive migration `UCI_Stats_API/supabase/migrations/20260930212704_pace_incident_field_context.sql` extends `get_rider_detail_data` with compact `i` rows: `[sessionId, riderId, finishSeconds, [[sectorIndex, seconds, rank], ...]]`. Only classified rival timing data is added, without identities/teams/splits or repeated statistics. It reuses the existing SQL CTEs in the same RPC; detection stays in C#, not duplicated in SQL. Full ranking packets already carry this population, so existing preaggregates do not need rebuilding. Detail parsing reuses the selected rider's shared field statistics and returns only the originally selected rider rows.
+The additive migration `racetrace-api/supabase/migrations/20260930212704_pace_incident_field_context.sql` extends `get_rider_detail_data` with compact `i` rows: `[sessionId, riderId, finishSeconds, [[sectorIndex, seconds, rank], ...]]`. Only classified rival timing data is added, without identities/teams/splits or repeated statistics. It reuses the existing SQL CTEs in the same RPC; detection stays in C#, not duplicated in SQL. Full ranking packets already carry this population, so existing preaggregates do not need rebuilding. Detail parsing reuses the selected rider's shared field statistics and returns only the originally selected rider rows.
 
 Fast-sector selection rounds only its sorting key to nine decimal places, preventing ~1e-12 transport differences from selecting differently weighted tied sectors. Calculations retain full precision.
 
@@ -40,14 +40,14 @@ Fast-sector selection rounds only its sorting key to nine decimal places, preven
 From the API repository root:
 
 ```powershell
-dotnet run --project tools/UCI_Stats_API.PodiumBacktest -c Release -- --incident-audit --api UCI_Stats_API --year 2026 --output artifacts/incident-audit
+dotnet run --project tools/racetrace-api.PodiumBacktest -c Release -- --incident-audit --api racetrace-api --year 2026 --output artifacts/incident-audit
 ```
 
 The tool reads development Supabase configuration locally (credentials are not exported), fetches session preaggregations and aborts if a session package is missing. `--offline` reuses `inputs-2026.json`; `--name baseline` can capture the old calculator **before changing code**. It writes JSON calculator results, `incidents-2026.csv` and a Markdown report. The CSV includes identifiers, estimated loss, reason and an empty `Verification` column. Artifacts are ignored by Git.
 
 The audit also compares anomaly classifications using recalculated field statistics versus preaggregations, failing if classifications diverge. This checks computational consistency, not whether crashes actually occurred.
 
-`--confirmed tools/UCI_Stats_API.PodiumBacktest/Fixtures/incidents-2026.csv` evaluates the user-supplied labelled positives. `--baseline before-csv.json` compares the saved previous detector on identical runs. `--verify-details` also makes five read-only detail RPC checks against the frozen ranking inputs (Pierron, Williams, Bruni and two Höll sessions). Raw/preaggregated Pace must match to 1e-7, not only incident classifications. Name aliases live only in this audit, never in the production detector.
+`--confirmed tools/racetrace-api.PodiumBacktest/Fixtures/incidents-2026.csv` evaluates the user-supplied labelled positives. `--baseline before-csv.json` compares the saved previous detector on identical runs. `--verify-details` also makes five read-only detail RPC checks against the frozen ranking inputs (Pierron, Williams, Bruni and two Höll sessions). Raw/preaggregated Pace must match to 1e-7, not only incident classifications. Name aliases live only in this audit, never in the production detector.
 
 ## Historical validation snapshot (2026-09-30, superseded detector)
 

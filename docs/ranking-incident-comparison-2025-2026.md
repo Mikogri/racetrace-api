@@ -94,9 +94,9 @@ Input/output fingerprints (SHA-256):
 From repository root, before modifying the algorithm:
 
 ```powershell
-dotnet run --project tools/UCI_Stats_API.PodiumBacktest -c Release -- --ranking-incident-comparison --api UCI_Stats_API --name before
+dotnet run --project tools/racetrace-api.PodiumBacktest -c Release -- --ranking-incident-comparison --api racetrace-api --name before
 # After changing the calculator, replay without database requests:
-dotnet run --project tools/UCI_Stats_API.PodiumBacktest -c Release -- --ranking-incident-comparison --api UCI_Stats_API --name after --offline
+dotnet run --project tools/racetrace-api.PodiumBacktest -c Release -- --ranking-incident-comparison --api racetrace-api --name after --offline
 python tools/ranking-incident-comparison.py
 ```
 

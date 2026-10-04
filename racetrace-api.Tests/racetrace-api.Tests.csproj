@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RaceTrace.Api.Tests</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\racetrace-api\racetrace-api.csproj" />
+    <ProjectReference Include="..\tools\racetrace-api.PodiumBacktest\racetrace-api.PodiumBacktest.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove=".codex-build\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <None Update="Fixtures\pinkbike-fantasy-athletes-2026.html" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\racetrace-api\Database\20260720_stage1_competition_levels_and_point_systems.sql"
+          Link="Fixtures\point-system-schema.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

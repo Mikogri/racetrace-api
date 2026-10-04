@@ -74,7 +74,7 @@ def main():
             if (r['SessionId'], r['Run']['RiderId']) in baseline}
     sessions = {str(s['id']): s for s in data['Data']['Sessions']}
     names = {str(r['rider_id']): r['riders']['first_name']+' '+r['riders']['last_name'] for r in data['Data']['Results']}
-    with (ROOT/'tools/UCI_Stats_API.PodiumBacktest/Fixtures/incidents-2026.csv').open(encoding='utf-8-sig', newline='') as file:
+    with (ROOT/'tools/racetrace-api.PodiumBacktest/Fixtures/incidents-2026.csv').open(encoding='utf-8-sig', newline='') as file:
         labels, excluded = audit.match_labels(list(csv.DictReader(file)), runs, sessions, names)
     features = {k: audit.features(r, 'local', [s['SectorIndex'] for s in baseline[k]['Sectors'] if s['Anomaly']['Kind'] == 3])
                 for k, r in runs.items()}

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="racetrace-api/racetrace-api.csproj" />
+  <Project Path="racetrace-api.Tests/racetrace-api.Tests.csproj" />
+</Solution>

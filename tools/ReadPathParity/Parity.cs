@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
-using UCI_Stats_API.Configuration;
-using UCI_Stats_API.Infrastructure;
-using UCI_Stats_API.Services;
+using RaceTrace.Api.Configuration;
+using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Services;
 
 static class Parity {
  public static async Task Run(SupabaseOptions options,string[] args) {

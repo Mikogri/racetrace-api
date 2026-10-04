@@ -8,11 +8,11 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
-using UCI_Stats_API.Configuration;
-using UCI_Stats_API.Infrastructure;
-using UCI_Stats_API.Services;
+using RaceTrace.Api.Configuration;
+using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Services;
 
-var api = args.Contains("--api-path") ? args[Array.IndexOf(args,"--api-path")+1] : Path.GetFullPath("UCI_Stats_API");
+var api = args.Contains("--api-path") ? args[Array.IndexOf(args,"--api-path")+1] : Path.GetFullPath("racetrace-api");
 var config = new ConfigurationBuilder().SetBasePath(api).AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", true)
     .AddJsonFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Microsoft","UserSecrets","uci-stats-api-2026","secrets.json"), true).Build();
 var options = config.GetSection("Supabase").Get<SupabaseOptions>()!;

@@ -11,8 +11,8 @@ The existing `Fantasy:ScheduledSyncEnabled` opt-in and six-hour synchronization 
 After building the API, install the browser for the account running the service:
 
 ```powershell
-dotnet build UCI_Stats_API/UCI_Stats_API.csproj -c Release
-pwsh UCI_Stats_API/bin/Release/net10.0/playwright.ps1 install chromium
+dotnet build racetrace-api/racetrace-api.csproj -c Release
+pwsh racetrace-api/bin/Release/net10.0/playwright.ps1 install chromium
 ```
 
 On Linux install required system dependencies as part of deployment (`install --with-deps chromium`). Repeat installation after upgrading Playwright; published binaries alone do not include Chromium. Ensure the service account can access the browser installation. See https://playwright.dev/dotnet/docs/browsers.

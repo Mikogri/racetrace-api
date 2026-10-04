@@ -75,7 +75,7 @@ kandydatów; prawdopodobieństwa nie uwzględniają wiarygodnie nieobecności na
 
 ## Powtórzenie i weryfikacja
 
-Instrukcja: [README narzędzia](../tools/UCI_Stats_API.PodiumBacktest/README.md).
+Instrukcja: [README narzędzia](../tools/racetrace-api.PodiumBacktest/README.md).
 Pełne wyniki lokalne: `artifacts/podium-backtest/report.md` oraz `results.json`.
 Ostatni pełny przebieg wykonano z `--offline --iterations 50000`; baza nie była
 odpytywana podczas właściwych symulacji i nie zmieniono żadnych rekordów.

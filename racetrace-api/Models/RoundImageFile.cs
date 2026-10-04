@@ -1,0 +1,8 @@
+namespace RaceTrace.Api.Models;
+
+public sealed record RoundImageFile(
+    byte[]? Bytes,
+    string ContentType,
+    string? FileName,
+    string? AltText,
+    string? StorageUrl = null);

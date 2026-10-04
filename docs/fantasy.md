@@ -5,7 +5,7 @@
 Moduł jest częścią obecnego API i strony React `/fantasy` (nawigacja przed About).
 Nie zmienia kalkulatorów Pace/Consistency/Rating ani dotychczasowych odpowiedzi podium.
 
-- `UCI_Stats_API/Features/Fantasy/Import/`: parser publicznego katalogu, bezpieczne mapowanie, synchronizacja i historia cen.
+- `racetrace-api/Features/Fantasy/Import/`: parser publicznego katalogu, bezpieczne mapowanie, synchronizacja i historia cen.
 - `Features/Fantasy/FantasyRules2026.cs`, `FantasyScoring.cs`: oficjalna punktacja i EV.
 - `FantasyRacePrediction.cs`, `FantasyCalibration.cs`, `FantasyPreparationService.cs`: adapter istniejącego silnika, kalibracja i walk-forward.
 - `FantasyOptimizer.cs`, `FantasyBacktester.cs`: dokładny skład oraz ocena historyczna.

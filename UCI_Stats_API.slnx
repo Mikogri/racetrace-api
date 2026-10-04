@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="UCI_Stats_API/UCI_Stats_API.csproj" />
-  <Project Path="UCI_Stats_API.Tests/UCI_Stats_API.Tests.csproj" />
-</Solution>
