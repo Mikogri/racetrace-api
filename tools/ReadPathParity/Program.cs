@@ -14,7 +14,7 @@ using RaceTrace.Api.Services;
 
 var api = args.Contains("--api-path") ? args[Array.IndexOf(args,"--api-path")+1] : Path.GetFullPath("racetrace-api");
 var config = new ConfigurationBuilder().SetBasePath(api).AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", true)
-    .AddJsonFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Microsoft","UserSecrets","uci-stats-api-2026","secrets.json"), true).Build();
+    .AddJsonFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Microsoft","UserSecrets","racetrace-api-2026","secrets.json"), true).Build();
 var options = config.GetSection("Supabase").Get<SupabaseOptions>()!;
 #if !BASELINE
 if(args.Contains("--prepare")) {

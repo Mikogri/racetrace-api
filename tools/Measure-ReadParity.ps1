@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$secretFile = Join-Path $env:APPDATA 'Microsoft/UserSecrets/uci-stats-api-2026/secrets.json'
+$secretFile = Join-Path $env:APPDATA 'Microsoft/UserSecrets/racetrace-api-2026/secrets.json'
 $settings = Get-Content -LiteralPath $secretFile -Raw | ConvertFrom-Json
 $headers = @{ Authorization = "Bearer $($settings.'ApiAccess:ReadSecret')" }
 $paths = @(

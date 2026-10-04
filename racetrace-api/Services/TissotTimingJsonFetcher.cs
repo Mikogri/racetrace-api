@@ -15,7 +15,7 @@ public sealed partial class TissotTimingJsonFetcher
     public TissotTimingJsonFetcher(HttpClient http)
     {
         _http = http;
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("UCI-Stats-API/1.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("racetrace-api/1.0");
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 

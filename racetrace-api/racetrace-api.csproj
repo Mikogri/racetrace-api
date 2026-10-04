@@ -6,7 +6,7 @@
     <AssemblyName>racetrace-api</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>uci-stats-api-2026</UserSecretsId>
+    <UserSecretsId>racetrace-api-2026</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
