@@ -123,10 +123,18 @@ sealed class ProbeHandler(bool raw) : DelegatingHandler(new SocketsHttpHandler{
         var fixture = FixtureDirectory is null ? null : Path.Combine(FixtureDirectory,
             Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(key)))+".json");
         var watch=Stopwatch.StartNew();
-        if(raw && endpoint is "get_ranking_metric_packages" or "get_ranking_preaggregate_packages" or "get_ranking_points_summary" or "get_prepared_rider_detail_data"){
+        if(raw && endpoint is "get_ranking_input_packages" or "get_ranking_metric_packages" or "get_ranking_preaggregate_packages" or "get_ranking_points_summary" or "get_prepared_rider_detail_data"){
             var content=endpoint is "get_ranking_points_summary" or "get_prepared_rider_detail_data" ? "{\"complete\":false,\"rows\":[]}" : "[]";
             Calls.Add(new{endpoint,simulatedCacheMiss=true});
             return new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(content,Encoding.UTF8,"application/json")};
+        }
+        if (raw && endpoint == "get_rider_input_data")
+        {
+            var input = JsonNode.Parse(payload)!.AsObject();
+            input["p_use_preaggregation"] = false;
+            payload = input.ToJsonString();
+            request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+            key = uri.PathAndQuery + "|" + payload;
         }
         if(Replay) {
             if (fixture is not null) {

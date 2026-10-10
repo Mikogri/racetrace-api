@@ -296,12 +296,14 @@ public sealed class RankingService
         var matchingSessions = resolvedSessions ?? await _domainQueries.GetMatchingSessionsAsync(
             context,
             cancellationToken: cancellationToken);
-        var preaggregated = await _domainQueries.GetRankingPreaggregatesAsync(
+        // Session packages contain all statuses. A status-filtered field must use
+        // the corresponding source query, including its reference population.
+        var preaggregated = string.IsNullOrWhiteSpace(context.Status) ? await _domainQueries.GetRankingPreaggregatesAsync(
             matchingSessions,
             riderQuery,
             nation,
             cancellationToken: cancellationToken,
-            includeSplits: false);
+            includeSplits: false) : null;
         if (preaggregated is not null)
         {
             preaggregated = DomainQueryService.RestrictToCategories(preaggregated, context);
@@ -471,9 +473,12 @@ public sealed class RankingService
         var resolvedTeam = rider?.Array("teams")?
             .OfType<JsonObject>()
             .FirstOrDefault();
-        var teamHistory = resolvedTeam is null
-            ? DomainQueryService.BuildTeamHistory(results)
-            : new JsonArray(resolvedTeam.DeepClone());
+        var explicitTeams = results.Where(result => !string.IsNullOrWhiteSpace(result.String("team_id"))).ToArray();
+        var teamHistory = explicitTeams.Length > 0
+            ? DomainQueryService.BuildTeamHistory(explicitTeams)
+            : resolvedTeam is null
+                ? DomainQueryService.BuildTeamHistory(results)
+                : new JsonArray(resolvedTeam.DeepClone());
         if (teamHistory.Count == 0 && fallbackTeamHistory is not null)
         {
             teamHistory = fallbackTeamHistory.DeepClone().AsArray();

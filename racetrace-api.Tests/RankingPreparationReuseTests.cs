@@ -21,7 +21,7 @@ public sealed class RankingPreparationReuseTests
         """)!.AsObject();
         var original = row.ToJsonString();
         using var memory = new MemoryCache(new MemoryCacheOptions());
-        const string key = "ranking-package:metrics:Anon:10";
+        const string key = "ranking-package:inputs-metrics:Anon:10";
         memory.Set(key, row);
         using var http = new HttpClient();
         var client = new SupabaseRestClient(http, Options.Create(new SupabaseOptions { Url = "https://test.invalid", AnonKey = "test" }));

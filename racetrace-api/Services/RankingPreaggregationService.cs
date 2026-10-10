@@ -6,7 +6,7 @@ using RaceTrace.Api.Infrastructure.Telemetry;
 
 namespace RaceTrace.Api.Services;
 
-/// <summary>Prepares field-dependent finish references using the same calculator as reads.</summary>
+/// <summary>Refreshes source packages. Calculator-dependent legacy preparation is kept only for rollback tooling.</summary>
 public sealed class RankingPreaggregationService(ISupabaseRestClient supabase)
 {
     public static string AlgorithmVersion => "pace-field-v1:" + AlgorithmCatalog.Current.Fingerprint("pace");
@@ -16,7 +16,9 @@ public sealed class RankingPreaggregationService(ISupabaseRestClient supabase)
         using var measurement = ApiTelemetry.Measure("preaggregation_rebuild");
         await supabase.RpcAsync("refresh_ranking_session_preaggregate",
             new JsonObject { ["p_session_id"] = long.Parse(sessionId) }, SupabaseRole.Service, cancellationToken);
-        return await PrepareAsync(sessionId, cancellationToken);
+        return await supabase.GetSingleAsync(new SupabaseQuery("ranking_session_preaggregates")
+            .Select("session_id").Filter("session_id", "eq", sessionId).Filter("input_splits", "not.is", "null"),
+            SupabaseRole.Service, cancellationToken) is not null;
     }
 
     public async Task<bool> PrepareAsync(string sessionId, CancellationToken cancellationToken)

@@ -29,7 +29,7 @@ public sealed class TelemetryCollection;
 public sealed class PerformanceTelemetryTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [Fact]
-    public async Task PreaggregationRebuildIncludesRawRefreshAndPreparation()
+    public async Task PreaggregationRebuildRefreshesInputsWithoutCalculatorPreparation()
     {
         using var measurements = new Measurements();
         using var http = new HttpClient(new ResponseFactoryHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]") }));

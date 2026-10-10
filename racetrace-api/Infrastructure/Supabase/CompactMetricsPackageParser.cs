@@ -25,6 +25,11 @@ internal static class CompactMetricsPackageParser
 
     internal static RankingReadData ParseRankingReadData(IReadOnlyList<JsonObject> packages)
     {
+        // Imports can assign newer IDs to older seasons. Resolve identity snapshots
+        // by race date, not insertion order, when combining session packages.
+        packages = packages.OrderBy(package => CompactRows([package], "s")
+            .Select(row => ParseTimestamp(CompactString(row, 5) ?? CompactString(row, 8)))
+            .Max()).ToArray();
         var sessions = new List<JsonObject>();
         var sessionsById = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in CompactRows(packages, "s"))
@@ -209,6 +214,7 @@ internal static class CompactMetricsPackageParser
                 ["position"] = CompactClone(row, 5),
                 ["is_classified"] = CompactClone(row, 6),
                 ["status"] = CompactClone(row, 7),
+                ["team_id"] = CompactClone(row, 9),
                 ["awarded_points"] = awardedPoints
             }, rider, team, session));
 
@@ -277,6 +283,16 @@ internal static class CompactMetricsPackageParser
     internal static (RankingReadData Data, IReadOnlyList<PacePrecomputedSessionData> PaceSessions) ParsePreparedRankingRead(IReadOnlyList<JsonObject> packages)
     {
         var data = ParseRankingReadData(packages);
+        if (packages.All(package => package.Int("v") == 3))
+        {
+            var measurements = CompactRows(packages, "ix").Select(row => new JsonObject
+            {
+                ["result_id"] = CompactClone(row, 0),
+                ["split_index"] = CompactClone(row, 1),
+                ["race_time"] = CompactClone(row, 2)
+            }).ToArray();
+            return (data, PaceService.PrepareInputSessions(data, measurements));
+        }
         var resultsById = data.Results
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
             .ToDictionary(
@@ -436,6 +452,27 @@ internal static class CompactMetricsPackageParser
             .ToDictionary(s => (s.SessionId, s.Run.RiderId));
         return (data,
             sessions.Select(s => prepared[(s.SessionId, s.Run.RiderId)]).ToArray());
+    }
+
+    internal static bool HasCompleteInputMeasurements(JsonObject package)
+    {
+        if (package.Int("v") != 3 || package["r"] is not JsonArray results ||
+            package["s"] is not JsonArray sessions || package["f"] is not JsonArray field ||
+            package["ix"] is not JsonArray measurements || package["x"] is not JsonArray)
+            return false;
+        if (results.Any(row => row is not JsonArray { Count: >= 8 }) ||
+            field.Any(row => row is not JsonArray { Count: >= 8 }) ||
+            sessions.Any(row => row is not JsonArray { Count: >= 5 }) ||
+            measurements.Any(row => row is not JsonArray { Count: >= 3 })) return false;
+        var sessionIds = sessions.OfType<JsonArray>().Select(row => CompactString(row, 0)).ToHashSet();
+        var fieldIds = field.OfType<JsonArray>().Select(row => CompactString(row, 0)).ToHashSet();
+        if (sessionIds.Contains(null) || fieldIds.Contains(null) ||
+            sessionIds.Count != sessions.Count || fieldIds.Count != field.Count ||
+            results.OfType<JsonArray>().Any(row => CompactString(row, 0) is null || CompactString(row, 1) is null) ||
+            field.OfType<JsonArray>().Any(row => CompactString(row, 1) is null)) return false;
+        return results.OfType<JsonArray>().All(row => fieldIds.Contains(CompactString(row, 0))) &&
+            field.OfType<JsonArray>().All(row => sessionIds.Contains(CompactString(row, 2))) &&
+            measurements.OfType<JsonArray>().All(row => fieldIds.Contains(CompactString(row, 0)));
     }
 
     internal static bool HasCompletePreparedFinishes(JsonObject package)

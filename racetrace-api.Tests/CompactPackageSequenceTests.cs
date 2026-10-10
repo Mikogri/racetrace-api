@@ -7,6 +7,39 @@ namespace RaceTrace.Api.Tests;
 
 public sealed class CompactPackageSequenceTests
 {
+    [Theory]
+    [InlineData("s")]
+    [InlineData("f")]
+    [InlineData("r")]
+    [InlineData("all")]
+    public void InputPackagesRejectMissingIdentifiers(string key)
+    {
+        var package = JsonNode.Parse("""
+        {"v":3,"s":[[1,1,1,"Final","FINAL"]],"r":[[2,3,1,100,null,1,true,"OK"]],"f":[[2,3,1,100,null,1,true,"OK"]],"ix":[[2,1,100]],"x":[]}
+        """)!.AsObject();
+        Assert.True(CompactMetricsPackageParser.HasCompleteInputMeasurements(package));
+        if (key == "all")
+        {
+            foreach (var table in new[] { "s", "r", "f", "ix" }) package[table]![0]![0] = null;
+            package["f"]![0]![2] = null;
+        }
+        else package[key]![0]![0] = null;
+        Assert.False(CompactMetricsPackageParser.HasCompleteInputMeasurements(package));
+    }
+
+    [Fact]
+    public void IdentitySnapshotsUseRaceDateRatherThanImportId()
+    {
+        var newer = JsonNode.Parse("""
+        {"s":[[1,1,1,"Final","FINAL","2026-01-01"]],"d":[[1,1,"Name","Rider","FRA",null,2,"Current Team"]],"r":[[1,1,1,100,null,1,true,"OK"]]}
+        """)!.AsObject();
+        var older = JsonNode.Parse("""
+        {"s":[[99,2,1,"Final","FINAL","2022-01-01"]],"d":[[1,1,"Name","Rider","FRA",null,1,"Old Team"]],"r":[[99,1,99,100,null,1,true,"OK"]]}
+        """)!.AsObject();
+        var data = CompactMetricsPackageParser.ParseRankingReadData([newer, older]);
+        Assert.All(data.Results, row => Assert.Equal("Current Team", row.Rider!["teams"]![0]!["name"]!.ToString()));
+    }
+
     [Fact]
     public void SequenceMatchesMergedPayloadAndKeepsLastIdentityAcrossSessions()
     {

@@ -377,6 +377,41 @@ public sealed class PaceService
             StringComparer.OrdinalIgnoreCase);
     }
 
+    internal static IReadOnlyList<PacePrecomputedSessionData> PrepareInputSessions(
+        RankingReadData data, IReadOnlyList<JsonObject> measurements)
+    {
+        var splits = measurements.GroupBy(row => row.String("result_id")!)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<JsonObject>)group.ToArray());
+        var selected = data.Results.Select(row => ConsistencyPaceKey(row.String("session_id")!, row.String("rider_id")!)).ToHashSet();
+        var calculator = new DownhillPaceCalculator(AlgorithmConfiguration.Pace);
+        var output = new List<PacePrecomputedSessionData>();
+        foreach (var field in data.FieldResults
+            .Where(row => !DownhillPaceCalculator.IsDisqualified(row.String("status")))
+            .GroupBy(row => row.String("session_id")!))
+        {
+            var first = field.First();
+            var session = first.Session;
+            var maximumSplitIndex = field.SelectMany(row => splits.GetValueOrDefault(row.String("id")!, []))
+                .Select(split => split.Int("split_index") ?? 0).DefaultIfEmpty(0).Max();
+            var runs = field.GroupBy(row => row.String("rider_id")!)
+                .Select(group => group.OrderByDescending(row => row.Decimal("id") ?? 0).First())
+                .Select(row => BuildRun(row, splits, new SessionSplitLayout(maximumSplitIndex))).ToArray();
+            var prepared = calculator.PrepareSession(new PaceSessionData(
+                ParseSessionType(session?.String("session_type"), session?.String("name")),
+                runs, CompetitionClassPriority(session)));
+            output.AddRange(prepared
+                .Where(row => selected.Contains(ConsistencyPaceKey(field.Key, row.Run.RiderId)))
+                .Select(row => row with
+                {
+                    SessionId = field.Key,
+                    CourseKey = BuildCourseKey(first),
+                    CategoryId = session?.String("category_id"),
+                    SessionDate = DateTimeOffset.TryParse(session?.String("session_date") ?? session?.Object("rounds")?.String("start_date"), out var date) ? date : null
+                }));
+        }
+        return output;
+    }
+
     internal IReadOnlyDictionary<string, RiderPerformanceMetricValues> CalculatePrecomputed(
         IReadOnlyList<JsonObject> selectedResults,
         IReadOnlyList<PacePrecomputedSessionData> precomputedSessions,
@@ -472,6 +507,16 @@ public sealed class PaceService
                         Status: pair.First.Run.Status,
                         HasIncident: pair.Second.IncidentSectorIndex.HasValue);
                 })
+                // A DSQ final still proves qualification. Exclude its performance,
+                // not its official entry, just as the raw-data path does.
+                .Concat(riderResults
+                    .Where(result => DownhillPaceCalculator.IsDisqualified(result.String("status")))
+                    .Select(result => new ConsistencyRunInput(
+                        result.String("id") ?? string.Empty,
+                        BuildCourseKey(result),
+                        ParseSessionType(result.Session?.String("session_type"), result.Session?.String("name")),
+                        [],
+                        Status: result.String("status"))))
                 .ToArray();
             availableFinalsByRiderId.TryGetValue(riderId, out var availableFinals);
             var isNonFinalist = nonFinalistsByRiderId.GetValueOrDefault(riderId);
@@ -786,6 +831,12 @@ public sealed class PaceService
         JsonObject result,
         IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> splitsByResultId,
         SessionSplitLayout splitLayout)
+        => BuildRun(RankingReadResult.FromLegacy(result), splitsByResultId, splitLayout);
+
+    private static PaceRiderRun BuildRun(
+        RankingReadResult result,
+        IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> splitsByResultId,
+        SessionSplitLayout splitLayout)
     {
         var resultId = result.String("id") ?? string.Empty;
         splitsByResultId.TryGetValue(resultId, out var resultSplits);
@@ -808,6 +859,9 @@ public sealed class PaceService
     }
 
     private static bool IsClassifiedRun(JsonObject result)
+        => IsClassifiedRun(RankingReadResult.FromLegacy(result));
+
+    private static bool IsClassifiedRun(RankingReadResult result)
     {
         var status = result.String("status");
         return (result.Bool("is_classified") == true || result.Int("position") is > 0) &&

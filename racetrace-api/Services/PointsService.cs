@@ -201,8 +201,7 @@ public sealed class PointsService
         {
             var response = await _supabase.GetAsync(
                 new SupabaseQuery("ranking_session_preaggregates").Select("session_id")
-                    .Filter("prepared_version", "eq", RankingPreaggregationService.AlgorithmVersion)
-                    .Filter("prepared_payload", "not.is", "null").In("session_id", batch),
+                    .Filter("input_splits", "not.is", "null").In("session_id", batch),
                 role: SupabaseRole.Service,
                 cancellationToken: cancellationToken);
             foreach (var row in response.Data)

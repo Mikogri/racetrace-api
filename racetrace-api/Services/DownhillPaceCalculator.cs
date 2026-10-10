@@ -272,6 +272,9 @@ internal sealed class DownhillPaceCalculator
     }
 
     public IReadOnlyList<RiderSessionPaceResult> CalculateSession(PaceSessionData session)
+        => PrepareSession(session).Select(CalculatePrecomputedSession).ToArray();
+
+    internal IReadOnlyList<PacePrecomputedSessionData> PrepareSession(PaceSessionData session)
     {
         using var measurement = ApiTelemetry.Measure("pace");
         var validRuns = session.Runs
@@ -329,7 +332,7 @@ internal sealed class DownhillPaceCalculator
                 CumulativeStatistics: cumulativeStatistics,
                 CompetitionClassPriority: session.CompetitionClassPriority))
             .ToArray();
-        return PrepareField(precomputed).Select(CalculatePrecomputedSession).ToArray();
+        return PrepareField(precomputed);
     }
 
     /// <summary>Two passes: estimate losses, then build one corrected finish distribution.

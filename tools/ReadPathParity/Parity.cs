@@ -49,6 +49,7 @@ static class Parity {
    ("rank-jw-all","","?category=junior_women&pageSize=150&comparison=previousRound")
   };
   var failures=0;
+  var crossPath = new Dictionary<string, JsonNode>();
   var selected = args.Contains("--cases") ? args[Array.IndexOf(args,"--cases")+1].Split(',').ToHashSet() : null;
   var repetitions = args.Contains("--repeat") ? int.Parse(args[Array.IndexOf(args,"--repeat")+1]) : 1;
   var count = 0;
@@ -79,6 +80,15 @@ static class Parity {
    object result=id==""?await ranking.ListRankingAsync(query,default):await riders.GetOverviewAsync(id,query,default);
    var ms=timer.Elapsed.TotalMilliseconds;
    var node=JsonSerializer.SerializeToNode(result,new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+   if (args.Contains("--cross-path"))
+   {
+    if (crossPath.TryGetValue(name, out var reference) && !JsonNode.DeepEquals(reference, node))
+    {
+     failures++;
+     Console.WriteLine("CROSS-PATH DIFF " + name);
+    }
+    else crossPath.TryAdd(name, node);
+   }
    var stem=name+(raw?"-raw":"-preagg");
    var file=Path.Combine(dir,stem+".json");
    if(capture)await File.WriteAllTextAsync(file,node.ToJsonString());
@@ -93,6 +103,6 @@ static class Parity {
    Console.WriteLine(JsonSerializer.Serialize(new{name,raw,ms,mode=capture?"baseline":"candidate",calls=handler.Calls}));
   }
   if(failures>0)throw new Exception(failures+" parity differences");
-  Console.WriteLine(capture?$"BASELINE SAVED: {count} responses":$"PARITY PASS: {count} complete responses identical");
+  Console.WriteLine(args.Contains("--cross-path") ? $"CROSS-PATH PASS: {count} complete responses identical" : capture?$"BASELINE SAVED: {count} responses":$"PARITY PASS: {count} complete responses identical");
  }
 }

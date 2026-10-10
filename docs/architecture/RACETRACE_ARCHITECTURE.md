@@ -195,12 +195,14 @@ Raw retrieval uses 1,000-row pages, up to three concurrent result-page requests 
 | --- | --- |
 | `get_ranking_data` | Compact ranking-oriented joined input |
 | `get_rider_detail_data` | Detailed input for one rider plus required field context |
-| `get_ranking_preaggregate_packages` | Full reusable session packages |
-| `get_ranking_metric_packages` | Smaller metrics-only session packages |
-| `get_prepared_rider_detail_data` | Detailed read with matching prepared finish/Pace inputs |
+| `get_ranking_input_packages` | Reusable source measurements; optional public split display fields |
+| `get_rider_input_data` | Target rider metadata and complete reference field; cached or raw measurements |
+| `get_ranking_preaggregate_packages`, `get_ranking_metric_packages`, `get_prepared_rider_detail_data` | Legacy read contracts retained for compatibility, not used by the normal optimized path |
 | `get_ranking_points_summary` / `get_ranking_points_raw_summary` | Points order without calculating all riders' Rating/Pace/Consistency |
 
-`ReadOptimizations:TypedRanking` selects typed compact processing; `PreparedRiderDetails` enables the prepared rider path. Prepared detail reads require no status filter, a compatible algorithm version and complete usable prepared data. Missing functions, incomplete packages or recognized format incompatibility can select the legacy path. Arbitrary database failures are not all silently converted into success.
+`ReadOptimizations:TypedRanking` selects typed compact processing. The retained configuration name `PreparedRiderDetails` now enables **source-package reuse**, not stored calculator outputs. `get_rider_input_data` uses raw source data when reuse is disabled, a package is missing, or a status filter is present. A missing RPC or structurally incomplete envelope selects the legacy detail read; network/authentication failures are not silently swallowed.
+
+Version 3 inputs contain official results, metadata and cumulative timing measurements (`ix`). Field distributions, sector timing interpretation, incident correction, Pace, Consistency and Rating are calculated in the API through the shared calculator path. Neither `prepared_version` nor `prepared_payload` is consumed. Calculator changes therefore do not require rebuilding source packages; imports, timing/point corrections or a new input schema still do. The `missing` rebuild checks `input_splits` availability. Legacy derived columns and explicit preparation tooling remain available for rollback, but normal imports no longer generate those calculator-dependent artifacts. See [input-package verification](../performance/2026-10-11-input-packages.md).
 
 The optimization changes transport and reuse, not the definition of the field or the sporting formulas. `Infrastructure/Supabase/CompactMetricsPackageParser.cs` and typed metric read models reduce repeated JSON traversal. Prepared-package parsing is memoized by object reference within a request.
 

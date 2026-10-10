@@ -19,7 +19,7 @@ public sealed class AlgorithmCatalog(IReadOnlyDictionary<string, AlgorithmDefini
         ["class-weights"] = new("1.0.0", new { rule = "max-active-priority / priority" }, []),
         ["incidents"] = new("1.0.0", new { pace = AlgorithmConfiguration.Pace, thresholds = AlgorithmConfiguration.Incidents }, []),
         ["pace"] = new("1.0.0", AlgorithmConfiguration.Pace, ["incidents", "session-weights", "class-weights"]),
-        ["consistency"] = new("1.0.0", AlgorithmConfiguration.Consistency, ["pace", "session-weights", "class-weights"]),
+        ["consistency"] = new("1.0.1", AlgorithmConfiguration.Consistency, ["pace", "session-weights", "class-weights"]),
         ["result-score"] = new("1.0.0", AlgorithmConfiguration.ResultScore, ["session-weights", "class-weights"]),
         ["rating"] = new("1.0.0", AlgorithmConfiguration.Rating, ["pace", "consistency", "result-score"]),
         ["podium"] = new(AlgorithmConfiguration.Podium.ModelVersion, AlgorithmConfiguration.Podium, ["rating"]),

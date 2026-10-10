@@ -469,7 +469,7 @@ public sealed class DomainQueryService
         }
 
         var packages = new Dictionary<string, JsonObject>();
-        var packageKind = includeSplits ? "full" : "metrics";
+        var packageKind = includeSplits ? "inputs-full" : "inputs-metrics";
         var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken) : null;
         string PackageKey(string id) => $"ranking-package:{packageKind}:{role}:{id}" +
             (revision is null ? "" : ":" + revision.ForSessions([id]));
@@ -486,8 +486,8 @@ public sealed class DomainQueryService
         if (missingIds.Length > 0)
         {
             var response = await _supabase.RpcAsync(
-                includeSplits ? "get_ranking_preaggregate_packages" : "get_ranking_metric_packages",
-                new JsonObject { ["p_session_ids"] = LongArray(missingIds) }, role, cancellationToken);
+                "get_ranking_input_packages",
+                new JsonObject { ["p_session_ids"] = LongArray(missingIds), ["p_include_splits"] = includeSplits }, role, cancellationToken);
             foreach (var row in (response as JsonArray)?.OfType<JsonObject>() ?? [])
             {
                 if (row.String("session_id") is not { } id) continue;
@@ -601,40 +601,24 @@ public sealed class DomainQueryService
         var payload = BuildMetricsRpcPayload(filters, resolvedSessionIds);
         payload["p_rider_id"] = LongNode(riderId);
 
-        if (_readOptions.PreparedRiderDetails && string.IsNullOrWhiteSpace(filters.Status))
+        var inputPayload = payload.DeepClone().AsObject();
+        inputPayload["p_use_preaggregation"] = _readOptions.PreparedRiderDetails && string.IsNullOrWhiteSpace(filters.Status);
+        try
         {
-            var preparedPayload = payload.DeepClone().AsObject();
-            preparedPayload["p_algorithm_version"] = RankingPreaggregationService.AlgorithmVersion;
-            JsonNode? prepared = null;
-            try
+            var input = await _supabase.RpcAsync("get_rider_input_data", inputPayload, role, cancellationToken);
+            if (input is JsonObject envelope && envelope.Bool("complete") == true &&
+                envelope["payload"] is JsonObject data && CompactMetricsPackageParser.HasCompleteInputMeasurements(data))
             {
-                prepared = await _supabase.RpcAsync("get_prepared_rider_detail_data", preparedPayload, role, cancellationToken);
+                ApiTelemetry.Cache("preaggregation", envelope.Bool("cached") == true ? "hit" : "bypass");
+                return RestrictToCategories(ParseRiderDetailDataBundle(data), filters);
             }
-            catch (SupabaseApiException ex) when (ex.StatusCode == 404)
-            {
-                _logger?.LogWarning("Prepared rider detail RPC unavailable; using legacy read.");
-            }
-
-            if (prepared is JsonObject envelope && envelope.Bool("complete") == true && envelope["payload"] is JsonObject data)
-            {
-                try
-                {
-                    if (CompactMetricsPackageParser.HasCompletePreparedFinishes(data))
-                    {
-                        ApiTelemetry.Cache("preaggregation", "hit");
-                        return RestrictToCategories(ParseRiderDetailDataBundle(data), filters);
-                    }
-                }
-                catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException or ArgumentException or IndexOutOfRangeException)
-                {
-                    _logger?.LogWarning("Invalid prepared rider detail payload ({ErrorType}); using legacy read.", ex.GetType().Name);
-                }
-                _logger?.LogWarning("Incomplete prepared rider detail payload; using legacy read.");
-            }
-            ApiTelemetry.Cache("preaggregation", "unavailable");
-            ApiTelemetry.Cache("preaggregation", "fallback");
+            _logger?.LogWarning("Incomplete rider input package; using legacy read.");
         }
-        else ApiTelemetry.Cache("preaggregation", "bypass");
+        catch (SupabaseApiException ex) when (ex.StatusCode == 404)
+        {
+            _logger?.LogWarning("Rider input RPC unavailable; using legacy read.");
+        }
+        ApiTelemetry.Cache("preaggregation", "fallback");
 
         var response = await _supabase.RpcAsync(
             "get_rider_detail_data",
@@ -649,9 +633,11 @@ public sealed class DomainQueryService
     {
         var ids = sessions.Select(session => session.String("id")).OfType<string>().Distinct().ToArray();
         if (ids.Length == 0) return [];
-        var response = await _supabase.RpcAsync("get_ranking_points_summary",
-            new JsonObject { ["p_session_ids"] = LongArray(ids) }, SupabaseRole.Anon, cancellationToken);
-        if (response is JsonObject cached && cached.Bool("complete") == false)
+        JsonNode? response = string.IsNullOrWhiteSpace(filters.Status)
+            ? await _supabase.RpcAsync("get_ranking_points_summary",
+                new JsonObject { ["p_session_ids"] = LongArray(ids) }, SupabaseRole.Anon, cancellationToken)
+            : null;
+        if (response is null || response is JsonObject cached && cached.Bool("complete") == false)
             response = await _supabase.RpcAsync("get_ranking_points_raw_summary",
                 BuildMetricsRpcPayload(filters, ids),
                 SupabaseRole.Anon, cancellationToken);

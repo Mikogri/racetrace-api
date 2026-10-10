@@ -23,7 +23,7 @@ public sealed class PreparedReadRequestTests
         var client = new SupabaseRestClient(http, Options.Create(new SupabaseOptions { Url = "https://test.invalid", AnonKey = "test" }));
         var domain = new DomainQueryService(client, readOptions: Options.Create(new ReadOptimizationOptions { PreparedRiderDetails = true }));
         await domain.GetRiderDetailDataAsync(Filters(), "18");
-        Assert.Equal(new[] { "get_prepared_rider_detail_data", "get_rider_detail_data" }, handler.Calls);
+        Assert.Equal(new[] { "get_rider_input_data", "get_rider_detail_data" }, handler.Calls);
     }
 
     private static RiderMetricsContext Filters(string? status = null) => new(2026, "EM", null, null, null, null, null, null, null, null, status);
@@ -41,8 +41,20 @@ public sealed class PreparedReadRequestTests
         var result = await domain.GetRiderDetailDataAsync(Filters(status), "18");
         Assert.Empty(result.Data.Results);
         Assert.Equal(calls, handler.Calls.Count);
-        Assert.Equal(status is null ? "get_prepared_rider_detail_data" : "get_rider_detail_data", handler.Calls[0]);
+        Assert.Equal("get_rider_input_data", handler.Calls[0]);
         if (!complete) Assert.Equal("get_rider_detail_data", handler.Calls[^1]);
+    }
+
+    [Fact]
+    public async Task SourceRefreshChecksInputAvailabilityNotCalculatorVersion()
+    {
+        using var handler = new Handler(true);
+        using var http = new HttpClient(handler);
+        var client = new SupabaseRestClient(http, Options.Create(new SupabaseOptions { Url = "https://test.invalid", ServiceRoleKey = "test" }));
+        Assert.True(await new RankingPreaggregationService(client).RefreshAsync("10", default));
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("input_splits", handler.Requests[1]);
+        Assert.All(handler.Requests, request => Assert.DoesNotContain("prepared_", request));
     }
 
     [Fact]
@@ -61,20 +73,23 @@ public sealed class PreparedReadRequestTests
         public string? PreparedPayload { get; init; }
         public HttpStatusCode PreparedStatus { get; init; } = HttpStatusCode.OK;
         public List<string> Calls { get; } = [];
+        public List<string> Requests { get; } = [];
         public JsonObject? Save { get; private set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             var name = request.RequestUri!.Segments.Last(); Calls.Add(name);
+            Requests.Add(request.RequestUri.PathAndQuery);
             var body = name switch
             {
-                "get_prepared_rider_detail_data" => complete ? "{\"complete\":true,\"payload\":{\"r\":[]}}" : "{\"complete\":false}",
+                "get_rider_input_data" => complete ? "{\"complete\":true,\"payload\":{\"v\":3,\"r\":[],\"s\":[],\"f\":[],\"ix\":[],\"x\":[]}}" : "{\"complete\":false}",
                 "get_rider_detail_data" => "{\"r\":[]}",
                 "ranking_session_preaggregates" => "[{\"source_revision\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{}}]",
                 "save_prepared_ranking_session" => "false",
+                "refresh_ranking_session_preaggregate" => "null",
                 _ => throw new InvalidOperationException(name)
             };
             if (name == "save_prepared_ranking_session") Save = JsonNode.Parse(await request.Content!.ReadAsStringAsync(token))!.AsObject();
-            if (name == "get_prepared_rider_detail_data")
+            if (name == "get_rider_input_data")
                 return new HttpResponseMessage(PreparedStatus) { Content = new StringContent(PreparedPayload is null ? body : "{\"complete\":true,\"payload\":" + PreparedPayload + "}") };
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
         }

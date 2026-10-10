@@ -80,7 +80,7 @@ public sealed class RankingDataRequestTests
         await domain.GetRankingPreaggregatesAsync(sessions, includeSplits: false);
         await domain.GetRankingPreaggregatesAsync(sessions);
         await domain.GetRankingPreaggregatesAsync(sessions, includeSplits: false);
-        Assert.Equal(new[] { "get_ranking_metric_packages", "get_ranking_preaggregate_packages" }, client.PackageFunctions);
+        Assert.Equal(new[] { "get_ranking_input_packages", "get_ranking_input_packages" }, client.PackageFunctions);
     }
 
     [Theory]
@@ -96,6 +96,16 @@ public sealed class RankingDataRequestTests
         Assert.Equal("A Rider", row.String("rider_name"));
         Assert.Equal(0m, row.Decimal("points"));
         Assert.Equal("2", row.String("rider_id"));
+    }
+
+    [Fact]
+    public async Task StatusFilteredPointsNeverUseAnUnfilteredSessionSummary()
+    {
+        var client = new CapturingSupabaseClient { PointsComplete = true };
+        var domain = new DomainQueryService(client);
+        await domain.GetPointsSummaryAsync(EmptyContext with { Status = "DNF" }, [new JsonObject { ["id"] = 1 }], default);
+        Assert.Equal("get_ranking_points_raw_summary", client.FunctionName);
+        Assert.Equal("DNF", client.Payload!.String("p_status"));
     }
 
     [Fact]
@@ -212,7 +222,7 @@ public sealed class RankingDataRequestTests
                     ["rows"] = new JsonArray(new JsonObject { ["rider_id"] = "2", ["points"] = 0,
                         ["rider"] = new JsonObject { ["first_name"] = "A", ["last_name"] = "Rider" } })
                 });
-            if (functionName is "get_ranking_preaggregate_packages" or "get_ranking_metric_packages")
+            if (functionName is "get_ranking_input_packages")
             {
                 PackageFunctions.Add(functionName);
                 PackageRequests.Add(payload["p_session_ids"]!.ToJsonString());
