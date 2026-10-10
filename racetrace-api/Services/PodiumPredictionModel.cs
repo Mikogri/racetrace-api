@@ -1,64 +1,7 @@
+using RaceTrace.Api.Infrastructure.Telemetry;
+
 namespace RaceTrace.Api.Services;
 
-internal sealed class PodiumPredictionOptions
-{
-    public string ModelVersion { get; init; } = "ridge-monte-carlo-v1";
-
-    public double RecentFormDecay { get; init; } = 0.70;
-
-    public double AffinityShrinkageK { get; init; } = 3.0;
-
-    public double PressureShrinkageK { get; init; } = 5.0;
-
-    public double WchShrinkageK { get; init; } = 3.0;
-
-    public double IncidentShrinkageK { get; init; } = 8.0;
-
-    public double IncidentPriorProbability { get; init; } = 0.08;
-
-    public int MonteCarloIterations { get; init; } = 50_000;
-
-    public int StudentTDegreesOfFreedom { get; init; } = 5;
-
-    public int RandomSeed { get; init; } = 20260824;
-
-    public double MinimumUncertainty { get; init; } = 1.25;
-
-    public double MaximumUncertainty { get; init; } = 12.0;
-
-    public double WchUncertaintyMultiplier { get; init; } = 1.15;
-
-    public double ConsistencyUncertaintyRange { get; init; } = 5.0;
-
-    public double ConfidenceUncertaintyRange { get; init; } = 4.0;
-
-    public double EvidenceUncertaintyScale { get; init; } = 2.0;
-
-    public double MaximumIncidentProbability { get; init; } = 0.95;
-
-    public double IncidentPerformanceLoss { get; init; } = 18.0;
-
-    public double IncidentTailLoss { get; init; } = 12.0;
-
-    public double MaximumPointsPerRound { get; init; } = 250.0;
-
-    public double FinalRoundTitleLeverageBoost { get; init; } = 0.25;
-
-    // Versioned ridge coefficients. Runtime never trains the model.
-    public double RatingCoefficient { get; init; } = 0.58;
-
-    public double PaceCoefficient { get; init; } = 0.42;
-
-    public double RecentFormCoefficient { get; init; } = 0.20;
-
-    public double TrackAffinityCoefficient { get; init; } = 0.16;
-
-    public double ConditionsAffinityCoefficient { get; init; } = 0.08;
-
-    public double WeekendPerformanceCoefficient { get; init; } = 0.32;
-
-    public double WchDeltaCoefficient { get; init; } = 0.12;
-}
 
 internal sealed record PodiumPredictionFeatures(
     string RiderId,
@@ -175,6 +118,7 @@ internal sealed class MonteCarloRaceSimulator
     internal IReadOnlyList<MonteCarloRaceResult> SimulateDetailed(
         IReadOnlyList<PodiumPredictionDistribution> riders)
     {
+        using var measurement = ApiTelemetry.Measure("podium");
         if (riders.Count == 0)
         {
             return [];

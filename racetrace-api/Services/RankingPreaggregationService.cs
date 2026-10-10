@@ -1,16 +1,19 @@
 using System.Text.Json.Nodes;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Infrastructure.Supabase;
+using RaceTrace.Api.Infrastructure.Calculations;
+using RaceTrace.Api.Infrastructure.Telemetry;
 
 namespace RaceTrace.Api.Services;
 
 /// <summary>Prepares field-dependent finish references using the same calculator as reads.</summary>
 public sealed class RankingPreaggregationService(ISupabaseRestClient supabase)
 {
-    public const string AlgorithmVersion = "pace-field-v1";
+    public static string AlgorithmVersion => "pace-field-v1:" + AlgorithmCatalog.Current.Fingerprint("pace");
 
     public async Task<bool> RefreshAsync(string sessionId, CancellationToken cancellationToken)
     {
+        using var measurement = ApiTelemetry.Measure("preaggregation_rebuild");
         await supabase.RpcAsync("refresh_ranking_session_preaggregate",
             new JsonObject { ["p_session_id"] = long.Parse(sessionId) }, SupabaseRole.Service, cancellationToken);
         return await PrepareAsync(sessionId, cancellationToken);
@@ -18,6 +21,7 @@ public sealed class RankingPreaggregationService(ISupabaseRestClient supabase)
 
     public async Task<bool> PrepareAsync(string sessionId, CancellationToken cancellationToken)
     {
+        using var measurement = ApiTelemetry.Measure("preaggregation");
         var row = await supabase.GetSingleAsync(new SupabaseQuery("ranking_session_preaggregates")
             .Select("session_id,payload,source_revision").Filter("session_id", "eq", sessionId),
             SupabaseRole.Service, cancellationToken);

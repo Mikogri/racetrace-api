@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Infrastructure.Calculations;
 using RaceTrace.Api.Models;
 
 namespace RaceTrace.Api.Services;
@@ -27,20 +28,22 @@ public sealed class PodiumPredictorService
     private readonly MetricsService _metrics;
     private readonly SeasonSummaryService _seasonSummary;
     private readonly TimeProvider _timeProvider;
-    private readonly PodiumPredictionOptions _options = new();
+    private readonly CalculationProvenance? _provenance;
+    private readonly PodiumPredictionOptions _options = AlgorithmConfiguration.Podium;
 
     public PodiumPredictorService(
         ISupabaseRestClient supabase,
         DomainQueryService domainQueries,
         MetricsService metrics,
         SeasonSummaryService seasonSummary,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider, CalculationProvenance? provenance = null)
     {
         _supabase = supabase;
         _domainQueries = domainQueries;
         _metrics = metrics;
         _seasonSummary = seasonSummary;
         _timeProvider = timeProvider;
+        _provenance = provenance;
     }
 
     public async Task<PodiumPredictionResponseDto> GetAsync(
@@ -84,6 +87,14 @@ public sealed class PodiumPredictorService
         }
 
         var historyCutoff = nextRoundDate.Value.AddDays(-1);
+        if (_provenance is not null)
+        {
+            _provenance.ModelVersion = _options.ModelVersion;
+            _provenance.PredictionAsOf = _timeProvider.GetUtcNow();
+            _provenance.HistoryCutoff = historyCutoff;
+            _provenance.SimulationSeed = _options.RandomSeed;
+            _provenance.SimulationIterations = _options.MonteCarloIterations;
+        }
         var currentTask = LoadMetricsAsync(
             SeasonContext(season, categoryCode) with { ToDate = historyCutoff },
             cancellationToken);

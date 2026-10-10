@@ -6,9 +6,11 @@ public sealed record ChampionshipStage(string SessionType, IReadOnlyList<Champio
     public int PointsAt(int position) => Rules.FirstOrDefault(rule => position >= rule.From && (rule.To is null || position <= rule.To))?.Points ?? 0;
 }
 public sealed record ChampionshipRider(string? RiderId, string UciId, string Name, int Points);
-public sealed record ChampionshipRun(string? UciId, string Name, int? Position, string State);
+public sealed record ChampionshipRun(string? UciId, string Name, int? Position,
+    [property: Infrastructure.ApiContractValues("finished", "pending", "dnf", "dns", "dsq")] string State);
 public sealed record ChampionshipSession(string SessionType, bool Complete, IReadOnlyList<ChampionshipRun> Riders);
-public sealed record ChampionshipProjection(IReadOnlyList<ChampionshipRider> Items, int? Lead, bool? CanChange, string Status);
+public sealed record ChampionshipProjection(IReadOnlyList<ChampionshipRider> Items, int? Lead, bool? CanChange,
+    [property: Infrastructure.ApiContractValues("unavailable", "incomplete", "tied", "open", "secured", "decided")] string Status);
 
 public static class LiveChampionshipCalculator
 {

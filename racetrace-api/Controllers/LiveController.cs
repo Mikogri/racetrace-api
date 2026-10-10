@@ -17,18 +17,21 @@ public sealed class LiveController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.ListResponse<System.Text.Json.Nodes.JsonObject>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Sessions(CancellationToken cancellationToken)
     {
         return Ok(await _live.ListLiveSessionsAsync(Request.Query, cancellationToken));
     }
 
     [HttpGet("{sessionId}")]
+    [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> Session(string sessionId, CancellationToken cancellationToken)
     {
         return Ok(await _live.GetLiveSessionAsync(sessionId, _validator.Csv(Request.Query, "include"), cancellationToken));
     }
 
     [HttpGet("{sessionId}/leaderboard")]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.ListResponse<System.Text.Json.Nodes.JsonObject>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Leaderboard(string sessionId, CancellationToken cancellationToken)
     {
         return Ok(await _live.GetLeaderboardAsync(sessionId, Request.Query, cancellationToken));

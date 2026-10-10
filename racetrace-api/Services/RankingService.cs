@@ -1,4 +1,6 @@
 using RaceTrace.Api.Features.Metrics;
+using RaceTrace.Api.Infrastructure.Calculations;
+using RaceTrace.Api.Infrastructure.Telemetry;
 using System.Text.Json.Nodes;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
@@ -51,19 +53,23 @@ public sealed class RankingService
     private readonly MetricsService _metrics;
     private readonly RankingSingleFlight _singleFlight;
     private readonly IMemoryCache _cache;
+    private readonly DataRevisionService? _revisions;
+    private readonly CalculationProvenance? _provenance;
 
     public RankingService(
         QueryValidationService validator,
         DomainQueryService domainQueries,
         MetricsService metrics,
         RankingSingleFlight singleFlight,
-        IMemoryCache cache)
+        IMemoryCache cache, DataRevisionService? revisions = null, CalculationProvenance? provenance = null)
     {
         _validator = validator;
         _domainQueries = domainQueries;
         _metrics = metrics;
         _singleFlight = singleFlight;
         _cache = cache;
+        _revisions = revisions;
+        _provenance = provenance;
     }
 
     public async Task<RankingResponseDto> ListRankingAsync(IQueryCollection queryString, CancellationToken cancellationToken)
@@ -191,7 +197,7 @@ public sealed class RankingService
             previousRowsByRider is null ? null : resolvedComparisonBasis);
     }
 
-    internal Task<RankingSnapshot> BuildSnapshotAsync(
+    internal async Task<RankingSnapshot> BuildSnapshotAsync(
         RiderMetricsContext context,
         CancellationToken cancellationToken,
         IReadOnlyList<JsonObject>? resolvedSessions = null,
@@ -199,13 +205,18 @@ public sealed class RankingService
         string? nation = null,
         string? riderId = null)
     {
-        var key = BuildSingleFlightKey(context, resolvedSessions, riderQuery, nation, riderId);
+        var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken) : null;
+        var key = BuildSingleFlightKey(context, resolvedSessions, riderQuery, nation, riderId) +
+            (revision is null ? "" : ":" + revision.ForContext(context) + ":" + AlgorithmCatalog.Current.Fingerprint("rating"));
         if (_cache.TryGetValue<RankingSnapshot>(key, out var cached))
         {
-            return Task.FromResult(cached!);
+            ApiTelemetry.Cache("memory", "hit");
+            _provenance?.Include(cached!.Metadata);
+            return cached!;
         }
 
-        return _singleFlight.RunAsync(
+        ApiTelemetry.Cache("memory", "miss");
+        var result = await _singleFlight.RunAsync(
             key,
             async () =>
             {
@@ -224,10 +235,18 @@ public sealed class RankingService
                     riderQuery,
                     nation,
                     riderId);
+                if (revision is not null && revision.ForContext(context) !=
+                    (await _revisions!.GetAsync(computationTimeout.Token, forceRefresh: true)).ForContext(context))
+                    throw new ApiException(503, "DATA_REVISION_CHANGED", "Data changed during calculation. Please retry.");
+                snapshot = snapshot with { Metadata = new CalculationMetadata(
+                    AlgorithmCatalog.Current.VersionLabel("rating"), AlgorithmCatalog.Current.ConfigurationHash("rating"),
+                    revision?.ForContext(context), DateTimeOffset.UtcNow) };
                 _cache.Set(key, snapshot, SnapshotLifetime);
                 return snapshot;
             },
             cancellationToken);
+        _provenance?.Include(result.Metadata);
+        return result;
     }
 
     private async Task<RankingSnapshot> BuildSnapshotCoreAsync(
@@ -394,7 +413,9 @@ public sealed class RankingService
         string riderId,
         CancellationToken cancellationToken)
     {
-        var key = BuildSingleFlightKey(context, null, null, null);
+        var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken) : null;
+        var key = BuildSingleFlightKey(context, null, null, null) +
+            (revision is null ? "" : ":" + revision.ForContext(context) + ":" + AlgorithmCatalog.Current.Fingerprint("rating"));
         if (!_cache.TryGetValue<RankingSnapshot>(key, out var snapshot) || snapshot is null)
         {
             var pointsKey = "points-position:" + key;
@@ -992,7 +1013,8 @@ internal sealed record RankingSnapshot(
     IReadOnlyList<JsonObject> Splits,
     IReadOnlyList<JsonObject> Sessions,
     IReadOnlyList<PacePrecomputedSessionData>? PrecomputedSessions = null,
-    RankingReadData? ReadData = null);
+    RankingReadData? ReadData = null,
+    CalculationMetadata? Metadata = null);
 
 internal sealed record RankingParticipationRates(
     int FinalsCount,

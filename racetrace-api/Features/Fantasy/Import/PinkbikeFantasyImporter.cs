@@ -13,12 +13,13 @@ public sealed class PinkbikeFantasyImporter(
     FantasyPriceSnapshotStore store,
     IOptions<FantasyImportOptions> options,
     TimeProvider time,
-    ILogger<PinkbikeFantasyImporter> logger)
+    ILogger<PinkbikeFantasyImporter> logger,
+    FantasyJobCoordinator? jobs = null)
 {
     public const string HttpClientName = "PinkbikeFantasy";
     private static readonly SemaphoreSlim SyncGate = new(1, 1);
 
-    public Task<FantasyPriceSnapshot> SyncAsync(int season, string? upcomingRoundId = null, CancellationToken cancellationToken = default) =>
+    public Task<FantasyPriceSnapshot> SyncAsync(int season, string? upcomingRoundId = null, CancellationToken cancellationToken = default, string? runId = null) =>
         RunGuardedAsync(season, async token =>
         {
             string html;
@@ -50,13 +51,13 @@ public sealed class PinkbikeFantasyImporter(
             }
             // Mapping/storage failures must not trigger another network acquisition.
             return await ImportCoreAsync(html, season, upcomingRoundId, method, token);
-        }, cancellationToken);
+        }, cancellationToken, runId);
 
     // Explicit, audited imports of saved public HTML use the same lock, timeout and failure reporting.
-    internal Task<FantasyPriceSnapshot> ImportHtmlAsync(string html, int season, string? upcomingRoundId, string acquisitionMethod, CancellationToken cancellationToken) =>
-        RunGuardedAsync(season, token => ImportCoreAsync(html, season, upcomingRoundId, acquisitionMethod, token), cancellationToken);
+    internal Task<FantasyPriceSnapshot> ImportHtmlAsync(string html, int season, string? upcomingRoundId, string acquisitionMethod, CancellationToken cancellationToken, string? runId = null) =>
+        RunGuardedAsync(season, token => ImportCoreAsync(html, season, upcomingRoundId, acquisitionMethod, token), cancellationToken, runId);
 
-    private async Task<FantasyPriceSnapshot> RunGuardedAsync(int season, Func<CancellationToken, Task<FantasyPriceSnapshot>> import, CancellationToken cancellationToken)
+    private async Task<FantasyPriceSnapshot> RunGuardedAsync(int season, Func<CancellationToken, Task<FantasyPriceSnapshot>> import, CancellationToken cancellationToken, string? runId)
     {
         // Reject overlapping syncs instead of queueing another expensive HTTP+DB import.
         if (!await SyncGate.WaitAsync(0, cancellationToken)) throw new InvalidOperationException("A Fantasy price sync is already running.");
@@ -64,7 +65,13 @@ public sealed class PinkbikeFantasyImporter(
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(options.Value.TimeoutSeconds, 5, 120)));
-            return await import(timeout.Token);
+            if (jobs is not null)
+                return await jobs.RunAsync($"prices:{season}", runId ?? "manual:" + Guid.NewGuid().ToString("N"), "prices",
+                    season.ToString(System.Globalization.CultureInfo.InvariantCulture), import, store.SaveAsync, timeout.Token);
+            var result = await import(timeout.Token);
+            timeout.Token.ThrowIfCancellationRequested();
+            await store.SaveAsync(result, timeout.Token);
+            return result;
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidDataException or FormatException or OperationCanceledException or IOException)
         {
@@ -93,7 +100,6 @@ public sealed class PinkbikeFantasyImporter(
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(html)))[..16].ToLowerInvariant();
         var snapshot = new FantasyPriceSnapshot($"{season}-{fetchedAt:yyyyMMddTHHmmssfffffff}-{hash}", season, upcomingRoundId,
             fetchedAt, riders, PinkbikeFantasyParser.SourceUrl, acquisitionMethod);
-        await store.SaveAsync(snapshot, cancellationToken);
         return snapshot;
     }
 

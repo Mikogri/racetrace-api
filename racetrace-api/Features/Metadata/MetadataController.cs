@@ -9,6 +9,7 @@ public sealed class MetadataController(DisplayMetadataService metadata) : Contro
 {
     [HttpGet]
     [OutputCache(PolicyName = "analytics")]
+    [ProducesResponseType(typeof(DisplayMetadataDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Get(CancellationToken cancellationToken) =>
         Ok(await metadata.GetAsync(cancellationToken));
 }

@@ -1,3 +1,5 @@
+using RaceTrace.Api.Infrastructure.Calculations;
+
 namespace RaceTrace.Api.Services;
 
 internal sealed record RiderResultScore(
@@ -5,13 +7,6 @@ internal sealed record RiderResultScore(
     double Confidence,
     int UsedSessions);
 
-internal sealed class ResultScoreOptions
-{
-    // Anchors the progressive position curve. Lower values create larger gaps
-    // between the winner and the rest of the podium.
-    public double SecondPlaceScore { get; init; } = 96.0;
-    public double ConfidenceWeightScale { get; init; } = 2.5;
-}
 
 internal sealed class DownhillResultScoreCalculator
 {
@@ -22,8 +17,8 @@ internal sealed class DownhillResultScoreCalculator
         ResultScoreOptions? options = null,
         SessionWeightOptions? sessionWeights = null)
     {
-        _options = options ?? new ResultScoreOptions();
-        _sessionWeights = sessionWeights ?? new SessionWeightOptions();
+        _options = options ?? AlgorithmConfiguration.ResultScore;
+        _sessionWeights = sessionWeights ?? AlgorithmConfiguration.SessionWeights;
         if (_options.SecondPlaceScore <= 0 ||
             _options.SecondPlaceScore >= 100 ||
             _options.ConfidenceWeightScale <= 0)

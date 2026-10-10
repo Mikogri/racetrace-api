@@ -1,3 +1,5 @@
+using RaceTrace.Api.Infrastructure.Calculations;
+
 namespace RaceTrace.Api.Services;
 
 internal sealed record RatingResult(
@@ -7,13 +9,6 @@ internal sealed record RatingResult(
     double Consistency,
     double? ResultScore);
 
-internal sealed class RatingOptions
-{
-    public double PaceWeight { get; init; } = 0.70;
-    public double ConsistencyWeight { get; init; } = 0.15;
-    public double ResultScoreWeight { get; init; } = 0.15;
-    public double RatingContrast { get; init; } = 1.20;
-}
 
 internal sealed class DownhillRatingCalculator
 {
@@ -21,7 +16,7 @@ internal sealed class DownhillRatingCalculator
 
     public DownhillRatingCalculator(RatingOptions? options = null)
     {
-        _options = options ?? new RatingOptions();
+        _options = options ?? AlgorithmConfiguration.Rating;
         if (_options.PaceWeight < 0 ||
             _options.ConsistencyWeight < 0 ||
             _options.ResultScoreWeight < 0 ||

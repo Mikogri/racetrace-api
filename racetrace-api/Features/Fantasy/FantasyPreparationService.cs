@@ -5,6 +5,8 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using RaceTrace.Api.Features.Fantasy.Import;
 using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Infrastructure.Calculations;
+using RaceTrace.Api.Infrastructure.Telemetry;
 using RaceTrace.Api.Services;
 
 namespace RaceTrace.Api.Features.Fantasy;
@@ -18,14 +20,21 @@ public sealed class FantasyPreparationService(
     FantasyPreparedStore store,
     FantasyPriceSnapshotStore prices,
     FantasyTrainingParticipants training,
-    ILogger<FantasyPreparationService> logger)
+    ILogger<FantasyPreparationService> logger,
+    FantasyJobCoordinator? jobs = null)
 {
-    public async Task<FantasyPreparedRound> PrepareAsync(JsonObject targetRound, CancellationToken token)
+    public async Task<FantasyPreparedRound> PrepareAsync(JsonObject targetRound, CancellationToken token, string? runId = null)
     {
         await coordinator.PrepareGate.WaitAsync(token);
         try
         {
-            return await PrepareCoreAsync(targetRound, token);
+            var roundId = targetRound.String("id") ?? throw new InvalidDataException("The upcoming round has no ID.");
+            if (jobs is not null)
+                return await jobs.RunAsync($"forecast:{roundId}", runId ?? "manual:" + Guid.NewGuid().ToString("N"), "forecast", roundId,
+                    execution => PrepareCoreAsync(targetRound, execution), store.WriteAsync, token);
+            var result = await PrepareCoreAsync(targetRound, token);
+            await store.WriteAsync(result, token);
+            return result;
         }
         finally
         {
@@ -47,6 +56,7 @@ public sealed class FantasyPreparationService(
 
     private async Task<FantasyPreparedRound> PrepareCoreAsync(JsonObject target, CancellationToken token)
     {
+        using var measurement = ApiTelemetry.Measure("fantasy");
         var season = target.Int("season_year") ?? throw new InvalidDataException("The upcoming round has no season.");
         if (season != FantasyRules2026.Rules.Season)
             throw new InvalidDataException("Official Fantasy scoring is not verified for this season.");
@@ -96,7 +106,7 @@ public sealed class FantasyPreparationService(
                 if (stages.Final is null && stages.Q1 is null) continue;
                 var salaryEvent = salarySnapshots.ContainsKey(historical.Id) ? options.Value.Events[historical.Id] : null;
                 var historicalQ1Applies = salaryEvent?.Q1BonusApplies ?? stages.Q1 is not null;
-                var forecasts = await source.ForecastAsync(archive, historical.Round, category, 10_000,
+                var forecasts = await source.ForecastAsync(archive, historical.Round, category, FantasyModelConfiguration.Current.HistoricalIterations,
                     salaryEvent?.StartListRiderIds?.ToHashSet(StringComparer.Ordinal), token);
                 if (forecasts.Count == 0) continue;
                 var finalFit = FitBefore(finalHistory, historical.Start);
@@ -150,7 +160,7 @@ public sealed class FantasyPreparationService(
             // Training matches cover the Pinkbike catalogue, not necessarily the entire race field.
             // They constrain team selection only; do not artificially improve odds by removing competitors.
             var startList = eventOptions?.StartListRiderIds?.ToHashSet(StringComparer.Ordinal);
-            var current = await source.ForecastAsync(archive, target, category, 50_000, startList, token);
+            var current = await source.ForecastAsync(archive, target, category, FantasyModelConfiguration.Current.ForecastIterations, startList, token);
             foreach (var forecast in current)
             {
                 var finalDistribution = FantasyCalibration.Apply(forecast.Positions, currentFinalFit);
@@ -175,8 +185,11 @@ public sealed class FantasyPreparationService(
             throw new InvalidDataException("Race data changed during Fantasy preparation. Retry to prepare a consistent forecast.");
         var prepared = new FantasyPreparedRound(season, roundId, starts, timeProvider.GetUtcNow(), FantasyRacePrediction.EngineVersion,
             FantasyCalibration.Version, FantasyRules2026.Rules.Version, EventFingerprint(eventOptions),
-            preparedRiders.OrderByDescending(rider => rider.ExpectedFantasyPoints).ToArray(), warnings.Order(StringComparer.Ordinal).ToArray(), backtests, calibrations, dataRevision, trainingFields);
-        await store.WriteAsync(prepared, token);
+            preparedRiders.OrderByDescending(rider => rider.ExpectedFantasyPoints).ToArray(), warnings.Order(StringComparer.Ordinal).ToArray(), backtests, calibrations, dataRevision, trainingFields,
+            AlgorithmCatalog.Current.Fingerprint("fantasy"),
+            AlgorithmCatalog.Hash(new { Configuration = AlgorithmCatalog.Current.ConfigurationHash("fantasy"), Event = EventFingerprint(eventOptions), Calibrations = calibrations }),
+            calibrations.Count == 0 ? null : calibrations.Values.Max(value => value.TrainedThroughUtc), timeProvider.GetUtcNow(),
+            AlgorithmConfiguration.Podium.RandomSeed, FantasyModelConfiguration.Current.ForecastIterations);
         logger.LogInformation("Prepared Fantasy round {RoundId}: {RiderCount} projections and {BacktestCount} walk-forward category tests.",
             roundId, prepared.Riders.Count, backtests.Count);
         return prepared;

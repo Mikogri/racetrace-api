@@ -43,4 +43,4 @@ public sealed record RankingResponseDto(
     [property: JsonPropertyName("hasPreviousPage")] bool HasPreviousPage,
     [property: JsonPropertyName("hasNextPage")] bool HasNextPage,
     [property: JsonPropertyName("summary")] RankingSummaryDto Summary,
-    [property: JsonPropertyName("comparisonBasis")] string? ComparisonBasis = null);
+    [property: JsonPropertyName("comparisonBasis"), Infrastructure.ApiContractValues("previousRound", "defaultFilters", "previousFilters")] string? ComparisonBasis = null);

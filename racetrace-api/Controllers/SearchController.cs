@@ -15,6 +15,7 @@ public sealed class SearchController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> Search(CancellationToken cancellationToken)
     {
         return Ok(await _search.SearchAsync(Request.Query, cancellationToken));

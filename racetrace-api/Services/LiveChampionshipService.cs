@@ -1,13 +1,14 @@
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json.Nodes;
 using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Infrastructure.Calculations;
 using RaceTrace.Api.Models;
 
 namespace RaceTrace.Api.Services;
 
 public sealed record ChampionshipContext(bool Eligible, IReadOnlyList<string> SessionTypes);
 
-public sealed class LiveChampionshipService(ISupabaseRestClient client, DomainQueryService domain, IMemoryCache cache)
+public sealed class LiveChampionshipService(ISupabaseRestClient client, DomainQueryService domain, IMemoryCache cache, DataRevisionService? revisions = null)
 {
     private sealed record Baseline(bool Eligible, bool Complete, IReadOnlyList<ChampionshipRider> Riders, IReadOnlyList<ChampionshipStage> Stages);
 
@@ -32,6 +33,8 @@ public sealed class LiveChampionshipService(ISupabaseRestClient client, DomainQu
     private async Task<Baseline> LoadAsync(string roundId, string category, CancellationToken token)
     {
         var key = $"live-championship:{roundId}:{category.ToUpperInvariant()}";
+        // The baseline depends on preceding rounds too, not just the live round.
+        if (revisions is { Enabled: true }) key += ":" + (await revisions.GetAsync(token)).ForScopes(["all"]);
         if (cache.TryGetValue<Baseline>(key, out var cached) && cached is not null) return cached;
         var result = await LoadCoreAsync(roundId, category, token);
         cache.Set(key, result, TimeSpan.FromMinutes(5));

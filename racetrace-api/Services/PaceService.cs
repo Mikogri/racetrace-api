@@ -2,6 +2,9 @@ using System.Text.Json.Nodes;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 
+using RaceTrace.Api.Infrastructure.Calculations;
+using RaceTrace.Api.Infrastructure.Telemetry;
+
 namespace RaceTrace.Api.Services;
 
 public sealed class PaceService
@@ -20,7 +23,7 @@ public sealed class PaceService
     public PaceService(ISupabaseRestClient supabase)
     {
         _supabase = supabase;
-        var paceOptions = new PaceOptions();
+        var paceOptions = AlgorithmConfiguration.Pace;
         _paceCalculator = new DownhillPaceCalculator(paceOptions);
         _consistencyCalculator = new DownhillConsistencyCalculator(
             sessionWeights: paceOptions.SessionWeights);
@@ -217,6 +220,7 @@ public sealed class PaceService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var splits = suppliedSplits ?? await FetchSplitsAsync(resultIds, cancellationToken);
+        using var measurement = ApiTelemetry.Measure("rating");
         var splitsByResultId = splits
             .GroupBy(split => split.String("result_id") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
@@ -384,6 +388,7 @@ public sealed class PaceService
         IReadOnlyList<PacePrecomputedSessionData> precomputedSessions,
         IReadOnlyList<JsonObject>? availableSessions = null)
     {
+        using var measurement = ApiTelemetry.Measure("rating");
         var resultsByRiderId = selectedResults
             .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")))
             .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)

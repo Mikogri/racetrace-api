@@ -1,3 +1,6 @@
+using RaceTrace.Api.Infrastructure.Calculations;
+using RaceTrace.Api.Infrastructure.Telemetry;
+
 namespace RaceTrace.Api.Services;
 
 internal sealed record ConsistencyRunInput(
@@ -47,57 +50,6 @@ internal sealed record ConsistencyOutlierProfile(
     IReadOnlySet<int> SectorIndexes,
     double? ProjectedFinishPositionScore);
 
-internal sealed class ConsistencyOptions
-{
-    public double VariationAtHalfScore { get; init; } = 0.06;
-
-    public double ConfidenceComparisonScale { get; init; } = 20.0;
-
-    // Reliability is the primary signal: frequent incidents must dominate the score.
-    public double IncidentReliabilityWeight { get; init; } = 0.40;
-
-    // Reaching the final is the second-strongest measure of sporting reliability.
-    public double FinalQualificationWeight { get; init; } = 0.35;
-
-    // Direct Q1 qualification is preferred, while advancing through Q2 remains positive.
-    public double QualificationQualityWeight { get; init; } = 0.05;
-
-    // This component measures only position variation, not whether the position was good.
-    public double PositionRepeatabilityWeight { get; init; } = 0.20;
-
-    // Higher values make each incident reduce Incident Reliability more aggressively.
-    public double IncidentRateExponent { get; init; } = 1.20;
-
-    // Prevents one incident in a short sample from collapsing reliability to zero.
-    // As evidence grows, the observed incident rate increasingly drives the score.
-    public double IncidentToleranceRuns { get; init; } = 2.0;
-
-    // Maximum additional loss for a sustained pattern of repeated incidents.
-    // The actual penalty uses incident frequency, not an absolute career count.
-    public double MaximumRepeatedIncidentPenalty { get; init; } = 60.0;
-
-    public double RepeatedIncidentPenaltyExponent { get; init; } = 1.15;
-
-    // Score assigned to an event where the rider reached the final through Q2.
-    public double Q2QualificationScore { get; init; } = 75.0;
-
-    // Final incidents drive sporting reliability; incidents in earlier sessions
-    // remain supporting evidence but cannot dilute repeated final crashes.
-    public double FinalIncidentReliabilityShare { get; init; } = 0.85;
-
-    // Robust normalized-position deviation that produces 50 Position Repeatability.
-    public double PositionVariationAtHalfScore { get; init; } = 0.12;
-
-    // Keeps the position signal resistant to one extreme result without hiding
-    // repeatable smaller changes around the rider's typical position.
-    public double RobustPositionDeviationWeight { get; init; } = 0.70;
-
-    public double OutlierReferenceQuantile { get; init; } = 0.75;
-
-    public double MinimumOutlierReferencePercentile { get; init; } = 0.60;
-
-    public double OutlierPercentileDropThreshold { get; init; } = 0.35;
-}
 
 internal sealed class DownhillConsistencyCalculator
 {
@@ -108,8 +60,8 @@ internal sealed class DownhillConsistencyCalculator
         ConsistencyOptions? options = null,
         SessionWeightOptions? sessionWeights = null)
     {
-        _options = options ?? new ConsistencyOptions();
-        _sessionWeights = sessionWeights ?? new SessionWeightOptions();
+        _options = options ?? AlgorithmConfiguration.Consistency;
+        _sessionWeights = sessionWeights ?? AlgorithmConfiguration.SessionWeights;
         if (_options.VariationAtHalfScore <= 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -213,6 +165,7 @@ internal sealed class DownhillConsistencyCalculator
         IReadOnlyList<ConsistencyRunInput> runs,
         CompetitionClassWeighting? competitionClassWeighting = null)
     {
+        using var measurement = ApiTelemetry.Measure("consistency");
         var officialRuns = runs
             .Where(run => _sessionWeights.GetWeight(run.SessionType) > 0)
             .ToArray();

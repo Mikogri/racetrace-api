@@ -30,6 +30,7 @@ public sealed class AdminImportController : ControllerBase
 
     [HttpPost("chronorace/session")]
     [HttpPost("results/session")]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.ChronoRaceImportResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ImportChronoRaceSession([FromBody] ChronoRaceImportRequest request, CancellationToken cancellationToken)
     {
         return Ok(await _import.ImportSessionAsync(request, cancellationToken));
@@ -37,6 +38,7 @@ public sealed class AdminImportController : ControllerBase
 
     [HttpPost("chronorace/round-form")]
     [HttpPost("results/round-form")]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.ChronoRaceRoundFormImportResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ImportChronoRaceRoundForm([FromBody] ChronoRaceRoundFormImportRequest request, CancellationToken cancellationToken)
     {
         return Ok(await _roundFormImport.ImportAsync(request, cancellationToken));
@@ -45,6 +47,7 @@ public sealed class AdminImportController : ControllerBase
     [HttpPost("results/round-form/pdf")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(50_000_000)]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.ChronoRaceRoundFormImportResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ImportPdfRoundForm(
         [FromForm(Name = "request")] string requestJson,
         [FromForm(Name = "files")] List<IFormFile> files,
@@ -111,6 +114,7 @@ public sealed class AdminImportController : ControllerBase
     }
 
     [HttpPost("~/api/admin/rounds")]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.PlannedRoundCreateResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> CreatePlannedRound([FromBody] PlannedRoundCreateRequest request, CancellationToken cancellationToken)
     {
         return Ok(await _import.CreatePlannedRoundAsync(request, cancellationToken));
@@ -119,6 +123,7 @@ public sealed class AdminImportController : ControllerBase
     [HttpPost("riders/profile-images")]
     [HttpPost("~/api/v1/import/riders/profile-images")]
     [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.RiderProfileImageImportResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ImportRiderProfileImages(
         [FromForm(Name = "files")] List<IFormFile> files,
         CancellationToken cancellationToken)

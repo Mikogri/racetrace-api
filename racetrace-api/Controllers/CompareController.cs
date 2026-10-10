@@ -15,6 +15,7 @@ public sealed class CompareController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.CompareResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
         return Ok(await _compare.CompareAsync(Request.Query, cancellationToken));

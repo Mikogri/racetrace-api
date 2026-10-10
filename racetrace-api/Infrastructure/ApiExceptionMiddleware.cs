@@ -1,4 +1,5 @@
 using RaceTrace.Api.Models;
+using RaceTrace.Api.Infrastructure.Telemetry;
 
 namespace RaceTrace.Api.Infrastructure;
 
@@ -31,7 +32,7 @@ public sealed class ApiExceptionMiddleware
         }
         catch (SupabaseApiException exception)
         {
-            _logger.LogWarning(exception, "Supabase request failed with status {StatusCode}. Body: {ResponseBody}", exception.StatusCode, exception.ResponseBody);
+            _logger.LogWarning("Supabase request failed with status {StatusCode}", exception.StatusCode);
             var statusCode = exception.StatusCode == StatusCodes.Status503ServiceUnavailable
                 ? StatusCodes.Status503ServiceUnavailable
                 : StatusCodes.Status500InternalServerError;
@@ -51,6 +52,7 @@ public sealed class ApiExceptionMiddleware
         }
         catch (TaskCanceledException exception)
         {
+            context.Items[ApiTelemetry.TimeoutKey] = true;
             _logger.LogWarning(exception, "External service request timed out or was cancelled.");
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsJsonAsync(new ApiErrorResponse(new ApiError("UPSTREAM_TIMEOUT", "External service request timed out or was cancelled.")));

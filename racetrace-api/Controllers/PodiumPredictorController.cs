@@ -17,6 +17,7 @@ public sealed class PodiumPredictorController : ControllerBase
 
     [HttpGet]
     [OutputCache(PolicyName = "season-overview")]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.PodiumPredictionResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
         return Ok(await _predictor.GetAsync(Request.Query, cancellationToken));

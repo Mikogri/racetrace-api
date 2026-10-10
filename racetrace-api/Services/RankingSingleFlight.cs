@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using RaceTrace.Api.Infrastructure.Telemetry;
 
 namespace RaceTrace.Api.Services;
 
@@ -18,12 +20,28 @@ public sealed class RankingSingleFlight
         var flight = _flights.GetOrAdd(key, candidate);
         var task = flight.Value;
 
-        if (ReferenceEquals(candidate, flight))
+        var shared = !ReferenceEquals(candidate, flight);
+        var measured = ApiTelemetry.DetailedEnabled;
+        if (measured) ApiTelemetry.FlightCalls.Add(1, new KeyValuePair<string, object?>("outcome", shared ? "shared" : "new"));
+        if (!shared)
         {
             _ = RemoveWhenCompletedAsync(key, flight, task);
         }
 
-        return await task.WaitAsync(cancellationToken);
+        var started = Stopwatch.GetTimestamp();
+        if (shared && measured) ApiTelemetry.FlightWaiters.Add(1);
+        try
+        {
+            return await task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            if (shared && measured)
+            {
+                ApiTelemetry.FlightWaiters.Add(-1);
+                ApiTelemetry.FlightWaitDuration.Record(Stopwatch.GetElapsedTime(started).TotalSeconds);
+            }
+        }
     }
 
     private static async Task<RankingSnapshot> InvokeAsync(Func<Task<RankingSnapshot>> factory) =>

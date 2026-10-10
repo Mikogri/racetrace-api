@@ -1,3 +1,5 @@
+using RaceTrace.Api.Infrastructure.Calculations;
+
 namespace RaceTrace.Api.Services;
 
 internal enum SectorAnomalyKind { Normal, PossibleIncident, LikelyIncident, InvalidTiming }
@@ -15,6 +17,7 @@ internal static class SectorIncidentDetector
     internal static IReadOnlyList<SectorAnomaly> Analyze(
         IReadOnlyList<PacePrecomputedSector> sectors, PaceOptions options)
     {
+        var thresholds = AlgorithmConfiguration.Incidents;
         var result = sectors.Select(s => new SectorAnomaly(
             SectorAnomalyKind.Normal, null, null, null,
             s.TimeSeconds is null ? "Missing timing" : "Insufficient evidence")).ToArray();
@@ -24,7 +27,7 @@ internal static class SectorIncidentDetector
             var s = sectors[i];
             invalid[i] = s.TimeSeconds.HasValue &&
                 (!double.IsFinite(s.TimeSeconds.Value) || s.TimeSeconds <= 0 ||
-                 (ValidField(s) && s.TimeSeconds < s.Statistics.Median * .25));
+                 (ValidField(s) && s.TimeSeconds < s.Statistics.Median * thresholds.InvalidShortRatio));
             if (invalid[i]) result[i] = Invalid("Non-positive, non-finite or implausibly short sector");
         }
 
@@ -42,9 +45,9 @@ internal static class SectorIncidentDetector
             var expectedB = b.Statistics.Median * factor;
             var da = a.TimeSeconds!.Value - expectedA;
             var db = b.TimeSeconds!.Value - expectedB;
-            if (((da > options.MinimumIncidentLossSeconds && b.TimeSeconds < Math.Min(expectedB, b.Statistics.Median) * .65) ||
-                 (db > options.MinimumIncidentLossSeconds && a.TimeSeconds < Math.Min(expectedA, a.Statistics.Median) * .65)) &&
-                da * db < 0 && Math.Abs(da + db) <= Math.Max(1, .05 * (expectedA + expectedB)))
+            if (((da > options.MinimumIncidentLossSeconds && b.TimeSeconds < Math.Min(expectedB, b.Statistics.Median) * thresholds.CheckpointShortRatio) ||
+                 (db > options.MinimumIncidentLossSeconds && a.TimeSeconds < Math.Min(expectedA, a.Statistics.Median) * thresholds.CheckpointShortRatio)) &&
+                da * db < 0 && Math.Abs(da + db) <= Math.Max(thresholds.CheckpointToleranceSeconds, thresholds.CheckpointToleranceRatio * (expectedA + expectedB)))
             {
                 invalid[i] = invalid[i + 1] = true;
                 result[i] = Invalid("Compensating long/short checkpoint pair");
@@ -58,35 +61,35 @@ internal static class SectorIncidentDetector
             var others = Enumerable.Range(0, sectors.Count)
                 .Where(j => j != i && !invalid[j] && Usable(sectors[j])).ToArray();
             var references = others.OrderBy(j => Math.Abs(j - i)).ThenBy(j => j)
-                .Take(3).Select(LogRatio).ToArray();
+                .Take(thresholds.ReferenceSectors).Select(LogRatio).ToArray();
             if (references.Length < 2) continue;
             var baseline = Median(references);
             var expected = sectors[i].Statistics.Median * Math.Exp(baseline);
             var loss = sectors[i].TimeSeconds!.Value - expected;
             // Floors protect near-identical fields. Cross-sector MAD allows normal
             // strengths/weaknesses instead of assuming a rider has identical ranks.
-            var scale = Math.Max(.02, Math.Max(sectors[i].Statistics.LogMadScale,
+            var scale = Math.Max(thresholds.ScaleFloor, Math.Max(sectors[i].Statistics.LogMadScale,
                 1.4826 * Median(references.Select(v => Math.Abs(v - baseline)))));
             var deviation = Math.Log(sectors[i].TimeSeconds!.Value / expected) / scale;
-            var clean = others.Where(j => Math.Abs(LogRatio(j) - baseline) <= 1.5 * scale).ToHashSet();
+            var clean = others.Where(j => Math.Abs(LogRatio(j) - baseline) <= thresholds.CleanDeviation * scale).ToHashSet();
             var later = others.Where(j => j > i).ToArray();
             var recovers = later.Any(clean.Contains);
             var ranked = others.Where(j => sectors[j].Rank is > 0).ToArray();
             var rankDrop = sectors[i].Rank is > 0 && ranked.Length > 0
                 ? RelativeRank(i) - Median(ranked.Select(RelativeRank)) : 0;
-            var largeLoss = loss >= 4 && deviation >= 1.5 &&
-                deviation + Math.Max(0, rankDrop) >= 4 && clean.Count >= 2;
+            var largeLoss = loss >= thresholds.LargeLossSeconds && deviation >= thresholds.LargeLossDeviation &&
+                deviation + Math.Max(0, rankDrop) >= thresholds.CombinedEvidence && clean.Count >= thresholds.LargeLossCleanSectors;
 
             // Smaller losses need top-field pace on BOTH adjacent sectors,
             // recovery, and a meaningful rank collapse; never a terminal exception.
-            var topReferences = ranked.Where(j => sectors[j].Statistics.Count >= 6).ToArray();
-            var isolatedTopPace = loss >= 2 && deviation >= 2 && clean.Count >= 3 &&
-                rankDrop >= .5 && sectors[i].Statistics.Count >= 6 && recovers &&
+            var topReferences = ranked.Where(j => sectors[j].Statistics.Count >= thresholds.TopFieldMinimumSize).ToArray();
+            var isolatedTopPace = loss >= thresholds.IsolatedLossSeconds && deviation >= thresholds.IsolatedDeviation && clean.Count >= thresholds.IsolatedCleanSectors &&
+                rankDrop >= thresholds.IsolatedRankDrop && sectors[i].Statistics.Count >= thresholds.TopFieldMinimumSize && recovers &&
                 others.Contains(i - 1) && others.Contains(i + 1) &&
                 clean.Contains(i - 1) && clean.Contains(i + 1) &&
-                topReferences.Length >= 3 && Median(topReferences.Select(RelativeRank)) <= .15 &&
+                topReferences.Length >= thresholds.TopReferenceCount && Median(topReferences.Select(RelativeRank)) <= thresholds.TopMedianRank &&
                 new[] { i - 1, i + 1 }.All(j => sectors[j].Rank is > 0 &&
-                    sectors[j].Statistics.Count >= 6 && RelativeRank(j) <= .2);
+                    sectors[j].Statistics.Count >= thresholds.TopFieldMinimumSize && RelativeRank(j) <= thresholds.TopAdjacentRank);
             var detected = largeLoss || isolatedTopPace;
             result[i] = new(detected ? SectorAnomalyKind.LikelyIncident : SectorAnomalyKind.Normal,
                 expected, loss, deviation,
@@ -111,7 +114,7 @@ internal static class SectorIncidentDetector
             {
                 var expected = sectors[j].Statistics.Median * Math.Exp(baseline);
                 var loss = sectors[j].TimeSeconds!.Value - expected;
-                var scale = Math.Max(.02, Math.Max(spread, sectors[j].Statistics.LogMadScale));
+                var scale = Math.Max(thresholds.ScaleFloor, Math.Max(spread, sectors[j].Statistics.LogMadScale));
                 return (Index: j, Expected: expected, Loss: loss,
                     Deviation: Math.Log(sectors[j].TimeSeconds!.Value / expected) / scale);
             }).ToArray();

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Models;
 using RaceTrace.Api.Services;
+using RaceTrace.Api.Infrastructure.Telemetry;
 using static RaceTrace.Api.Features.Results.ResultTimingProjection;
 
 namespace RaceTrace.Api.Features.Analytics;
@@ -17,6 +18,7 @@ internal static class RoundRaceAnalytics
         IReadOnlyList<JsonObject> preFinalResults,
         string? preFinalSession)
     {
+        using var measurement = ApiTelemetry.Measure("round_analytics");
         var classified = results.Where(IsClassified).OrderBy(row => row.Int("position")).ToArray();
         var starters = results.Where(row => !string.Equals(row.String("status")?.Trim(), "DNS", StringComparison.OrdinalIgnoreCase)).ToArray();
         var eligible = starters.Where(row => !DownhillPaceCalculator.IsDisqualified(row.String("status"))).ToArray();

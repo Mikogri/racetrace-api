@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using RaceTrace.Api.Features.Fantasy;
 using RaceTrace.Api.Features.Fantasy.Import;
 using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Infrastructure.Calculations;
 
 namespace RaceTrace.Api.Tests;
 
@@ -26,6 +27,9 @@ public sealed class FantasyServiceTests
     [InlineData("injury", false)]
     [InlineData("outside-start-list", false)]
     [InlineData("stale-model", false)]
+    [InlineData("stale-dependency", false)]
+    [InlineData("legacy-fingerprint", true)]
+    [InlineData("legacy-fingerprint-strict", false)]
     [InlineData("changed-source", false)]
     public async Task RecommendationRequiresCompleteVerifiedInputs(string scenario, bool expected)
     {
@@ -44,6 +48,15 @@ public sealed class FantasyServiceTests
             Assert.Equal(600, response.Recommendation.ExpectedFantasyPoints);
         }
         else Assert.DoesNotContain(response.Riders, rider => rider.IsRecommended);
+        if (!scenario.StartsWith("legacy-fingerprint", StringComparison.Ordinal) && scenario is not ("stale-model" or "stale-dependency" or "changed-source"))
+        {
+            Assert.NotNull(response.Calculation);
+            Assert.Equal("stored-effective-config", response.Calculation.ConfigurationHash);
+            Assert.Equal(123, response.Calculation.SimulationSeed);
+            Assert.Equal(2_000, response.Calculation.SimulationIterations);
+            Assert.Equal(FantasyCalibration.Version, response.Calculation.AlgorithmVersion);
+        }
+        else Assert.Null(response.Calculation);
         // Reads use the calendar/cache, not the importer, expensive metrics or race simulation RPC.
         Assert.Equal(1, fixture.Database.CalendarReads);
         await fixture.Service.CurrentAsync(default);
@@ -120,6 +133,7 @@ public sealed class FantasyServiceTests
             services.AddSingleton<TimeProvider>(new FixedTime(Now));
             services.AddSingleton<IHostEnvironment>(new TestEnvironment(_directory));
             services.Configure<FantasyOptions>(options => { if (_event is not null) options.Events["37"] = _event; });
+            if (scenario == "legacy-fingerprint-strict") services.Configure<CacheCoherenceOptions>(options => options.Enabled = true);
             _provider = services.BuildServiceProvider();
             _scope = _provider.CreateScope();
         }
@@ -138,7 +152,10 @@ public sealed class FantasyServiceTests
                 scenario == "stale-model" ? "old" : FantasyRacePrediction.EngineVersion, FantasyCalibration.Version,
                 FantasyRules2026.Rules.Version, FantasyPreparationService.EventFingerprint(_event), projections, [], [],
                 DataRevision: scenario == "changed-source" ? "old-data" : await _scope.ServiceProvider.GetRequiredService<FantasyRacePrediction>().DataRevisionAsync(default),
-                TrainingFields: scenario == "training-exclusion" ? [new("male", "test", "https://example.org/training", Now, ["0", "1", "2"])] : []));
+                TrainingFields: scenario == "training-exclusion" ? [new("male", "test", "https://example.org/training", Now, ["0", "1", "2"])] : [],
+                CalculationFingerprint: scenario.StartsWith("legacy-fingerprint", StringComparison.Ordinal) ? null :
+                    scenario == "stale-dependency" ? "previous-rating-config" : AlgorithmCatalog.Current.Fingerprint("fantasy"),
+                ConfigurationHash: "stored-effective-config", SimulationSeed: 123, SimulationIterations: 2_000));
         }
 
         public void Dispose()
@@ -183,6 +200,7 @@ public sealed class FantasyServiceTests
         public Task<IReadOnlyList<JsonObject>> PostAsync(string table, JsonNode payload, SupabaseRole role, string? onConflict = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<JsonObject>> PatchAsync(string table, JsonObject payload, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DeleteAsync(string table, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role, CancellationToken cancellationToken = default) =>
+            functionName == "get_calculation_revisions" ? Task.FromResult<JsonNode?>(new JsonObject { ["all"] = 1L, ["global"] = 1L }) : throw new NotSupportedException();
     }
 }

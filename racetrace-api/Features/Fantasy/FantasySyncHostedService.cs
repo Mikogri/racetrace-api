@@ -24,23 +24,28 @@ public sealed class FantasySyncHostedService(IServiceScopeFactory scopes, IOptio
                 {
                     if (time.GetUtcNow() >= nextPriceSync)
                     {
-                        nextPriceSync = time.GetUtcNow() + options.Value.SyncInterval;
                         await scope.ServiceProvider.GetRequiredService<PinkbikeFantasyImporter>()
-                            .SyncAsync(time.GetUtcNow().Year, round?.String("id"), stoppingToken);
+                            .SyncAsync(time.GetUtcNow().Year, round?.String("id"), stoppingToken,
+                                FantasyJobCoordinator.ScheduledRunId(time.GetUtcNow(), options.Value.SyncInterval));
+                        nextPriceSync = time.GetUtcNow() + options.Value.SyncInterval;
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+                catch (FantasyJobConflictException) { logger.LogDebug("Fantasy price cycle is owned by another worker."); }
                 catch (Exception exception)
                 {
                     logger.LogWarning(exception, "Fantasy price sync failed; refreshing independent race projections using the preserved price history.");
                 }
                 if (round is not null && (FantasyTrainingParticipants.IsLive(round) || time.GetUtcNow() >= nextPreparation))
                 {
-                    await scope.ServiceProvider.GetRequiredService<FantasyPreparationService>().PrepareAsync(round, stoppingToken);
+                    var interval = FantasyTrainingParticipants.IsLive(round) ? options.Value.LiveSyncInterval : options.Value.SyncInterval;
+                    await scope.ServiceProvider.GetRequiredService<FantasyPreparationService>().PrepareAsync(round, stoppingToken,
+                        FantasyJobCoordinator.ScheduledRunId(time.GetUtcNow(), interval));
                     nextPreparation = time.GetUtcNow() + options.Value.SyncInterval;
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (FantasyJobConflictException) { logger.LogDebug("Fantasy preparation cycle is owned by another worker."); }
             catch (Exception exception)
             {
                 logger.LogWarning(exception, "Fantasy refresh failed; the last successful price and projection snapshots are preserved.");

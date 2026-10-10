@@ -26,12 +26,14 @@ public sealed class AdminDataController : ControllerBase
     }
 
     [HttpGet("editable-resources")]
+    [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public IActionResult EditableResources()
     {
         return Ok(_adminData.EditableResources());
     }
 
     [HttpPatch("riders/{riderId:long}")]
+    [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateRider(
         string riderId,
         [FromBody] JsonObject? patch,
@@ -41,6 +43,7 @@ public sealed class AdminDataController : ControllerBase
     }
 
     [HttpPatch("{resource}/{id:long}")]
+    [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         string resource,
         string id,
@@ -51,6 +54,7 @@ public sealed class AdminDataController : ControllerBase
     }
 
     [HttpPatch("rounds/{roundId:long}/track")]
+    [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateRoundTrack(
         string roundId,
         [FromBody] JsonObject? patch,
@@ -60,6 +64,7 @@ public sealed class AdminDataController : ControllerBase
     }
 
     [HttpPut("rounds/{roundId:long}/image")]
+    [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpsertRoundImage(
         string roundId,
         [FromBody] ImportRoundImagePayload payload,
@@ -69,6 +74,7 @@ public sealed class AdminDataController : ControllerBase
     }
 
     [HttpDelete("rounds/{roundId:long}")]
+    [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteRound(
         string roundId,
         CancellationToken cancellationToken)
@@ -77,6 +83,7 @@ public sealed class AdminDataController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId:long}/reimport")]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.ChronoRaceSessionReimportResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ReimportSession(
         string sessionId,
         [FromBody] ChronoRaceSessionReimportRequest? request,
@@ -86,6 +93,7 @@ public sealed class AdminDataController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId:long}/supplement/uci-mtb-world-series")]
+    [ProducesResponseType(typeof(RaceTrace.Api.Models.UciMtbWorldSeriesSupplementResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SupplementUciMtbWorldSeriesResults(
         string sessionId,
         [FromBody] JsonObject? payload,

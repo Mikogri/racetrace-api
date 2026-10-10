@@ -8,6 +8,7 @@ namespace RaceTrace.Api.Controllers;
 public sealed class LiveChampionshipController(LiveChampionshipService championship) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(typeof(RaceTrace.Api.Services.ChampionshipContext), StatusCodes.Status200OK)]
     public async Task<IActionResult> Context(string roundId, [FromQuery] string category, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(category) || category.Length > 64) return BadRequest();
@@ -18,6 +19,7 @@ public sealed class LiveChampionshipController(LiveChampionshipService champions
     // No results, points or standings are written to the database.
     [HttpPost]
     [RequestSizeLimit(262144)]
+    [ProducesResponseType(typeof(RaceTrace.Api.Services.ChampionshipProjection), StatusCodes.Status200OK)]
     public async Task<IActionResult> Project(string roundId, [FromQuery] string category,
         [FromBody] ChampionshipSession[] sessions, CancellationToken cancellationToken)
     {

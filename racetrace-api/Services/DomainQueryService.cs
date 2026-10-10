@@ -1,6 +1,8 @@
 using RaceTrace.Api.Features.Metrics;
 using RaceTrace.Api.Features.Metadata;
 using RaceTrace.Api.Infrastructure.Supabase;
+using RaceTrace.Api.Infrastructure.Calculations;
+using RaceTrace.Api.Infrastructure.Telemetry;
 using System.Globalization;
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json.Nodes;
@@ -19,6 +21,7 @@ public sealed class DomainQueryService
     private readonly ISupabaseRestClient _supabase;
     private readonly DisplayMetadataService _metadata;
     private readonly IMemoryCache? _packageCache;
+    private readonly DataRevisionService? _revisions;
     private readonly Dictionary<JsonObject, IReadOnlyList<PacePrecomputedSessionData>> _preparedPackages = new(ReferenceEqualityComparer.Instance);
     private Task<DisplayMetadataDto>? _metadataTask;
     private readonly object _teamHistoryLock = new();
@@ -40,13 +43,14 @@ public sealed class DomainQueryService
 
     public DomainQueryService(ISupabaseRestClient supabase, DisplayMetadataService? metadata = null, IMemoryCache? packageCache = null,
         Microsoft.Extensions.Options.IOptions<RaceTrace.Api.Configuration.ReadOptimizationOptions>? readOptions = null,
-        ILogger<DomainQueryService>? logger = null)
+        ILogger<DomainQueryService>? logger = null, DataRevisionService? revisions = null)
     {
         _supabase = supabase;
         _metadata = metadata ?? new DisplayMetadataService(supabase);
         _packageCache = packageCache;
         _readOptions = readOptions?.Value ?? new();
         _logger = logger;
+        _revisions = revisions;
     }
 
     public Task<RiderMetricsContext> ParseMetricsContextAsync(
@@ -466,9 +470,18 @@ public sealed class DomainQueryService
 
         var packages = new Dictionary<string, JsonObject>();
         var packageKind = includeSplits ? "full" : "metrics";
+        var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken) : null;
+        string PackageKey(string id) => $"ranking-package:{packageKind}:{role}:{id}" +
+            (revision is null ? "" : ":" + revision.ForSessions([id]));
         foreach (var id in sessionIds)
-            if (_packageCache?.TryGetValue<JsonObject>($"ranking-package:{packageKind}:{role}:{id}", out var package) == true)
+        {
+            if (_packageCache?.TryGetValue<JsonObject>(PackageKey(id), out var package) == true)
+            {
+                ApiTelemetry.Cache("memory", "hit");
                 packages[id] = package!;
+            }
+            else ApiTelemetry.Cache("memory", _packageCache is null ? "bypass" : "miss");
+        }
         var missingIds = sessionIds.Where(id => !packages.ContainsKey(id)).ToArray();
         if (missingIds.Length > 0)
         {
@@ -479,13 +492,15 @@ public sealed class DomainQueryService
             {
                 if (row.String("session_id") is not { } id) continue;
                 packages[id] = row;
-                _packageCache?.Set($"ranking-package:{packageKind}:{role}:{id}", row, TimeSpan.FromSeconds(30));
+                _packageCache?.Set(PackageKey(id), row, TimeSpan.FromSeconds(30));
             }
         }
         // Keep RPC ordering; the parser reads cached rows without creating a merged JSON copy.
         var cacheRows = packages.Values.OrderBy(row => PublicDtoMapping.Long(row.String("session_id"))).ToArray();
         if (cacheRows.Length == 0)
         {
+            ApiTelemetry.Cache("preaggregation", "unavailable");
+            ApiTelemetry.Cache("preaggregation", "fallback");
             return null;
         }
 
@@ -496,8 +511,12 @@ public sealed class DomainQueryService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (sessionIds.Any(id => !cachedSessionIds.Contains(id)))
         {
+            ApiTelemetry.Cache("preaggregation", "unavailable");
+            ApiTelemetry.Cache("preaggregation", "fallback");
             return null;
         }
+
+        ApiTelemetry.Cache("preaggregation", "hit");
 
         if (_readOptions.TypedRanking && !includeSplits)
         {
@@ -601,7 +620,10 @@ public sealed class DomainQueryService
                 try
                 {
                     if (CompactMetricsPackageParser.HasCompletePreparedFinishes(data))
+                    {
+                        ApiTelemetry.Cache("preaggregation", "hit");
                         return RestrictToCategories(ParseRiderDetailDataBundle(data), filters);
+                    }
                 }
                 catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException or ArgumentException or IndexOutOfRangeException)
                 {
@@ -609,7 +631,10 @@ public sealed class DomainQueryService
                 }
                 _logger?.LogWarning("Incomplete prepared rider detail payload; using legacy read.");
             }
+            ApiTelemetry.Cache("preaggregation", "unavailable");
+            ApiTelemetry.Cache("preaggregation", "fallback");
         }
+        else ApiTelemetry.Cache("preaggregation", "bypass");
 
         var response = await _supabase.RpcAsync(
             "get_rider_detail_data",

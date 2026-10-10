@@ -135,7 +135,7 @@ internal sealed class PodiumPredictionFeatureBuilder
     private static double WeightedSessionPerformance(
         IReadOnlyList<PerformanceObservation> observations)
     {
-        var paceOptions = new SessionWeightOptions();
+        var paceOptions = RaceTrace.Api.Infrastructure.Calculations.AlgorithmConfiguration.SessionWeights;
         var weighted = observations.Sum(value =>
             value.Performance * paceOptions.GetWeight(value.SessionType));
         var weights = observations.Sum(value => paceOptions.GetWeight(value.SessionType));

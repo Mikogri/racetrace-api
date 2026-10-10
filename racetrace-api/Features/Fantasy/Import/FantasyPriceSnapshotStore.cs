@@ -11,13 +11,15 @@ public sealed class FantasyPriceSnapshotStore
     private readonly FantasyImportOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<FantasyPriceSnapshotStore> _logger;
+    private readonly FantasyJobCoordinator? _jobs;
 
-    public FantasyPriceSnapshotStore(IOptions<FantasyImportOptions> options, IHostEnvironment environment, TimeProvider time, ILogger<FantasyPriceSnapshotStore> logger)
+    public FantasyPriceSnapshotStore(IOptions<FantasyImportOptions> options, IHostEnvironment environment, TimeProvider time, ILogger<FantasyPriceSnapshotStore> logger, FantasyJobCoordinator? jobs = null)
     {
         _options = options.Value;
         _directory = Path.GetFullPath(_options.SnapshotDirectory, environment.ContentRootPath);
         _time = time;
         _logger = logger;
+        _jobs = jobs;
     }
 
     public Task<FantasyPriceSnapshot?> GetLatestAsync(int season, CancellationToken cancellationToken = default) =>
@@ -25,6 +27,7 @@ public sealed class FantasyPriceSnapshotStore
 
     public async Task<FantasyPriceSnapshot?> GetAtOrBeforeAsync(int season, DateTimeOffset cutoff, CancellationToken cancellationToken = default)
     {
+        if (_jobs?.Enabled == true) return await _jobs.ReadAsync<FantasyPriceSnapshot>("prices", season.ToString(System.Globalization.CultureInfo.InvariantCulture), cutoff, cancellationToken);
         var directory = SeasonDirectory(season);
         if (!Directory.Exists(directory)) return null;
         foreach (var path in Directory.EnumerateFiles(directory, "snapshot-*.json").OrderDescending(StringComparer.Ordinal))
@@ -45,6 +48,13 @@ public sealed class FantasyPriceSnapshotStore
     public async Task<FantasyPriceStatus> GetStatusAsync(int season, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetLatestAsync(season, cancellationToken);
+        if (_jobs?.Enabled == true)
+        {
+            var sharedStatus = await _jobs.ReadStatusAsync($"prices:{season}", cancellationToken);
+            return new(snapshot, snapshot is null || _time.GetUtcNow() - snapshot.FetchedAtUtc > TimeSpan.FromHours(Math.Max(1, _options.StaleAfterHours)),
+                sharedStatus?.Status == "failed" ? "The last Fantasy price synchronization failed. The last successful snapshot is preserved." : null,
+                sharedStatus?.LastAttemptAt);
+        }
         var statusPath = Path.Combine(SeasonDirectory(season), "sync-status.json");
         SyncStatus? status = null;
         if (File.Exists(statusPath))
@@ -62,6 +72,7 @@ public sealed class FantasyPriceSnapshotStore
 
     public async Task SaveAsync(FantasyPriceSnapshot snapshot, CancellationToken cancellationToken = default)
     {
+        if (_jobs?.Enabled == true) throw new InvalidOperationException("Distributed Fantasy snapshots require fenced job publication.");
         var directory = SeasonDirectory(snapshot.Season);
         Directory.CreateDirectory(directory);
         var name = $"snapshot-{snapshot.FetchedAtUtc.UtcDateTime:yyyyMMddTHHmmssfffffff}-{Guid.NewGuid():N}.json";
@@ -71,6 +82,7 @@ public sealed class FantasyPriceSnapshotStore
 
     public async Task RecordAttemptAsync(int season, string? error, CancellationToken cancellationToken = default)
     {
+        if (_jobs?.Enabled == true) return; // Shared run status is written by the fenced job RPC.
         var directory = SeasonDirectory(season);
         Directory.CreateDirectory(directory);
         await WriteAtomicAsync(Path.Combine(directory, "sync-status.json"), new SyncStatus(_time.GetUtcNow(), error), overwrite: true, cancellationToken);

@@ -7,7 +7,7 @@ public sealed record FantasyRiderDto(
     [property: JsonPropertyName("riderId")] string? RiderId,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
-    [property: JsonPropertyName("gender")] string Gender,
+    [property: JsonPropertyName("gender"), Infrastructure.ApiContractValues("male", "female")] string Gender,
     [property: JsonPropertyName("price")] decimal? Price,
     [property: JsonPropertyName("pinkbikeSeasonPoints")] int? PinkbikeSeasonPoints,
     [property: JsonPropertyName("injuryFlag")] bool InjuryFlag,
@@ -43,7 +43,20 @@ public sealed record FantasyCurrentDto(
     [property: JsonPropertyName("priceSnapshotId")] string? PriceSnapshotId,
     [property: JsonPropertyName("sourceUrl")] string SourceUrl,
     [property: JsonPropertyName("predictionEngineVersion")] string PredictionEngineVersion,
-    [property: JsonPropertyName("fantasyProjectionVersion")] string FantasyProjectionVersion);
+    [property: JsonPropertyName("fantasyProjectionVersion")] string FantasyProjectionVersion,
+    [property: JsonPropertyName("calculation")] FantasyCalculationDto? Calculation = null);
+
+public sealed record FantasyCalculationDto(
+    [property: JsonPropertyName("algorithmVersion")] string AlgorithmVersion,
+    [property: JsonPropertyName("configurationHash")] string? ConfigurationHash,
+    [property: JsonPropertyName("dataRevision")] string? DataRevision,
+    [property: JsonPropertyName("computedAt")] DateTimeOffset ComputedAt,
+    [property: JsonPropertyName("modelVersion")] string ModelVersion,
+    [property: JsonPropertyName("trainingDataCutoff")] DateTimeOffset? TrainingDataCutoff,
+    [property: JsonPropertyName("predictionAsOf")] DateTimeOffset? PredictionAsOf,
+    [property: JsonPropertyName("simulationSeed")] int? SimulationSeed,
+    [property: JsonPropertyName("simulationIterations")] int? SimulationIterations,
+    [property: JsonPropertyName("calculationFingerprint")] string CalculationFingerprint);
 
 public sealed record FantasyPlacementDto(
     [property: JsonPropertyName("position")] int Position,

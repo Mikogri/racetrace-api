@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Infrastructure.Calculations;
 using RaceTrace.Api.Models;
 using RaceTrace.Api.Services;
 
@@ -22,14 +23,21 @@ internal sealed record FantasyRaceForecast(string RiderId, string Name, string? 
 
 /// <summary>Data adapter for the existing prediction engine, not a second race model.</summary>
 public sealed class FantasyRacePrediction(
-    ISupabaseRestClient supabase, DomainQueryService queries, MetricsService metrics, IMemoryCache cache)
+    ISupabaseRestClient supabase, DomainQueryService queries, MetricsService metrics, IMemoryCache cache, DataRevisionService? revisionService = null)
 {
-    public static string EngineVersion => new PodiumPredictionOptions().ModelVersion;
+    public static string EngineVersion => AlgorithmConfiguration.Podium.ModelVersion;
+    internal bool CoherenceEnabled => revisionService?.Enabled == true;
     private readonly Dictionary<string, IReadOnlyDictionary<string, RiderPerformanceMetricValues>> _metricMemo = new();
     private string? _metricRevision;
 
     internal async Task<string> DataRevisionAsync(CancellationToken token, bool forceRefresh = false)
     {
+        if (revisionService?.Enabled == true)
+        {
+            var sharedRevision = (await revisionService.GetAsync(token, forceRefresh)).ForContext(null);
+            ResetMetricsForRevision(sharedRevision);
+            return sharedRevision;
+        }
         const string key = "fantasy-source-revision";
         if (!forceRefresh && cache.TryGetValue<string>(key, out var cached))
         {
@@ -99,7 +107,7 @@ public sealed class FantasyRacePrediction(
         foreach (var trackRound in past.Where(round => round.TrackId == target.String("track_id") && round.Season >= season - 2).OrderBy(round => round.Start))
             foreach (var pair in await MetricsAsync(Combine([trackRound], category, cutoff), token)) trackMetrics[pair.Key] = pair.Value;
 
-        var options = new PodiumPredictionOptions { MonteCarloIterations = iterations };
+        var options = AlgorithmConfiguration.Podium with { MonteCarloIterations = iterations };
         var builder = new PodiumPredictionFeatureBuilder(options);
         var historical = current.Results.Concat(previous.Results).ToArray();
         // Opening rounds have no current-season measurements; use previous-season evidence, explicitly.

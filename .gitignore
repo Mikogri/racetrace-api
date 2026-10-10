@@ -28,3 +28,10 @@ coverage.*
 
 .DS_Store
 Thumbs.db
+
+# Local analysis and verification artifacts
+.serena/
+**/graphify-out/
+**/.codex-test-obj/
+supabase/.temp/
+**/__pycache__/

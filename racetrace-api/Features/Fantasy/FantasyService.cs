@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Caching.Memory;
 using RaceTrace.Api.Features.Fantasy.Import;
+using RaceTrace.Api.Infrastructure.Calculations;
 using RaceTrace.Api.Models;
 using RaceTrace.Api.Services;
 
@@ -44,6 +45,8 @@ public sealed class FantasyService(
             eventOptions?.StartListFetchedAtUtc is not null && eventOptions.StartListFetchedAtUtc <= time.GetUtcNow();
         if (round is not null && !verifiedList) warnings.Add("Team selection uses the Pinkbike catalogue and reported injuries; participation in the next round is not confirmed.");
         var validForecast = forecast is not null && forecast.Season == season && forecast.EngineVersion == FantasyRacePrediction.EngineVersion &&
+            (forecast.CalculationFingerprint == AlgorithmCatalog.Current.Fingerprint("fantasy") ||
+                forecast.CalculationFingerprint is null && !race.CoherenceEnabled && !options.Value.DistributedCoordinationEnabled) &&
             forecast.ProjectionVersion == FantasyCalibration.Version && forecast.RulesVersion == rules.Version &&
             forecast.EventFingerprint == FantasyPreparationService.EventFingerprint(eventOptions) &&
             forecast.DataRevision == await race.DataRevisionAsync(token);
@@ -104,7 +107,10 @@ public sealed class FantasyService(
         return new(recommendation is not null ? "ready" : "incomplete", season,
             round is null ? null : new(roundId!, round.Int("round_number"), round.Object("tracks")?.String("venue"), round.Object("tracks")?.String("name"), round.String("start_date")),
             riders, recommendation, warnings.Distinct(StringComparer.Ordinal).ToArray(), snapshot?.FetchedAtUtc,
-            snapshot?.Id, FantasyRules2026.AthletesUrl, FantasyRacePrediction.EngineVersion, FantasyCalibration.Version);
+            snapshot?.Id, FantasyRules2026.AthletesUrl, FantasyRacePrediction.EngineVersion, FantasyCalibration.Version,
+            validForecast && forecast!.CalculationFingerprint is not null ? new(forecast.ProjectionVersion, forecast.ConfigurationHash,
+                forecast.DataRevision, forecast.PreparedAtUtc, forecast.EngineVersion, forecast.TrainingDataCutoff, forecast.PredictionAsOf,
+                forecast.SimulationSeed, forecast.SimulationIterations, forecast.CalculationFingerprint) : null);
     }
 
     public static FantasyRulesDto Rules()
