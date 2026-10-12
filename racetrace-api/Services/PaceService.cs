@@ -302,20 +302,20 @@ public sealed class PaceService
                 group => group.Key,
                 group => (IReadOnlyList<RiderSessionPaceResult>)group.ToArray(),
                 StringComparer.OrdinalIgnoreCase);
-        var paceSessionBySessionId = Enumerable.Range(0, sessionGroups.Length)
+        var resultScoreSessionBySessionId = Enumerable.Range(0, sessionGroups.Length)
             .ToDictionary(
                 index => sessionGroups[index].Key,
-                index => paceSessions[index],
+                index => DownhillResultScoreCalculator.PrepareSession(paceSessions[index]),
                 StringComparer.OrdinalIgnoreCase);
-        var paceSessionsByRiderId = selectedResultsByRiderId.ToDictionary(
+        var resultScoreSessionsByRiderId = selectedResultsByRiderId.ToDictionary(
             pair => pair.Key,
-            pair => (IReadOnlyList<PaceSessionData>)pair.Value
+            pair => (IReadOnlyList<PreparedResultScoreSession>)pair.Value
                 .Select(ResultSessionId)
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Select(id => id!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(paceSessionBySessionId.ContainsKey)
-                .Select(id => paceSessionBySessionId[id])
+                .Where(resultScoreSessionBySessionId.ContainsKey)
+                .Select(id => resultScoreSessionBySessionId[id])
                 .ToArray(),
             StringComparer.OrdinalIgnoreCase);
         var availableFinalsByRiderId = BuildAvailableFinalCounts(
@@ -339,9 +339,9 @@ public sealed class PaceService
             var riderSessionPaceResults = sessionPaceResultsByRiderId.GetValueOrDefault(
                 riderId,
                 Array.Empty<RiderSessionPaceResult>());
-            var riderPaceSessions = paceSessionsByRiderId.GetValueOrDefault(
+            var riderScoreSessions = resultScoreSessionsByRiderId.GetValueOrDefault(
                 riderId,
-                Array.Empty<PaceSessionData>());
+                Array.Empty<PreparedResultScoreSession>());
             var consistencyRuns = BuildConsistencyRuns(
                 riderId,
                 riderResults,
@@ -355,7 +355,7 @@ public sealed class PaceService
                     riderSessionPaceResults,
                     availableFinals),
                 _consistencyCalculator.Calculate(consistencyRuns),
-                _resultScoreCalculator.Calculate(riderId, riderPaceSessions),
+                _resultScoreCalculator.CalculatePrepared(riderId, riderScoreSessions),
                 _paceCalculator.CalculatePace(
                     riderId,
                     riderSessionPaceResults,
@@ -364,9 +364,9 @@ public sealed class PaceService
                 _consistencyCalculator.Calculate(
                     consistencyRuns,
                     competitionClassWeighting),
-                _resultScoreCalculator.Calculate(
+                _resultScoreCalculator.CalculatePrepared(
                     riderId,
-                    riderPaceSessions,
+                    riderScoreSessions,
                     competitionClassWeighting),
                 isNonFinalist);
         });

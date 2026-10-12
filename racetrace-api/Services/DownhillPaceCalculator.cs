@@ -3,151 +3,23 @@ using RaceTrace.Api.Infrastructure.Telemetry;
 
 namespace RaceTrace.Api.Services;
 
-internal enum PaceSessionType
-{
-    Final,
-    SemiFinal,
-    Qualifying1,
-    Qualifying2,
-    Qualifying,
-    Seeding,
-    TimedTraining,
-    Training
-}
-
-internal sealed record PaceRiderRun(
-    string RiderId,
-    IReadOnlyList<double?> SectorTimes,
-    double? TopSpeed = null,
-    int? FinishRank = null,
-    double? FinishTimeSeconds = null,
-    double? HistoricalExpectedPercentile = null,
-    bool IsClassified = true,
-    string? Status = null);
-
-internal sealed record PaceSessionData(
-    PaceSessionType SessionType,
-    IReadOnlyList<PaceRiderRun> Runs,
-    int? CompetitionClassPriority = null);
-
-internal sealed record PaceFieldSummary(
-    int Count,
-    double Median,
-    double LogMedian,
-    double LogMadScale,
-    double LinearMadScale,
-    double? BestValue = null,
-    double? SecondBestValue = null);
-
-internal sealed record PacePrecomputedSector(
-    int SectorIndex,
-    double? TimeSeconds,
-    int? Rank,
-    PaceFieldSummary Statistics);
-
-internal sealed record PacePrecomputedSessionData(
-    string SessionId,
-    string CourseKey,
-    string? CategoryId,
-    PaceSessionType SessionType,
-    PaceRiderRun Run,
-    int ClassifiedFieldSize,
-    IReadOnlyList<PacePrecomputedSector> Sectors,
-    PaceFieldSummary? SpeedStatistics,
-    int? SpeedRank,
-    PaceFieldSummary? FinishStatistics,
-    IReadOnlyList<PaceFieldSummary?> CumulativeStatistics,
-    int? CompetitionClassPriority = null,
-    DateTimeOffset? SessionDate = null)
-{
-    // Prepared for the complete session/category, before selecting any rider.
-    public PaceFinishReference? PaceFinish { get; init; }
-}
-
-internal sealed record PaceFinishReference(double? TimeSeconds, double RemovedLossSeconds, PaceFieldSummary Statistics);
-
-internal enum PaceSectorStatus
-{
-    Valid,
-    Incident,
-    RecoveredAfterIncident,
-    AfterIncident,
-    Missing,
-    InvalidTiming,
-    PossibleIncident
-}
-
-internal sealed record PaceSectorResult(
-    int SectorIndex,
-    PaceSectorStatus Status,
-    double? Time,
-    int? Rank,
-    double? Percentile,
-    double? PerformanceZ,
-    double? Score)
-{
-    public SectorAnomaly? Anomaly { get; init; }
-}
-
-internal sealed record RiderSessionPaceResult(
-    string RiderId,
-    PaceSessionType SessionType,
-    double? Pace,
-    double? SectorPace,
-    double? SpeedScore,
-    double? FullRunTimeScore,
-    double Confidence,
-    double SessionWeight,
-    bool IsRepresentative,
-    int? IncidentSectorIndex,
-    IReadOnlyList<PaceSectorResult> Sectors,
-    double SectorCoverage = 1.0,
-    double? EvidenceAdjustedSectorPace = null,
-    double DominanceBonus = 0,
-    string? NoResultReason = null,
-    int? CompetitionClassPriority = null,
-    DateTimeOffset? SessionDate = null);
-
-internal sealed record RiderSessionPaceObservation(
-    string SessionId,
-    string RiderId,
-    RiderSessionPaceResult Result);
-
-internal sealed record RiderPaceResult(
-    string RiderId,
-    double? Pace,
-    double? RawPace,
-    double Confidence,
-    int UsedSessions,
-    int UsedFinals = 0,
-    double TotalEvidence = 0,
-    double FinalEvidence = 0,
-    string ConfidenceStatus = "Low");
-
-internal sealed record WeightedScore(double Score, double Weight);
-
-internal sealed record WeightedPace(double Pace, double Weight);
-
-internal sealed record StagePaceResult(
-    double Pace,
-    double EvidenceWeight,
-    double RoundWeight,
-    int UsedSessions);
-
-
-
-internal sealed class DownhillPaceCalculator
+internal sealed partial class DownhillPaceCalculator
 {
     private readonly PaceOptions _options;
 
     public DownhillPaceCalculator(PaceOptions? options = null)
     {
-		_options = options ?? AlgorithmConfiguration.Pace;
+        _options = options ?? AlgorithmConfiguration.Pace;
 
-        if (_options.NonFinalistMaxScore is < 0 or > 100 ||
-            _options.SessionWeights.FinalTargetImpact is < 0 or > 1 ||
+        ValidateOptions(_options);
+    }
+
+    private static void ValidateOptions(PaceOptions options)
+    {
+        if (options.NonFinalistMaxScore is < 0 or > 100 ||
+            options.SessionWeights.FinalTargetImpact is < 0 or > 1 ||
             Enum.GetValues<PaceSessionType>()
-                .Select(_options.SessionWeights.GetWeight)
+                .Select(options.SessionWeights.GetWeight)
                 .Any(weight => weight < 0))
         {
             throw new ArgumentOutOfRangeException(
@@ -156,114 +28,114 @@ internal sealed class DownhillPaceCalculator
                 "and NonFinalistMaxScore must be between 0 and 100.");
         }
 
-		double maximumRawSectorScore =
-			100.0 * (_options.RankWeight + _options.TimeWeight)
-			+ _options.MaximumWinBonus;
+        double maximumRawSectorScore =
+            100.0 * (options.RankWeight + options.TimeWeight)
+            + options.MaximumWinBonus;
 
-		if (_options.RankWeight < 0 ||
-			_options.RankWeight > 1 ||
-			_options.TimeWeight < 0 ||
-			_options.TimeWeight > 1 ||
-			_options.MaximumWinBonus < 0 ||
-			maximumRawSectorScore > 100.000001)
-		{
-			throw new ArgumentOutOfRangeException(
-				nameof(options),
-				"RankWeight and TimeWeight must be between 0 and 1, " +
-				"MaximumWinBonus must be non-negative, and the maximum " +
-				"raw sector score cannot exceed 100.");
-		}
+        if (options.RankWeight < 0 ||
+            options.RankWeight > 1 ||
+            options.TimeWeight < 0 ||
+            options.TimeWeight > 1 ||
+            options.MaximumWinBonus < 0 ||
+            maximumRawSectorScore > 100.000001)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "RankWeight and TimeWeight must be between 0 and 1, " +
+                "MaximumWinBonus must be non-negative, and the maximum " +
+                "raw sector score cannot exceed 100.");
+        }
 
-		if (_options.StrongSectorCalibrationThreshold is < 0 or >= 100)
+        if (options.StrongSectorCalibrationThreshold is < 0 or >= 100)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "StrongSectorCalibrationThreshold must be between 0 and 100.");
         }
 
-        if (_options.MinimumValidSectorsForSessionPace < 1 ||
-            _options.FullEvidenceSectorCount <= 0 ||
-            _options.CoverageWeightPower < 0)
+        if (options.MinimumValidSectorsForSessionPace < 1 ||
+            options.FullEvidenceSectorCount <= 0 ||
+            options.CoverageWeightPower < 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "Pace evidence options must be positive.");
         }
 
-        if (_options.FullConfidenceSectorCount <= 0 ||
-            _options.CoverageConfidencePower < 0 ||
-            _options.FullConfidenceFieldSize <= 0 ||
-            _options.OverallEvidenceScale <= 0 ||
-            _options.MinimumConfidenceWithoutFinals is < 0 or > 100 ||
-            _options.FinalEvidenceScale <= 0 ||
-            _options.FullFinalConfidenceEvidence is <= 0 or > 1 ||
-            _options.FinalParticipationConfidencePower <= 0)
+        if (options.FullConfidenceSectorCount <= 0 ||
+            options.CoverageConfidencePower < 0 ||
+            options.FullConfidenceFieldSize <= 0 ||
+            options.OverallEvidenceScale <= 0 ||
+            options.MinimumConfidenceWithoutFinals is < 0 or > 100 ||
+            options.FinalEvidenceScale <= 0 ||
+            options.FullFinalConfidenceEvidence is <= 0 or > 1 ||
+            options.FinalParticipationConfidencePower <= 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "Confidence options are outside their valid ranges.");
         }
 
-        if (_options.PostIncidentMinimumPositiveScore is < 0 or > 100 ||
-            !double.IsFinite(_options.PostIncidentMinimumPerformanceZ) ||
-            _options.PostIncidentMaximumScoreDrop < 0 ||
-            _options.PostIncidentMaximumPercentileDrop is < 0 or > 1 ||
-            _options.PostIncidentMaximumPerformanceDrop < 0)
+        if (options.PostIncidentMinimumPositiveScore is < 0 or > 100 ||
+            !double.IsFinite(options.PostIncidentMinimumPerformanceZ) ||
+            options.PostIncidentMaximumScoreDrop < 0 ||
+            options.PostIncidentMaximumPercentileDrop is < 0 or > 1 ||
+            options.PostIncidentMaximumPerformanceDrop < 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "Post-incident recovery options are outside their valid ranges.");
         }
 
-        if (_options.PaceCalibrationThreshold is < 0 or >= 100 ||
-            _options.PaceCalibrationPower <= 0)
+        if (options.PaceCalibrationThreshold is < 0 or >= 100 ||
+            options.PaceCalibrationPower <= 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "Final Pace calibration options are outside their valid ranges.");
         }
 
-        if (_options.UpperPaceCalibrationMaximumBoost < 0 ||
-            _options.UpperPaceCalibrationStart is < 0 or > 100 ||
-            _options.UpperPaceCalibrationFull is < 0 or > 100 ||
-            _options.UpperPaceCalibrationTaperStart is < 0 or > 100 ||
-            _options.UpperPaceCalibrationEnd is < 0 or > 100 ||
-            _options.UpperPaceCalibrationStart >= _options.UpperPaceCalibrationFull ||
-            _options.UpperPaceCalibrationFull > _options.UpperPaceCalibrationTaperStart ||
-            _options.UpperPaceCalibrationTaperStart >= _options.UpperPaceCalibrationEnd)
+        if (options.UpperPaceCalibrationMaximumBoost < 0 ||
+            options.UpperPaceCalibrationStart is < 0 or > 100 ||
+            options.UpperPaceCalibrationFull is < 0 or > 100 ||
+            options.UpperPaceCalibrationTaperStart is < 0 or > 100 ||
+            options.UpperPaceCalibrationEnd is < 0 or > 100 ||
+            options.UpperPaceCalibrationStart >= options.UpperPaceCalibrationFull ||
+            options.UpperPaceCalibrationFull > options.UpperPaceCalibrationTaperStart ||
+            options.UpperPaceCalibrationTaperStart >= options.UpperPaceCalibrationEnd)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "Upper Pace calibration options must define an ordered range within 0-100.");
         }
 
-        if (_options.FinalStageEvidenceFactor is < 0 or > 1 ||
-            _options.SemiFinalStageEvidenceFactor is < 0 or > 1 ||
-            _options.QualifyingStageEvidenceFactor is < 0 or > 1 ||
-            _options.SeedingStageEvidenceFactor is < 0 or > 1)
+        if (options.FinalStageEvidenceFactor is < 0 or > 1 ||
+            options.SemiFinalStageEvidenceFactor is < 0 or > 1 ||
+            options.QualifyingStageEvidenceFactor is < 0 or > 1 ||
+            options.SeedingStageEvidenceFactor is < 0 or > 1)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "Stage evidence factors must be between 0 and 1.");
         }
 
-        if (_options.SemiFinalEarlierStageMaximumLift < 0 ||
-            _options.SemiFinalHighestStagePaceCap is < 0 or > 100 ||
-            _options.QualifyingHighestStagePaceCap is < 0 or > 100 ||
-            _options.SeedingHighestStagePaceCap is < 0 or > 100 ||
-            _options.SparseNonFinalMaximumSectorCount < 1 ||
-            _options.SparseSemiFinalPaceCap is < 0 or > 100 ||
-            _options.SparseQualifyingPaceCap is < 0 or > 100 ||
-            _options.SparseSeedingPaceCap is < 0 or > 100)
+        if (options.SemiFinalEarlierStageMaximumLift < 0 ||
+            options.SemiFinalHighestStagePaceCap is < 0 or > 100 ||
+            options.QualifyingHighestStagePaceCap is < 0 or > 100 ||
+            options.SeedingHighestStagePaceCap is < 0 or > 100 ||
+            options.SparseNonFinalMaximumSectorCount < 1 ||
+            options.SparseSemiFinalPaceCap is < 0 or > 100 ||
+            options.SparseQualifyingPaceCap is < 0 or > 100 ||
+            options.SparseSeedingPaceCap is < 0 or > 100)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
                 "Stage confirmation limits are outside their valid ranges.");
         }
 
-        if (_options.MaximumDominanceBonus < 0 ||
-            _options.MinimumDominanceRelativeMargin < 0 ||
-            _options.DominanceRelativeMarginScale <= 0)
+        if (options.MaximumDominanceBonus < 0 ||
+            options.MinimumDominanceRelativeMargin < 0 ||
+            options.DominanceRelativeMarginScale <= 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
@@ -302,14 +174,18 @@ internal sealed class DownhillPaceCalculator
             .Select(time => time!.Value)
             .ToArray();
         var fullRunStatistics = BuildFieldStatistics(fullRunTimes);
-        var cumulativeStatistics = Enumerable.Range(1, sectorCount)
-            .Select(cleanSectorCount => validRuns
-                .Select(run => GetCumulativeTime(run, cleanSectorCount))
+        var cumulativeTimes = validRuns.Select(run => GetCumulativeTimes(run, sectorCount)).ToArray();
+        var cumulativeStatistics = Enumerable.Range(0, sectorCount)
+            .Select(index => cumulativeTimes
+                .Select(times => times[index])
                 .Where(IsValidTime)
                 .Select(time => time!.Value)
                 .ToArray())
             .Select(values => ToFieldSummary(BuildFieldStatistics(values)))
             .ToArray();
+        var sectorSummaries = sectorStatistics.Select(ToFieldSummary).ToArray();
+        var speedSummary = ToFieldSummary(speedStatistics);
+        var finishSummary = ToFieldSummary(fullRunStatistics);
         var classifiedFieldSize = validRuns.Count(run => run.IsClassified);
         var precomputed = validRuns
             .Select(run => new PacePrecomputedSessionData(
@@ -324,11 +200,11 @@ internal sealed class DownhillPaceCalculator
                         index,
                         GetSectorTime(run, index),
                         CalculateRank(GetSectorTime(run, index), sectorStatistics[index]),
-                        ToFieldSummary(sectorStatistics[index])))
+                        sectorSummaries[index]))
                     .ToArray(),
-                SpeedStatistics: ToFieldSummary(speedStatistics),
+                SpeedStatistics: speedSummary,
                 SpeedRank: CalculateRank(run.TopSpeed, speedStatistics, lowerIsBetter: false),
-                FinishStatistics: ToFieldSummary(fullRunStatistics),
+                FinishStatistics: finishSummary,
                 CumulativeStatistics: cumulativeStatistics,
                 CompetitionClassPriority: session.CompetitionClassPriority))
             .ToArray();
@@ -392,19 +268,18 @@ internal sealed class DownhillPaceCalculator
         PacePrecomputedSessionData session)
     {
         var run = session.Run;
-        var sectorStatistics = session.Sectors
-            .OrderBy(sector => sector.SectorIndex)
+        var orderedSectors = session.Sectors.OrderBy(sector => sector.SectorIndex).ToArray();
+        var sectorStatistics = orderedSectors
             .Select(sector => ToFieldStatistics(sector.Statistics))
             .ToArray();
-        var raw = session.Sectors
-            .OrderBy(sector => sector.SectorIndex)
+        var raw = orderedSectors
             .Select((sector, index) => EvaluateRawSector(
                 sector.TimeSeconds,
                 sectorStatistics[index],
                 sector.Rank))
             .ToArray();
         var anomalies = SectorIncidentDetector.Analyze(
-            session.Sectors.OrderBy(s => s.SectorIndex).ToArray(), _options);
+            orderedSectors, _options);
         int? incidentIndex = Enumerable.Range(0, raw.Length)
             .Where(i => anomalies[i].Kind == SectorAnomalyKind.LikelyIncident)
             .Select(i => (int?)i).FirstOrDefault();
@@ -478,7 +353,7 @@ internal sealed class DownhillPaceCalculator
         var sectorCoverage = raw.Length > 0
             ? (double)validScores.Count / raw.Length
             : 0;
-        var representative = IsRepresentativeRun(run, raw, incidentIndex);
+        var representative = IsRepresentativeRun(run, raw);
         if (!representative ||
             validScores.Count < _options.MinimumValidSectorsForSessionPace)
         {
@@ -514,7 +389,7 @@ internal sealed class DownhillPaceCalculator
             paceSectorCount > 0 ? (double)validScores.Count / paceSectorCount : 0,
             validScores.Count);
         double? speedScore = null;
-        if (IsValidSpeed(run.TopSpeed) &&
+        if (IsValidTime(run.TopSpeed) &&
             session.SpeedStatistics is not null)
         {
             speedScore = EvaluateFieldValue(
@@ -912,31 +787,6 @@ internal sealed class DownhillPaceCalculator
     private double? CalculateEffectiveFullRunTimeScore(
         PaceRiderRun run,
         int? incidentIndex,
-        IReadOnlyCollection<double> fieldTotalTimes,
-        IReadOnlyList<IReadOnlyCollection<double>> cumulativeTimesByCheckpoint)
-    {
-        if (!incidentIndex.HasValue)
-        {
-            return run.IsClassified
-                ? CalculateFullRunTimeScore(run.FinishTimeSeconds, fieldTotalTimes)
-                : null;
-        }
-
-        var cleanSectorCount = incidentIndex.Value;
-        if (cleanSectorCount < 2 ||
-            cleanSectorCount > cumulativeTimesByCheckpoint.Count)
-        {
-            return null;
-        }
-
-        return CalculateFullRunTimeScore(
-            GetCumulativeTime(run, cleanSectorCount),
-            cumulativeTimesByCheckpoint[cleanSectorCount - 1]);
-    }
-
-    private double? CalculateEffectiveFullRunTimeScore(
-        PaceRiderRun run,
-        int? incidentIndex,
         PaceFieldSummary? finishStatistics,
         IReadOnlyList<PaceFieldSummary?> cumulativeStatistics)
     {
@@ -1019,14 +869,13 @@ internal sealed class DownhillPaceCalculator
     {
         if (!IsValidTime(riderTime) || statistics.Count < _options.MinimumFieldSize)
         {
-            return new RawSectorEvaluation(riderTime, null, null, null, null, null, statistics);
+            return new RawSectorEvaluation(riderTime, null, null, null, null, statistics);
         }
 
         var time = riderTime!.Value;
-        var rank = knownRank ?? 1 + statistics.Values.Count(value => value < time);
+        var rank = knownRank ?? CalculateRank(time, statistics)!.Value;
         var percentile = CalculatePercentile(rank, statistics.Count);
         var performanceZ = (statistics.LogMedian - Math.Log(time)) / statistics.LogMadScale;
-        var slowZ = -performanceZ;
         var rankScore = CalculateSectorRankScore(percentile);
         var timeScore = CalculateSectorTimeScore(performanceZ);
         var winBonus = 0.0;
@@ -1051,7 +900,6 @@ internal sealed class DownhillPaceCalculator
             rank,
             percentile,
             performanceZ,
-            slowZ,
             ApplyPositiveSectorCalibration(rawSectorScore),
             statistics);
     }
@@ -1172,8 +1020,7 @@ internal sealed class DownhillPaceCalculator
 
     private bool IsRepresentativeRun(
         PaceRiderRun run,
-        IReadOnlyList<RawSectorEvaluation> sectors,
-        int? incidentIndex)
+        IReadOnlyList<RawSectorEvaluation> sectors)
     {
         if (!run.HistoricalExpectedPercentile.HasValue)
         {
@@ -1321,9 +1168,7 @@ internal sealed class DownhillPaceCalculator
             return null;
         }
 
-        var rank = knownRank ?? (lowerIsBetter
-            ? 1 + statistics.Values.Count(fieldValue => fieldValue < value)
-            : 1 + statistics.Values.Count(fieldValue => fieldValue > value));
+        var rank = knownRank ?? CalculateRank(value, statistics, lowerIsBetter)!.Value;
         var percentile = CalculatePercentile(rank, statistics.Count);
         var normalizedDifference = lowerIsBetter
             ? (statistics.LogMedian - Math.Log(value)) / statistics.LogMadScale
@@ -1338,81 +1183,10 @@ internal sealed class DownhillPaceCalculator
     {
         var speeds = runs
             .Select(run => run.TopSpeed)
-            .Where(IsValidSpeed)
+            .Where(IsValidTime)
             .Select(speed => speed!.Value)
             .ToArray();
         return BuildFieldStatistics(speeds);
-    }
-
-    private static FieldStatistics BuildFieldStatistics(IReadOnlyCollection<double> input)
-    {
-        var values = input
-            .Where(value => !double.IsNaN(value) && !double.IsInfinity(value) && value > 0)
-            .OrderBy(value => value)
-            .ToArray();
-
-        if (values.Length == 0)
-        {
-            return new FieldStatistics([], 0, 0, 0, 1, 1, null, null);
-        }
-
-        var median = Median(values);
-        var logs = values.Select(value => Math.Log(value)).ToArray();
-        var logMedian = Median(logs);
-        var logMad = Median(logs.Select(value => Math.Abs(value - logMedian)));
-        var linearMad = Median(values.Select(value => Math.Abs(value - median)));
-        var logMadScale = Math.Max(1.4826 * logMad, 0.003);
-        var linearMadScale = Math.Max(1.4826 * linearMad, Math.Max(median * 0.003, 0.01));
-
-        return new FieldStatistics(
-            values,
-            values.Length,
-            median,
-            logMedian,
-            logMadScale,
-            linearMadScale,
-            values[0],
-            values.Length > 1 ? values[1] : null);
-    }
-
-    private static FieldStatistics ToFieldStatistics(PaceFieldSummary summary)
-    {
-        return new FieldStatistics(
-            [],
-            summary.Count,
-            summary.Median,
-            summary.LogMedian,
-            summary.LogMadScale,
-            summary.LinearMadScale,
-            summary.BestValue,
-            summary.SecondBestValue);
-    }
-
-    private static PaceFieldSummary ToFieldSummary(FieldStatistics statistics)
-    {
-        return new PaceFieldSummary(
-            statistics.Count,
-            statistics.Median,
-            statistics.LogMedian,
-            statistics.LogMadScale,
-            statistics.LinearMadScale,
-            statistics.BestValue,
-            statistics.SecondBestValue);
-    }
-
-    private static int? CalculateRank(
-        double? value,
-        FieldStatistics statistics,
-        bool lowerIsBetter = true)
-    {
-        if (!value.HasValue || !double.IsFinite(value.Value) || value.Value <= 0)
-        {
-            return null;
-        }
-
-        return 1 + statistics.Values.Count(fieldValue => lowerIsBetter
-            ? fieldValue < value.Value
-            : fieldValue > value.Value);
     }
 
     private static PaceSectorResult ToSectorResult(
@@ -1480,6 +1254,20 @@ internal sealed class DownhillPaceCalculator
             : run.SectorTimes[index];
     }
 
+    private static double?[] GetCumulativeTimes(PaceRiderRun run, int sectorCount)
+    {
+        var times = new double?[sectorCount];
+        double total = 0;
+        for (var index = 0; index < run.SectorTimes.Count; index++)
+        {
+            var time = run.SectorTimes[index];
+            if (!IsValidTime(time)) break;
+            total += time!.Value;
+            times[index] = total;
+        }
+        return times;
+    }
+
     private static double? GetCumulativeTime(
         PaceRiderRun run,
         int sectorCount)
@@ -1489,10 +1277,14 @@ internal sealed class DownhillPaceCalculator
             return null;
         }
 
-        var times = run.SectorTimes.Take(sectorCount).ToArray();
-        return times.All(IsValidTime)
-            ? times.Sum(time => time!.Value)
-            : null;
+        double total = 0;
+        for (var index = 0; index < sectorCount; index++)
+        {
+            var time = run.SectorTimes[index];
+            if (!IsValidTime(time)) return null;
+            total += time!.Value;
+        }
+        return total;
     }
 
     private static bool IsValidTime(double? value)
@@ -1503,62 +1295,12 @@ internal sealed class DownhillPaceCalculator
             !double.IsInfinity(value.Value);
     }
 
-    private static bool IsValidSpeed(double? value)
-    {
-        return value.HasValue &&
-            value.Value > 0 &&
-            !double.IsNaN(value.Value) &&
-            !double.IsInfinity(value.Value);
-    }
-
-    private static double Median(IEnumerable<double> input)
-    {
-        var values = input.OrderBy(value => value).ToArray();
-        if (values.Length == 0)
-        {
-            return 0;
-        }
-
-        var middle = values.Length / 2;
-        return values.Length % 2 == 1
-            ? values[middle]
-            : (values[middle - 1] + values[middle]) / 2.0;
-    }
-
-    private static double Sigmoid(double value)
-    {
-        if (value >= 0)
-        {
-            var exp = Math.Exp(-value);
-            return 1.0 / (1.0 + exp);
-        }
-
-        var negativeExp = Math.Exp(value);
-        return negativeExp / (1.0 + negativeExp);
-    }
-
-    private static double Clamp(double value, double minimum, double maximum)
-    {
-        return Math.Min(maximum, Math.Max(minimum, value));
-    }
-
     private sealed record RawSectorEvaluation(
         double? Time,
         int? Rank,
         double? Percentile,
         double? PerformanceZ,
-        double? SlowZ,
         double? Score,
         FieldStatistics? Statistics);
-
-    private sealed record FieldStatistics(
-        double[] Values,
-        int Count,
-        double Median,
-        double LogMedian,
-        double LogMadScale,
-        double LinearMadScale,
-        double? BestValue,
-        double? SecondBestValue);
 
 }

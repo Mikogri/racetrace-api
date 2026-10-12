@@ -4,8 +4,8 @@ using System.Text.Json.Nodes;
 namespace RaceTrace.Api.Models;
 
 public sealed record PublicPagedResponse<T>(
-    [property: JsonPropertyName("items")] IReadOnlyList<T> Items,
-    [property: JsonPropertyName("page")] int Page,
+    IReadOnlyList<T> Items,
+    int Page,
     [property: JsonPropertyName("pageSize")] int PageSize,
     [property: JsonPropertyName("totalItems")] int TotalItems,
     [property: JsonPropertyName("totalPages")] int TotalPages,
@@ -31,9 +31,9 @@ public sealed record PublicPagedResponse<T>(
 }
 
 public sealed record ConditionDto(
-    [property: JsonPropertyName("id")] long? Id,
-    [property: JsonPropertyName("code")] string? Code,
-    [property: JsonPropertyName("name")] string? Name);
+    long? Id,
+    string? Code,
+    string? Name);
 
 public sealed record TrackFilterOptionDto(
     [property: JsonPropertyName("trackId")] long TrackId,

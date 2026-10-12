@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace RaceTrace.Api.Models;
 
 public sealed record RankingRiderDto(
-    [property: JsonPropertyName("position")] int Position,
+    int Position,
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("uciId")] string? UciId,
     [property: JsonPropertyName("firstName")] string? FirstName,
@@ -14,10 +14,10 @@ public sealed record RankingRiderDto(
     [property: JsonPropertyName("teamId")] long? TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
     [property: JsonPropertyName("totalPoints")] decimal TotalPoints,
-    [property: JsonPropertyName("rating")] decimal? Rating,
-    [property: JsonPropertyName("pace")] decimal? Pace,
-    [property: JsonPropertyName("consistency")] decimal? Consistency,
-    [property: JsonPropertyName("confidence")] decimal Confidence,
+    decimal? Rating,
+    decimal? Pace,
+    decimal? Consistency,
+    decimal Confidence,
     [property: JsonPropertyName("finalsCount")] int FinalsCount,
     [property: JsonPropertyName("qualifyingRate")] decimal QualifyingRate,
     [property: JsonPropertyName("profileImageUrl")] string? ProfileImageUrl)
@@ -35,12 +35,12 @@ public sealed record RankingSummaryDto(
     [property: JsonPropertyName("ridersCount")] int RidersCount);
 
 public sealed record RankingResponseDto(
-    [property: JsonPropertyName("items")] IReadOnlyList<RankingRiderDto> Items,
-    [property: JsonPropertyName("page")] int Page,
+    IReadOnlyList<RankingRiderDto> Items,
+    int Page,
     [property: JsonPropertyName("pageSize")] int PageSize,
     [property: JsonPropertyName("totalItems")] int TotalItems,
     [property: JsonPropertyName("totalPages")] int TotalPages,
     [property: JsonPropertyName("hasPreviousPage")] bool HasPreviousPage,
     [property: JsonPropertyName("hasNextPage")] bool HasNextPage,
-    [property: JsonPropertyName("summary")] RankingSummaryDto Summary,
+    RankingSummaryDto Summary,
     [property: JsonPropertyName("comparisonBasis"), Infrastructure.ApiContractValues("previousRound", "defaultFilters", "previousFilters")] string? ComparisonBasis = null);

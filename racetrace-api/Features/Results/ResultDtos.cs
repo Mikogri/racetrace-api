@@ -7,8 +7,8 @@ public sealed record SessionSummaryDto(
     [property: JsonPropertyName("sessionId")] long SessionId,
     [property: JsonPropertyName("roundId")] long RoundId,
     [property: JsonPropertyName("sessionType")] string? SessionType,
-    [property: JsonPropertyName("category")] string? Category,
-    [property: JsonPropertyName("condition")] ConditionDto? Condition,
+    string? Category,
+    ConditionDto? Condition,
     [property: JsonPropertyName("completedRidersCount")] int CompletedRidersCount,
     [property: JsonPropertyName("startedRidersCount")] int StartedRidersCount,
     [property: JsonPropertyName("splitCount")] int SplitCount,
@@ -16,18 +16,18 @@ public sealed record SessionSummaryDto(
     [property: JsonPropertyName("timeView")] string TimeView);
 
 public sealed record ResultTimeDto(
-    [property: JsonPropertyName("index")] int Index,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("time")] decimal? Time,
+    int Index,
+    string Name,
+    decimal? Time,
     [property: JsonPropertyName("gapToLeader")] decimal? GapToLeader,
-    [property: JsonPropertyName("position")] int? Position)
+    int? Position)
 {
     [JsonPropertyName("gapToBest")]
     public decimal? GapToBest => GapToLeader;
 }
 
 public sealed record SessionResultDto(
-    [property: JsonPropertyName("position")] int? Position,
+    int? Position,
     [property: JsonPropertyName("resultId")] long? ResultId,
     [property: JsonPropertyName("riderId")] long? RiderId,
     [property: JsonPropertyName("uciId")] string? UciId,
@@ -37,13 +37,13 @@ public sealed record SessionResultDto(
     [property: JsonPropertyName("countryCode")] string? CountryCode,
     [property: JsonPropertyName("teamId")] long? TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
-    [property: JsonPropertyName("status")] string? Status,
+    string? Status,
     [property: JsonPropertyName("topSpeed")] decimal? TopSpeed,
     [property: JsonPropertyName("averageSpeed")] decimal? AverageSpeed,
     [property: JsonPropertyName("finalTime")] decimal? FinalTime,
     [property: JsonPropertyName("finalGapToLeader")] decimal? FinalGapToLeader,
     [property: JsonPropertyName("awardedPoints")] decimal AwardedPoints,
-    [property: JsonPropertyName("times")] IReadOnlyList<ResultTimeDto> Times)
+    IReadOnlyList<ResultTimeDto> Times)
 {
     [JsonPropertyName("isPerfectRun")]
     public bool IsPerfectRun { get; init; }
@@ -56,9 +56,9 @@ public sealed record SessionResultDto(
 }
 
 public sealed record SessionResultsResponseDto(
-    [property: JsonPropertyName("session")] SessionSummaryDto Session,
-    [property: JsonPropertyName("items")] IReadOnlyList<SessionResultDto> Items,
-    [property: JsonPropertyName("page")] int Page,
+    SessionSummaryDto Session,
+    IReadOnlyList<SessionResultDto> Items,
+    int Page,
     [property: JsonPropertyName("pageSize")] int PageSize,
     [property: JsonPropertyName("totalItems")] int TotalItems,
     [property: JsonPropertyName("totalPages")] int TotalPages,
@@ -69,6 +69,6 @@ public sealed record CommonSessionDto(
     [property: JsonPropertyName("sessionId")] long SessionId,
     [property: JsonPropertyName("roundId")] long RoundId,
     [property: JsonPropertyName("sessionType")] string? SessionType,
-    [property: JsonPropertyName("category")] string? Category,
+    string? Category,
     [property: JsonPropertyName("sessionDate")] DateOnly? SessionDate,
     [property: JsonPropertyName("riderIds")] IReadOnlyList<long> RiderIds);

@@ -6,27 +6,27 @@ namespace RaceTrace.Api.Models;
 public sealed record RoundRaceAnalyticsDto(
     [property: JsonPropertyName("methodVersion")] string MethodVersion,
     [property: JsonPropertyName("sectorEfficiency")] IReadOnlyList<SectorEfficiencyDto> SectorEfficiency,
-    [property: JsonPropertyName("chaos")] ChaosIndexDto Chaos,
-    [property: JsonPropertyName("correlation")] QualiFinalCorrelationDto Correlation,
+    ChaosIndexDto Chaos,
+    QualiFinalCorrelationDto Correlation,
     [property: JsonPropertyName("winningMargin")] WinningMarginDto? WinningMargin,
     [property: JsonPropertyName("runEfficiency")] RunEfficiencyDto? RunEfficiency,
-    [property: JsonPropertyName("distribution")] PerformanceDistributionDto Distribution);
+    PerformanceDistributionDto Distribution);
 
 public sealed record SectorEfficiencyDto(
     [property: JsonPropertyName("sectorIndex")] int SectorIndex,
     [property: JsonPropertyName("ridersCount")] int RidersCount,
     [property: JsonPropertyName("positionsPerSecond")] decimal? PositionsPerSecond);
 public sealed record ChaosComponentDto(
-    [property: JsonPropertyName("key")] string Key,
-    [property: JsonPropertyName("score")] decimal? Score,
-    [property: JsonPropertyName("weight")] decimal Weight,
+    string Key,
+    decimal? Score,
+    decimal Weight,
     [property: JsonPropertyName("sampleSize")] int SampleSize);
 public sealed record ChaosIndexDto(
-    [property: JsonPropertyName("score")] decimal? Score,
-    [property: JsonPropertyName("starters")] int Starters,
+    decimal? Score,
+    int Starters,
     [property: JsonPropertyName("dnfCount")] int DnfCount,
     [property: JsonPropertyName("incidentCount")] int IncidentCount,
-    [property: JsonPropertyName("components")] IReadOnlyList<ChaosComponentDto> Components);
+    IReadOnlyList<ChaosComponentDto> Components);
 public sealed record CorrelationRiderDto(
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("fullName")] string FullName,
@@ -34,8 +34,8 @@ public sealed record CorrelationRiderDto(
     [property: JsonPropertyName("finalPosition")] int FinalPosition);
 public sealed record QualiFinalCorrelationDto(
     [property: JsonPropertyName("preFinalSession")] string? PreFinalSession,
-    [property: JsonPropertyName("spearman")] decimal? Spearman,
-    [property: JsonPropertyName("points")] IReadOnlyList<CorrelationRiderDto> Points);
+    decimal? Spearman,
+    IReadOnlyList<CorrelationRiderDto> Points);
 public sealed record SectorContributionDto(
     [property: JsonPropertyName("sectorIndex")] int SectorIndex,
     [property: JsonPropertyName("gapSeconds")] decimal GapSeconds,
@@ -46,7 +46,7 @@ public sealed record WinningMarginDto(
     [property: JsonPropertyName("runnerUpId")] long RunnerUpId,
     [property: JsonPropertyName("runnerUpName")] string RunnerUpName,
     [property: JsonPropertyName("marginSeconds")] decimal MarginSeconds,
-    [property: JsonPropertyName("sectors")] IReadOnlyList<SectorContributionDto> Sectors);
+    IReadOnlyList<SectorContributionDto> Sectors);
 public sealed record RunEfficiencyDto(
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("fullName")] string FullName,
@@ -64,16 +64,16 @@ public sealed record RunEfficiencyDto(
     public decimal? SectorsTop3Percent => MeasuredSectors > 0 ? Math.Round(100m * SectorsTop3 / MeasuredSectors, 1) : null;
 }
 public sealed record PerformanceBinDto(
-    [property: JsonPropertyName("from")] int From,
-    [property: JsonPropertyName("to")] int To,
-    [property: JsonPropertyName("count")] int Count);
+    int From,
+    int To,
+    int Count);
 public sealed record PerformanceOutlierDto(
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("fullName")] string FullName,
-    [property: JsonPropertyName("pace")] decimal Pace);
+    decimal Pace);
 public sealed record PerformanceDistributionDto(
     [property: JsonPropertyName("ridersCount")] int RidersCount,
     [property: JsonPropertyName("classifiedCount")] int ClassifiedCount,
-    [property: JsonPropertyName("median")] decimal? Median,
-    [property: JsonPropertyName("bins")] IReadOnlyList<PerformanceBinDto> Bins,
-    [property: JsonPropertyName("outliers")] IReadOnlyList<PerformanceOutlierDto> Outliers);
+    decimal? Median,
+    IReadOnlyList<PerformanceBinDto> Bins,
+    IReadOnlyList<PerformanceOutlierDto> Outliers);

@@ -4,11 +4,11 @@ namespace RaceTrace.Api.Models;
 
 public sealed record SeasonSummaryRoundDto(
     [property: JsonPropertyName("roundId")] long RoundId,
-    [property: JsonPropertyName("season")] int Season,
+    int Season,
     [property: JsonPropertyName("roundNumber")] int? RoundNumber,
     [property: JsonPropertyName("startDate")] DateOnly? StartDate,
     [property: JsonPropertyName("endDate")] DateOnly? EndDate,
-    [property: JsonPropertyName("status")] string Status,
+    string Status,
     [property: JsonPropertyName("trackId")] long? TrackId,
     [property: JsonPropertyName("trackName")] string? TrackName,
     [property: JsonPropertyName("venueName")] string? VenueName,
@@ -21,14 +21,14 @@ public sealed record SeasonSummaryRoundDto(
     [property: JsonPropertyName("competitionClassPriority")] int? CompetitionClassPriority);
 
 public sealed record SeasonSummaryResultDto(
-    [property: JsonPropertyName("position")] int Position,
+    int Position,
     [property: JsonPropertyName("resultId")] long ResultId,
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("fullName")] string FullName,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
     [property: JsonPropertyName("teamId")] long? TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
-    [property: JsonPropertyName("time")] decimal? Time,
+    decimal? Time,
     [property: JsonPropertyName("gapToLeader")] decimal? GapToLeader);
 
 public sealed record SeasonProgressDto(
@@ -38,29 +38,29 @@ public sealed record SeasonProgressDto(
     [property: JsonPropertyName("categoriesCount")] int CategoriesCount);
 
 public sealed record SeasonTopRatedRiderDto(
-    [property: JsonPropertyName("position")] int Position,
+    int Position,
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("fullName")] string FullName,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
     [property: JsonPropertyName("teamId")] long? TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
-    [property: JsonPropertyName("rating")] decimal Rating,
-    [property: JsonPropertyName("pace")] decimal? Pace,
-    [property: JsonPropertyName("consistency")] decimal? Consistency,
-    [property: JsonPropertyName("confidence")] decimal Confidence);
+    decimal Rating,
+    decimal? Pace,
+    decimal? Consistency,
+    decimal Confidence);
 
 public sealed record SeasonStandingRiderDto(
-    [property: JsonPropertyName("position")] int Position,
+    int Position,
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("fullName")] string FullName,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
     [property: JsonPropertyName("teamId")] long? TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
-    [property: JsonPropertyName("points")] decimal Points);
+    decimal Points);
 
 public sealed record SeasonSummaryResponseDto(
-    [property: JsonPropertyName("season")] int Season,
-    [property: JsonPropertyName("category")] string Category,
+    int Season,
+    string Category,
     [property: JsonPropertyName("nextRound")] SeasonSummaryRoundDto? NextRound,
     [property: JsonPropertyName("lastCompletedRound")] SeasonSummaryRoundDto? LastCompletedRound,
     [property: JsonPropertyName("lastRoundResults")] IReadOnlyList<SeasonSummaryResultDto> LastRoundResults,
@@ -69,7 +69,7 @@ public sealed record SeasonSummaryResponseDto(
     [property: JsonPropertyName("currentStandings")] IReadOnlyList<SeasonStandingRiderDto> CurrentStandings);
 
 public sealed record PodiumPredictionRiderDto(
-    [property: JsonPropertyName("position")] int Position,
+    int Position,
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("fullName")] string FullName,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
@@ -80,7 +80,7 @@ public sealed record PodiumPredictionRiderDto(
     [property: JsonPropertyName("currentSeasonRating")] decimal? CurrentSeasonRating,
     [property: JsonPropertyName("lastTrackPace")] decimal? LastTrackPace,
     [property: JsonPropertyName("previousSeasonRating")] decimal? PreviousSeasonRating,
-    [property: JsonPropertyName("confidence")] decimal Confidence)
+    decimal Confidence)
 {
     [JsonPropertyName("winProbability")]
     public decimal WinProbability { get; init; }
@@ -100,7 +100,6 @@ public sealed record PodiumPredictionRiderDto(
     [JsonPropertyName("incidentProbability")]
     public decimal IncidentProbability { get; init; }
 
-    [JsonPropertyName("context")]
     public PodiumPredictionContextDto Context { get; init; } = new(0, 0, 0, 0, 0);
 }
 
@@ -108,14 +107,14 @@ public sealed record PodiumPredictionContextDto(
     [property: JsonPropertyName("trackAffinity")] decimal TrackAffinity,
     [property: JsonPropertyName("conditionsAffinity")] decimal ConditionsAffinity,
     [property: JsonPropertyName("recentForm")] decimal RecentForm,
-    [property: JsonPropertyName("pressure")] decimal Pressure,
+    decimal Pressure,
     [property: JsonPropertyName("pressureResponse")] decimal PressureResponse);
 
 public sealed record PodiumPredictionResponseDto(
-    [property: JsonPropertyName("season")] int Season,
-    [property: JsonPropertyName("category")] string Category,
-    [property: JsonPropertyName("round")] SeasonSummaryRoundDto? Round,
-    [property: JsonPropertyName("items")] IReadOnlyList<PodiumPredictionRiderDto> Items)
+    int Season,
+    string Category,
+    SeasonSummaryRoundDto? Round,
+    IReadOnlyList<PodiumPredictionRiderDto> Items)
 {
     [JsonPropertyName("modelVersion")]
     public string ModelVersion { get; init; } = "ridge-monte-carlo-v1";

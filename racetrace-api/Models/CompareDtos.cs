@@ -3,10 +3,10 @@ using System.Text.Json.Serialization;
 namespace RaceTrace.Api.Models;
 
 public sealed record CompareResponseDto(
-    [property: JsonPropertyName("riders")] IReadOnlyList<CompareRiderDto> Riders,
-    [property: JsonPropertyName("sessions")] IReadOnlyList<CompareSessionDto> Sessions,
+    IReadOnlyList<CompareRiderDto> Riders,
+    IReadOnlyList<CompareSessionDto> Sessions,
     [property: JsonPropertyName("commonSessions")] IReadOnlyList<CompareSessionDto> CommonSessions,
-    [property: JsonPropertyName("summary")] CompareSummaryDto Summary);
+    CompareSummaryDto Summary);
 
 public sealed record CompareSummaryDto(
     [property: JsonPropertyName("ridersCount")] int RidersCount,
@@ -21,9 +21,9 @@ public sealed record CompareRiderDto(
     [property: JsonPropertyName("fullName")] string FullName,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
     [property: JsonPropertyName("profileImageUrl")] string? ProfileImageUrl,
-    [property: JsonPropertyName("age")] int? Age,
+    int? Age,
     [property: JsonPropertyName("currentCategory")] string? CurrentCategory,
-    [property: JsonPropertyName("categories")] IReadOnlyList<string> Categories,
+    IReadOnlyList<string> Categories,
     [property: JsonPropertyName("teamId")] long? TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
     [property: JsonPropertyName("teamCode")] string? TeamCode,
@@ -31,10 +31,10 @@ public sealed record CompareRiderDto(
     [property: JsonPropertyName("podiumsCount")] int PodiumsCount,
     [property: JsonPropertyName("top5Count")] int Top5Count,
     [property: JsonPropertyName("top10Count")] int Top10Count,
-    [property: JsonPropertyName("rating")] decimal? Rating,
-    [property: JsonPropertyName("pace")] decimal? Pace,
-    [property: JsonPropertyName("consistency")] decimal? Consistency,
-    [property: JsonPropertyName("confidence")] decimal Confidence,
+    decimal? Rating,
+    decimal? Pace,
+    decimal? Consistency,
+    decimal Confidence,
     [property: JsonPropertyName("wonSplitsCount")] int WonSplitsCount,
     [property: JsonPropertyName("wonSectorsCount")] int WonSectorsCount,
     [property: JsonPropertyName("averageFinalPosition")] decimal? AverageFinalPosition,
@@ -65,25 +65,25 @@ public sealed record ComparePointsProgressDto(
     [property: JsonPropertyName("resultId")] long ResultId,
     [property: JsonPropertyName("sessionId")] long SessionId,
     [property: JsonPropertyName("roundId")] long RoundId,
-    [property: JsonPropertyName("date")] DateOnly? Date,
+    DateOnly? Date,
     [property: JsonPropertyName("sessionType")] string? SessionType,
-    [property: JsonPropertyName("category")] string? Category,
+    string? Category,
     [property: JsonPropertyName("awardedPoints")] decimal AwardedPoints,
     [property: JsonPropertyName("cumulativePoints")] decimal CumulativePoints);
 
 public sealed record CompareRoundMetricsDto(
     [property: JsonPropertyName("roundId")] long RoundId,
-    [property: JsonPropertyName("season")] int? Season,
+    int? Season,
     [property: JsonPropertyName("roundNumber")] int? RoundNumber,
-    [property: JsonPropertyName("date")] DateOnly? Date,
+    DateOnly? Date,
     [property: JsonPropertyName("trackId")] long? TrackId,
     [property: JsonPropertyName("trackName")] string? TrackName,
     [property: JsonPropertyName("venueName")] string? VenueName,
     [property: JsonPropertyName("competitionClassCode")] string? CompetitionClassCode,
-    [property: JsonPropertyName("rating")] decimal? Rating,
-    [property: JsonPropertyName("pace")] decimal? Pace,
-    [property: JsonPropertyName("consistency")] decimal? Consistency,
-    [property: JsonPropertyName("confidence")] decimal Confidence)
+    decimal? Rating,
+    decimal? Pace,
+    decimal? Consistency,
+    decimal Confidence)
 {
     [JsonPropertyName("consistencyEvidence")]
     public decimal ConsistencyEvidence { get; init; }
@@ -100,38 +100,38 @@ public sealed record CompareAverageSectorGapDto(
 public sealed record CompareSessionDto(
     [property: JsonPropertyName("sessionId")] long SessionId,
     [property: JsonPropertyName("roundId")] long RoundId,
-    [property: JsonPropertyName("season")] int? Season,
+    int? Season,
     [property: JsonPropertyName("roundNumber")] int? RoundNumber,
     [property: JsonPropertyName("sessionName")] string? SessionName,
     [property: JsonPropertyName("sessionType")] string? SessionType,
-    [property: JsonPropertyName("category")] string? Category,
+    string? Category,
     [property: JsonPropertyName("sessionDate")] DateOnly? SessionDate,
     [property: JsonPropertyName("trackId")] long? TrackId,
     [property: JsonPropertyName("trackName")] string? TrackName,
     [property: JsonPropertyName("venueName")] string? VenueName,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
-    [property: JsonPropertyName("condition")] ConditionDto? Condition,
+    ConditionDto? Condition,
     [property: JsonPropertyName("competitionClassId")] long? CompetitionClassId,
     [property: JsonPropertyName("competitionClassCode")] string? CompetitionClassCode,
     [property: JsonPropertyName("competitionClassName")] string? CompetitionClassName,
     [property: JsonPropertyName("isCommon")] bool IsCommon,
-    [property: JsonPropertyName("results")] IReadOnlyList<CompareSessionResultDto> Results);
+    IReadOnlyList<CompareSessionResultDto> Results);
 
 public sealed record CompareSessionResultDto(
     [property: JsonPropertyName("resultId")] long ResultId,
     [property: JsonPropertyName("riderId")] long RiderId,
-    [property: JsonPropertyName("position")] int? Position,
-    [property: JsonPropertyName("status")] string? Status,
+    int? Position,
+    string? Status,
     [property: JsonPropertyName("isClassified")] bool IsClassified,
     [property: JsonPropertyName("teamId")] long? TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
     [property: JsonPropertyName("finalTime")] decimal? FinalTime,
     [property: JsonPropertyName("gapToBestSelected")] decimal? GapToBestSelected,
-    [property: JsonPropertyName("sectors")] IReadOnlyList<CompareSectorResultDto> Sectors);
+    IReadOnlyList<CompareSectorResultDto> Sectors);
 
 public sealed record CompareSectorResultDto(
     [property: JsonPropertyName("sectorIndex")] int SectorIndex,
     [property: JsonPropertyName("isFinishSector")] bool IsFinishSector,
-    [property: JsonPropertyName("time")] decimal? Time,
+    decimal? Time,
     [property: JsonPropertyName("gapToBestSelected")] decimal? GapToBestSelected,
     [property: JsonPropertyName("positionAmongSelected")] int? PositionAmongSelected);

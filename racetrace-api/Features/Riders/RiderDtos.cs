@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace RaceTrace.Api.Models;
 
 public sealed record RiderTeamHistoryDto(
-    [property: JsonPropertyName("id")] long Id,
+    long Id,
     [property: JsonPropertyName("riderId")] long RiderId,
     [property: JsonPropertyName("teamId")] long TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
@@ -18,15 +18,15 @@ public sealed record SessionPositionDto(
     [property: JsonPropertyName("roundId")] long RoundId,
     [property: JsonPropertyName("sessionId")] long SessionId,
     [property: JsonPropertyName("sessionType")] string SessionType,
-    [property: JsonPropertyName("position")] int? Position);
+    int? Position);
 
 public sealed record SpeedGroupDto(
     [property: JsonPropertyName("topSpeed")] decimal? TopSpeed,
     [property: JsonPropertyName("averageSpeed")] decimal? AverageSpeed);
 
 public sealed record RiderSpeedDto(
-    [property: JsonPropertyName("qualification")] SpeedGroupDto Qualification,
-    [property: JsonPropertyName("final")] SpeedGroupDto Final);
+    SpeedGroupDto Qualification,
+    SpeedGroupDto Final);
 
 public sealed record AverageSectorTimeDto(
     [property: JsonPropertyName("sectorIndex")] int SectorIndex,
@@ -41,16 +41,16 @@ public sealed record RiderStatisticsDto(
     [property: JsonPropertyName("fullName")] string FullName,
     [property: JsonPropertyName("profileImageUrl")] string? ProfileImageUrl,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
-    [property: JsonPropertyName("gender")] string? Gender,
+    string? Gender,
     [property: JsonPropertyName("teamId")] long? TeamId,
     [property: JsonPropertyName("teamName")] string? TeamName,
     [property: JsonPropertyName("teamCode")] string? TeamCode,
     [property: JsonPropertyName("currentCategory")] string? CurrentCategory,
-    [property: JsonPropertyName("age")] int? Age,
-    [property: JsonPropertyName("rating")] decimal? Rating,
-    [property: JsonPropertyName("pace")] decimal? Pace,
-    [property: JsonPropertyName("consistency")] decimal? Consistency,
-    [property: JsonPropertyName("confidence")] decimal Confidence,
+    int? Age,
+    decimal? Rating,
+    decimal? Pace,
+    decimal? Consistency,
+    decimal Confidence,
     [property: JsonPropertyName("averagePosition")] decimal? AveragePosition,
     [property: JsonPropertyName("totalPoints")] decimal TotalPoints,
     [property: JsonPropertyName("rankingPosition")] int? RankingPosition,
@@ -67,7 +67,7 @@ public sealed record RiderStatisticsDto(
     [property: JsonPropertyName("preFinalWonSectorsCount")] int PreFinalWonSectorsCount,
     [property: JsonPropertyName("finalWonSplitsCount")] int FinalWonSplitsCount,
     [property: JsonPropertyName("finalWonSectorsCount")] int FinalWonSectorsCount,
-    [property: JsonPropertyName("speed")] RiderSpeedDto Speed,
+    RiderSpeedDto Speed,
     [property: JsonPropertyName("averageQualifyingPosition")] decimal? AverageQualifyingPosition,
     [property: JsonPropertyName("averageQualifying1Position")] decimal? AverageQualifying1Position,
     [property: JsonPropertyName("averageQualifying2Position")] decimal? AverageQualifying2Position,
@@ -79,21 +79,21 @@ public sealed record RiderStatisticsDto(
 public sealed record RiderRoundResultDto(
     [property: JsonPropertyName("roundId")] long RoundId,
     [property: JsonPropertyName("roundNumber")] int? RoundNumber,
-    [property: JsonPropertyName("season")] int? Season,
+    int? Season,
     [property: JsonPropertyName("competitionClassId")] long? CompetitionClassId,
     [property: JsonPropertyName("competitionClassCode")] string? CompetitionClassCode,
     [property: JsonPropertyName("competitionClassName")] string? CompetitionClassName,
-    [property: JsonPropertyName("condition")] ConditionDto? Condition,
+    ConditionDto? Condition,
     [property: JsonPropertyName("roundStartDate")] DateOnly? RoundStartDate,
     [property: JsonPropertyName("trackId")] long? TrackId,
     [property: JsonPropertyName("trackName")] string? TrackName,
     [property: JsonPropertyName("venueId")] long? VenueId,
     [property: JsonPropertyName("venueName")] string? VenueName,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
-    [property: JsonPropertyName("rating")] decimal? Rating,
-    [property: JsonPropertyName("pace")] decimal? Pace,
-    [property: JsonPropertyName("consistency")] decimal? Consistency,
-    [property: JsonPropertyName("confidence")] decimal Confidence,
+    decimal? Rating,
+    decimal? Pace,
+    decimal? Consistency,
+    decimal Confidence,
     [property: JsonPropertyName("qualifyingPosition")] int? QualifyingPosition,
     [property: JsonPropertyName("qualifying1Position")] int? Qualifying1Position,
     [property: JsonPropertyName("qualifying2Position")] int? Qualifying2Position,
@@ -107,10 +107,10 @@ public sealed record RiderTrackStatisticsDto(
     [property: JsonPropertyName("venueId")] long? VenueId,
     [property: JsonPropertyName("venueName")] string? VenueName,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
-    [property: JsonPropertyName("rating")] decimal? Rating,
-    [property: JsonPropertyName("pace")] decimal? Pace,
-    [property: JsonPropertyName("consistency")] decimal? Consistency,
-    [property: JsonPropertyName("confidence")] decimal Confidence,
+    decimal? Rating,
+    decimal? Pace,
+    decimal? Consistency,
+    decimal Confidence,
     [property: JsonPropertyName("averageQualifyingPosition")] decimal? AverageQualifyingPosition,
     [property: JsonPropertyName("averageQualifying1Position")] decimal? AverageQualifying1Position,
     [property: JsonPropertyName("averageQualifying2Position")] decimal? AverageQualifying2Position,
@@ -119,7 +119,7 @@ public sealed record RiderTrackStatisticsDto(
     [property: JsonPropertyName("startsCount")] int StartsCount);
 
 public sealed record RiderOverviewDto(
-    [property: JsonPropertyName("statistics")] RiderStatisticsDto Statistics,
+    RiderStatisticsDto Statistics,
     [property: JsonPropertyName("roundResults")] IReadOnlyList<RiderRoundResultDto> RoundResults,
     [property: JsonPropertyName("trackStatistics")] IReadOnlyList<RiderTrackStatisticsDto> TrackStatistics,
     [property: JsonPropertyName("sessionResults")] JsonArray SessionResults,

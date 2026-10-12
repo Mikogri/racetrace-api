@@ -5,46 +5,46 @@ namespace RaceTrace.Api.Models;
 public sealed record FantasyRiderDto(
     [property: JsonPropertyName("pinkbikeExternalId")] string PinkbikeExternalId,
     [property: JsonPropertyName("riderId")] string? RiderId,
-    [property: JsonPropertyName("name")] string Name,
+    string Name,
     [property: JsonPropertyName("countryCode")] string? CountryCode,
-    [property: JsonPropertyName("gender"), Infrastructure.ApiContractValues("male", "female")] string Gender,
-    [property: JsonPropertyName("price")] decimal? Price,
+    [property: Infrastructure.ApiContractValues("male", "female")] string Gender,
+    decimal? Price,
     [property: JsonPropertyName("pinkbikeSeasonPoints")] int? PinkbikeSeasonPoints,
     [property: JsonPropertyName("injuryFlag")] bool InjuryFlag,
     [property: JsonPropertyName("expectedFinalPoints")] decimal? ExpectedFinalPoints,
     [property: JsonPropertyName("expectedQ1Bonus")] decimal? ExpectedQ1Bonus,
     [property: JsonPropertyName("expectedFantasyPoints")] decimal? ExpectedFantasyPoints,
     [property: JsonPropertyName("predictedPosition")] decimal? PredictedPosition,
-    [property: JsonPropertyName("confidence")] decimal? Confidence,
+    decimal? Confidence,
     [property: JsonPropertyName("isRecommended")] bool IsRecommended,
-    [property: JsonPropertyName("warnings")] IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings);
 
 public sealed record FantasyRoundDto(
     [property: JsonPropertyName("roundId")] string RoundId,
     [property: JsonPropertyName("roundNumber")] int? RoundNumber,
-    [property: JsonPropertyName("venue")] string? Venue,
+    string? Venue,
     [property: JsonPropertyName("trackName")] string? TrackName,
     [property: JsonPropertyName("startDate")] string? StartDate);
 
 public sealed record FantasyRecommendationDto(
-    [property: JsonPropertyName("riders")] IReadOnlyList<FantasyRiderDto> Riders,
+    IReadOnlyList<FantasyRiderDto> Riders,
     [property: JsonPropertyName("totalPrice")] decimal TotalPrice,
     [property: JsonPropertyName("remainingBudget")] decimal RemainingBudget,
     [property: JsonPropertyName("expectedFantasyPoints")] decimal ExpectedFantasyPoints);
 
 public sealed record FantasyCurrentDto(
-    [property: JsonPropertyName("status")] string Status,
-    [property: JsonPropertyName("season")] int Season,
-    [property: JsonPropertyName("round")] FantasyRoundDto? Round,
-    [property: JsonPropertyName("riders")] IReadOnlyList<FantasyRiderDto> Riders,
-    [property: JsonPropertyName("recommendation")] FantasyRecommendationDto? Recommendation,
-    [property: JsonPropertyName("warnings")] IReadOnlyList<string> Warnings,
+    string Status,
+    int Season,
+    FantasyRoundDto? Round,
+    IReadOnlyList<FantasyRiderDto> Riders,
+    FantasyRecommendationDto? Recommendation,
+    IReadOnlyList<string> Warnings,
     [property: JsonPropertyName("fetchedAtUtc")] DateTimeOffset? FetchedAtUtc,
     [property: JsonPropertyName("priceSnapshotId")] string? PriceSnapshotId,
     [property: JsonPropertyName("sourceUrl")] string SourceUrl,
     [property: JsonPropertyName("predictionEngineVersion")] string PredictionEngineVersion,
     [property: JsonPropertyName("fantasyProjectionVersion")] string FantasyProjectionVersion,
-    [property: JsonPropertyName("calculation")] FantasyCalculationDto? Calculation = null);
+    FantasyCalculationDto? Calculation = null);
 
 public sealed record FantasyCalculationDto(
     [property: JsonPropertyName("algorithmVersion")] string AlgorithmVersion,

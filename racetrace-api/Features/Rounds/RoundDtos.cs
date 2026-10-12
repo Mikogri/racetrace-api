@@ -6,7 +6,7 @@ namespace RaceTrace.Api.Models;
 public sealed record RoundListItemDto(
     [property: JsonPropertyName("roundId")] long RoundId,
     [property: JsonPropertyName("roundNumber")] int? RoundNumber,
-    [property: JsonPropertyName("season")] int Season,
+    int Season,
     [property: JsonPropertyName("contextName")] string? ContextName,
     [property: JsonPropertyName("imageUrl")] string? ImageUrl,
     [property: JsonPropertyName("trackId")] long TrackId,
@@ -16,7 +16,7 @@ public sealed record RoundListItemDto(
     [property: JsonPropertyName("countryCode")] string? CountryCode,
     [property: JsonPropertyName("startDate")] DateOnly? StartDate,
     [property: JsonPropertyName("endDate")] DateOnly? EndDate,
-    [property: JsonPropertyName("status")] string Status,
+    string Status,
     [property: JsonPropertyName("competitionClassId")] long? CompetitionClassId,
     [property: JsonPropertyName("competitionClassCode")] string? CompetitionClassCode,
     [property: JsonPropertyName("competitionClassName")] string? CompetitionClassName,
