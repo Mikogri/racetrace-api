@@ -73,6 +73,16 @@ public sealed class AdminDataController : ControllerBase
         return Ok(await _adminData.UpsertRoundImageAsync(roundId, payload, cancellationToken));
     }
 
+    [HttpPost("round-images/convert-webp")]
+    [ProducesResponseType(typeof(JsonObject), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ConvertRoundImagesToWebp(
+        [FromServices] RoundImageBackfillService backfill,
+        [FromQuery] int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        return Ok(await backfill.ConvertBatchAsync(limit, cancellationToken));
+    }
+
     [HttpDelete("rounds/{roundId:long}")]
     [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteRound(

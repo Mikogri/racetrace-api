@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
+using RaceTrace.Api.Configuration;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 using RaceTrace.Api.Services;
@@ -23,11 +25,13 @@ public sealed class RoundImagePayloadParserTests
             1));
 
         Assert.NotNull(result);
-        Assert.Equal("route.png", result.FileName);
+        Assert.Equal("route.webp", result.FileName);
         Assert.Equal("World Cup route", result.AltText);
         Assert.Equal(1, result.WidthPx);
         Assert.Equal(1, result.HeightPx);
-        Assert.True(result.Bytes.Length > 8);
+        Assert.True(result.Bytes.Length > 12);
+        Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(result.Bytes, 0, 4));
+        Assert.Equal("WEBP", System.Text.Encoding.ASCII.GetString(result.Bytes, 8, 4));
     }
 
     [Fact]
@@ -71,5 +75,37 @@ public sealed class RoundImagePayloadParserTests
                 1)));
 
         Assert.Equal("ROUND_IMAGE_WIDTH_INVALID", exception.Code);
+    }
+
+    [Fact]
+    public async Task UploadStoresConvertedWebpWithMatchingContentType()
+    {
+        var image = RoundImagePayloadParser.Parse(new ImportRoundImagePayload(OnePixelPng, "route.png", null, null, null))!;
+        using var handler = new UploadHandler();
+        using var http = new HttpClient(handler);
+        var storage = new RoundImageStorageService(http, Options.Create(new SupabaseOptions
+        {
+            Url = "https://storage.example.test",
+            ServiceRoleKey = "test-key"
+        }));
+
+        var path = await storage.UploadAsync(image, CancellationToken.None);
+
+        Assert.EndsWith(".webp", path);
+        Assert.Equal("image/webp", handler.ContentType);
+        Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(handler.UploadedBytes!, 0, 4));
+    }
+
+    private sealed class UploadHandler : HttpMessageHandler
+    {
+        public string? ContentType { get; private set; }
+        public byte[]? UploadedBytes { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            ContentType = request.Content!.Headers.ContentType?.MediaType;
+            UploadedBytes = await request.Content.ReadAsByteArrayAsync(cancellationToken);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }
     }
 }

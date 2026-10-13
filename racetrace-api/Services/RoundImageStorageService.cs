@@ -20,11 +20,11 @@ public sealed class RoundImageStorageService
         _options = options.Value;
     }
 
-    internal async Task<string> UploadAsync(PreparedRoundImage image, CancellationToken cancellationToken)
+    internal async Task<string> UploadAsync(PreparedRoundImage image, CancellationToken cancellationToken, string pathPrefix = "images")
     {
         EnsureConfigured(requireServiceKey: true);
         var hash = Convert.ToHexString(SHA256.HashData(image.Bytes)).ToLowerInvariant();
-        var storagePath = $"images/{hash}.png";
+        var storagePath = $"{pathPrefix}/{hash}.webp";
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"{_options.Url.TrimEnd('/')}/storage/v1/object/{BucketName}/{storagePath}");
@@ -33,7 +33,7 @@ public sealed class RoundImageStorageService
         request.Headers.TryAddWithoutValidation("x-upsert", "true");
         request.Headers.TryAddWithoutValidation("cache-control", "31536000");
         request.Content = new ByteArrayContent(image.Bytes);
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue(RoundImagePayloadParser.ContentType);
 
         using var response = await _http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -46,6 +46,17 @@ public sealed class RoundImageStorageService
         }
 
         return storagePath;
+    }
+
+    internal async Task<byte[]> DownloadAsync(string storagePath, CancellationToken cancellationToken)
+    {
+        EnsureConfigured(requireServiceKey: false);
+        using var response = await _http.GetAsync(PublicUrl(storagePath), cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        if (bytes.Length > RoundImagePayloadParser.MaximumImageBytes)
+            throw new ApiException(StatusCodes.Status400BadRequest, "ROUND_IMAGE_TOO_LARGE", "Stored round image exceeds the import size limit.");
+        return bytes;
     }
 
     public string PublicUrl(string storagePath)

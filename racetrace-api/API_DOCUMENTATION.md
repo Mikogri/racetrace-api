@@ -117,12 +117,12 @@ Migracja i granice refactoru: `../docs/refactor-display-metadata.md`.
 |---|---|
 | `GET /api/v1/rounds` | lekka, stronicowana lista rund posortowana domyślnie po dacie |
 | `GET /api/v1/rounds/{round_id}` | szczegóły rundy |
-| `GET /api/v1/rounds/{round_id}/image` | binarny plik PNG rundy |
+| `GET /api/v1/rounds/{round_id}/image` | obraz rundy (WebP lub starszy PNG) |
 | `GET /api/v1/rounds/{round_id}/sessions` | sesje należące do rundy |
 | `GET /api/v1/rounds/{round_id}/results` | wyniki rundy |
 | `GET /api/v1/sessions/common` | sesje wspólne dla przekazanych zawodników i filtrów |
 
-Lista rund nie zawiera obrazu base64. Zwraca lekkie informacje o jego dostępności i adres endpointu obrazu. Endpoint obrazu przekierowuje do publicznego obiektu w bucketcie Supabase Storage `round-images`, dzięki czemu przeglądarka pobiera PNG bezpośrednio ze Storage i może korzystać z długiego cache. Zdjęcia wspólne dla venue są przechowywane tylko raz w `venue_images` i przypisywane do tras; wszystkie rundy danej trasy korzystają z tego samego obiektu.
+Lista rund nie zawiera obrazu base64. Zwraca lekkie informacje o jego dostępności i adres endpointu obrazu. Endpoint obrazu przekierowuje do publicznego obiektu w bucketcie Supabase Storage `round-images`, dzięki czemu przeglądarka pobiera obraz bezpośrednio ze Storage i może korzystać z długiego cache. Nowe obrazy PNG są automatycznie kodowane jako WebP podczas importu; istniejące PNG pozostają czytelne. Zdjęcia wspólne dla venue są przechowywane tylko raz w `venue_images` i przypisywane do tras; wszystkie rundy danej trasy korzystają z tego samego obiektu.
 
 ### Wyniki
 
@@ -345,7 +345,8 @@ Endpointy administracyjne wymagają tokena administratora.
 | `PATCH /api/admin/riders/{rider_id}` | częściowa edycja ridera, np. zdjęcie lub `has_injury` |
 | `PATCH /api/admin/{resource}/{id}` | częściowa edycja dozwolonego zasobu |
 | `PATCH /api/admin/rounds/{round_id}/track` | edycja trasy przypisanej do rundy |
-| `PUT /api/admin/rounds/{round_id}/image` | dodanie lub zastąpienie PNG rundy |
+| `PUT /api/admin/rounds/{round_id}/image` | dodanie lub zastąpienie obrazu rundy (wejściowy PNG, zapis WebP) |
+| `POST /api/admin/round-images/convert-webp?limit=10` | konwersja partii starszych PNG rund i venue do WebP |
 | `DELETE /api/admin/rounds/{round_id}` | usunięcie rundy zgodnie z relacjami bazy |
 | `POST /api/admin/sessions/{session_id}/reimport` | ponowny import sesji |
 | `POST /api/admin/sessions/{session_id}/supplement/uci-mtb-world-series` | uzupełnienie sesji JSON-em UCI MTB World Series |
@@ -359,7 +360,7 @@ Import PDF używa `multipart/form-data`. Pole `request` zawiera JSON o strukturz
 
 Jeśli źródło nie zawiera teamu, import i odczyt wyników szukają go w `rider_team_history`: najpierw dla okresu obejmującego datę sesji, a następnie w najbliższym znanym okresie. Jawny team z wyniku ma zawsze pierwszeństwo. Fallback nie tworzy wpisu historii i nie zastępuje istniejącego teamu; brak jest zwracany dopiero wtedy, gdy rider nie ma żadnej znanej historii.
 
-Runda może mieć administracyjny status `live`. `POST /api/admin/rounds` przyjmuje też opcjonalny `context_name` i obraz PNG w `image`; formularz importu rundy nadal obsługuje `round.context_name`, `round.status = "live"` oraz `image`. Status wymaga migracji `20260820_live_round_status.sql`.
+Runda może mieć administracyjny status `live`. `POST /api/admin/rounds` przyjmuje też opcjonalny `context_name` i obraz PNG w `image`, kodowany automatycznie jako WebP; formularz importu rundy nadal obsługuje `round.context_name`, `round.status = "live"` oraz `image`. Status wymaga migracji `20260820_live_round_status.sql`.
 
 Po imporcie wyniku zawierającego jawny team API przebudowuje okresy historii tylko dla riderów obecnych w tym imporcie. Import World Champs lub innego źródła bez teamów nie zamyka okresu, nie tworzy pustego wpisu i nie zmienia historii ridera.
 
@@ -393,7 +394,9 @@ Cache ogranicza serię identycznych odczytów z frontendu, ale zachowuje dynamic
 
 ### Obrazy poza JSON-em
 
-Zdjęcia rund są pobierane osobnym endpointem jako PNG i mogą mieć `Cache-Control`. Ranking, detale ridera i pozostałe listy nie przenoszą binarnego obrazu rundy. Eliminuje to base64, które zwiększa rozmiar danych i zużycie pamięci.
+Zdjęcia rund są pobierane osobnym endpointem jako WebP (starsze: PNG) i mogą mieć `Cache-Control`. Ranking, detale ridera i pozostałe listy nie przenoszą binarnego obrazu rundy. Eliminuje to base64, które zwiększa rozmiar danych i zużycie pamięci.
+
+Przed pierwszym importem WebP zastosuj `Database/20261013_round_images_webp.sql` (Storage dopuszcza wtedy oba formaty). Istniejące obrazy można konwertować partiami wywołując administracyjny endpoint aż obie liczby `*_converted` będą zerowe. Stare obiekty PNG w Storage pozostają przez czas życia cache przekierowań (24 godziny); usuń je później po upewnieniu się, że żaden rekord już na nie nie wskazuje. Operację należy wykonać po wdrożeniu nowego API i migracji bazy.
 
 ### Pozostałe mechanizmy
 

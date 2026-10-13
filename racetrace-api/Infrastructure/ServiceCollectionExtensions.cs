@@ -107,6 +107,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SearchService>();
         services.AddScoped<RoundsService>();
         services.AddHttpClient<RoundImageStorageService>();
+        services.AddScoped<RoundImageBackfillService>();
         services.AddScoped<ResultsService>();
         services.AddScoped<SessionsService>();
         services.AddScoped<RidersService>();

@@ -1,5 +1,6 @@
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
+using SkiaSharp;
 
 namespace RaceTrace.Api.Services;
 
@@ -13,6 +14,8 @@ internal sealed record PreparedRoundImage(
 internal static class RoundImagePayloadParser
 {
     internal const int MaximumImageBytes = 10 * 1024 * 1024;
+    internal const string ContentType = "image/webp";
+    private const int WebpQuality = 88;
 
     private static readonly byte[] PngSignature =
     [
@@ -55,18 +58,35 @@ internal static class RoundImagePayloadParser
             throw Invalid("ROUND_IMAGE_TOO_LARGE", $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB.");
         }
 
+        return ConvertPng(bytes, payload.FileName, payload.AltText);
+    }
+
+    internal static PreparedRoundImage ConvertPng(byte[] bytes, string? fileName, string? altText)
+    {
+        if (bytes.Length > MaximumImageBytes)
+            throw Invalid("ROUND_IMAGE_TOO_LARGE", $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB.");
+
         if (bytes.Length < PngSignature.Length ||
             !bytes.AsSpan(0, PngSignature.Length).SequenceEqual(PngSignature))
         {
             throw Invalid("ROUND_IMAGE_NOT_PNG", "Round image must be a PNG file.");
         }
 
+        using var bitmap = SKBitmap.Decode(bytes)
+            ?? throw Invalid("ROUND_IMAGE_INVALID_DATA", "Round image contains invalid PNG data.");
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Webp, WebpQuality)
+            ?? throw Invalid("ROUND_IMAGE_CONVERSION_FAILED", "Round image could not be converted to WebP.");
+        var webpBytes = encoded.ToArray();
+        if (webpBytes.Length > MaximumImageBytes)
+            throw Invalid("ROUND_IMAGE_TOO_LARGE", $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB.");
+
         return new PreparedRoundImage(
-            bytes,
-            payload.FileName,
-            payload.AltText,
-            payload.WidthPx,
-            payload.HeightPx);
+            webpBytes,
+            fileName is null ? null : Path.ChangeExtension(fileName.Trim(), ".webp"),
+            altText,
+            bitmap.Width,
+            bitmap.Height);
     }
 
     private static string ExtractBase64(string value)

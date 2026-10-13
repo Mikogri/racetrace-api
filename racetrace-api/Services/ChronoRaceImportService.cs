@@ -561,7 +561,7 @@ public sealed class ChronoRaceImportService
                 ["round_id"] = roundId,
                 ["image_data"] = storagePath is null ? $"\\x{Convert.ToHexString(image.Bytes)}" : null,
                 ["storage_path"] = storagePath,
-                ["content_type"] = "image/png",
+                ["content_type"] = RoundImagePayloadParser.ContentType,
                 ["file_name"] = image.FileName,
                 ["alt_text"] = image.AltText,
                 ["width_px"] = image.WidthPx,
