@@ -38,6 +38,50 @@ public sealed class DataRevisionTests
         Assert.Equal(2, rpc.SourceReads);
     }
 
+    [Fact]
+    public async Task RankingRefreshRecomputesSnapshotAndReplacesMemoryCacheEntry()
+    {
+        var rpc = new RevisionRpc();
+        using var services = Services(rpc, new Clock());
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var domain = new DomainQueryService(rpc);
+        var ranking = new RankingService(new(), domain, new MetricsService(domain, new PaceService(rpc)), new(), cache,
+            services.GetRequiredService<DataRevisionService>());
+        var filters = new RiderMetricsContext(2026, "EM", null, null, null, null, null, null, null, null, null);
+
+        var original = await ranking.BuildSnapshotAsync(filters, default);
+        var refreshed = await ranking.BuildSnapshotAsync(filters, default, forceRefresh: true);
+        var reused = await ranking.BuildSnapshotAsync(filters, default);
+
+        Assert.NotSame(original, refreshed);
+        Assert.Same(refreshed, reused);
+        Assert.Equal(2, rpc.SourceReads);
+    }
+
+    [Fact]
+    public async Task RankingRefreshBypassesOutputCacheWithoutAffectingOtherRoutes()
+    {
+        var policy = new ApiReadOutputCachePolicy(TimeSpan.FromSeconds(30));
+        static OutputCacheContext Context() => new()
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+        var ranking = Context();
+        ranking.HttpContext.Request.Method = "GET";
+        ranking.HttpContext.Request.Path = "/api/v1/ranking";
+        ranking.HttpContext.Request.QueryString = new("?refresh=1");
+        await policy.CacheRequestAsync(ranking, default);
+        Assert.False(ranking.AllowCacheLookup);
+        Assert.False(ranking.AllowCacheStorage);
+
+        var other = Context();
+        other.HttpContext.Request.Method = "GET";
+        other.HttpContext.Request.Path = "/api/v1/riders";
+        other.HttpContext.Request.QueryString = new("?refresh=1");
+        await policy.CacheRequestAsync(other, default);
+        Assert.True(other.AllowCacheLookup);
+    }
+
     [Theory]
     [InlineData("/API/V1/RANKING")]
     [InlineData("/api/v1/riders")]

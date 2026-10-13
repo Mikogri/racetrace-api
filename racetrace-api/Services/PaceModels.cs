@@ -59,6 +59,9 @@ internal sealed record PacePrecomputedSessionData(
 {
     // Prepared for the complete session/category, before selecting any rider.
     public PaceFinishReference? PaceFinish { get; init; }
+    internal (IReadOnlyList<PacePrecomputedSector> Sectors, PaceOptions Options,
+        IReadOnlyList<SectorAnomaly> Values)? PreparedAnomalies { get; init; }
+    internal (PaceRiderRun Run, IReadOnlyList<double?> Times)? PreparedCumulativeTimes { get; init; }
 }
 
 internal sealed record PaceFinishReference(double? TimeSeconds, double RemovedLossSeconds, PaceFieldSummary Statistics);

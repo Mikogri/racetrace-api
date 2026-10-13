@@ -1204,6 +1204,8 @@ public sealed class DownhillPaceCalculatorTests
             fieldSize: 30)), "target");
 
         Assert.True(complete.Confidence > partial.Confidence);
+        Assert.Equal(100.0 * (1.0 - Math.Exp(-0.5)) * Math.Sqrt(0.5),
+            partial.Confidence, precision: 10);
     }
 
     [Fact]

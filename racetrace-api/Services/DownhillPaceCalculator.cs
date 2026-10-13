@@ -16,11 +16,51 @@ internal sealed partial class DownhillPaceCalculator
 
     private static void ValidateOptions(PaceOptions options)
     {
+        ReadOnlySpan<double> numericOptions =
+        [
+            options.NonFinalistMaxScore, options.RankWeight, options.TimeWeight,
+            options.MaximumWinBonus, options.SectorRankExponent, options.SectorTimeSigmoidSlope,
+            options.SectorTimeSigmoidOffset, options.StrongSectorCalibrationThreshold,
+            options.StrongSectorCalibrationPower, options.FastSectorFraction,
+            options.FastSectorWeight, options.AllSectorWeight, options.FullEvidenceSectorCount,
+            options.FullConfidenceSectorCount, options.CoverageConfidencePower,
+            options.FullConfidenceFieldSize, options.OverallEvidenceScale,
+            options.MinimumConfidenceWithoutFinals, options.FinalEvidenceScale,
+            options.FullFinalConfidenceEvidence, options.FinalParticipationConfidencePower,
+            options.CoverageWeightPower, options.FinishPositiveGain, options.TopSpeedPositiveGain,
+            options.MaximumDominanceBonus, options.MinimumDominanceRelativeMargin,
+            options.DominanceRelativeMarginScale, options.FinalWinBonus, options.SemiFinalWinBonus,
+            options.QualifyingWinBonus, options.SeedingWinBonus, options.TimedTrainingWinBonus,
+            options.TrainingWinBonus, options.IncidentPerformanceDropThreshold,
+            options.IncidentRelativeLossThreshold, options.MinimumIncidentLossSeconds,
+            options.PostIncidentMinimumPositiveScore, options.PostIncidentMinimumPerformanceZ,
+            options.PostIncidentMaximumScoreDrop, options.PostIncidentMaximumPercentileDrop,
+            options.PostIncidentMaximumPerformanceDrop, options.PaceCalibrationThreshold,
+            options.PaceCalibrationPower, options.UpperPaceCalibrationMaximumBoost,
+            options.UpperPaceCalibrationStart, options.UpperPaceCalibrationFull,
+            options.UpperPaceCalibrationTaperStart, options.UpperPaceCalibrationEnd,
+            options.FinalStageEvidenceFactor, options.SemiFinalStageEvidenceFactor,
+            options.QualifyingStageEvidenceFactor, options.SeedingStageEvidenceFactor,
+            options.SemiFinalEarlierStageMaximumLift, options.SemiFinalHighestStagePaceCap,
+            options.QualifyingHighestStagePaceCap, options.SeedingHighestStagePaceCap,
+            options.SparseSemiFinalPaceCap, options.SparseQualifyingPaceCap,
+            options.SparseSeedingPaceCap, options.SlowRunPercentileDrop,
+            options.MinimumHistoricalPercentileForSlowRunCheck, options.TempoPower,
+            options.SessionWeights.FinalTargetImpact
+        ];
+        foreach (var value in numericOptions)
+        {
+            if (!double.IsFinite(value))
+                throw new ArgumentOutOfRangeException(nameof(options), "Pace options must be finite.");
+        }
+        if (options.TempoPower <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "TempoPower must be positive.");
+
         if (options.NonFinalistMaxScore is < 0 or > 100 ||
             options.SessionWeights.FinalTargetImpact is < 0 or > 1 ||
             Enum.GetValues<PaceSessionType>()
                 .Select(options.SessionWeights.GetWeight)
-                .Any(weight => weight < 0))
+                .Any(weight => !double.IsFinite(weight) || weight < 0))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options),
@@ -188,7 +228,7 @@ internal sealed partial class DownhillPaceCalculator
         var finishSummary = ToFieldSummary(fullRunStatistics);
         var classifiedFieldSize = validRuns.Count(run => run.IsClassified);
         var precomputed = validRuns
-            .Select(run => new PacePrecomputedSessionData(
+            .Select((run, runIndex) => new PacePrecomputedSessionData(
                 SessionId: string.Empty,
                 CourseKey: string.Empty,
                 CategoryId: null,
@@ -196,17 +236,20 @@ internal sealed partial class DownhillPaceCalculator
                 Run: run,
                 ClassifiedFieldSize: classifiedFieldSize,
                 Sectors: Enumerable.Range(0, sectorCount)
-                    .Select(index => new PacePrecomputedSector(
-                        index,
-                        GetSectorTime(run, index),
-                        CalculateRank(GetSectorTime(run, index), sectorStatistics[index]),
-                        sectorSummaries[index]))
-                    .ToArray(),
+                    .Select(index =>
+                    {
+                        var time = GetSectorTime(run, index);
+                        return new PacePrecomputedSector(index, time,
+                            CalculateRank(time, sectorStatistics[index]), sectorSummaries[index]);
+                    }).ToArray(),
                 SpeedStatistics: speedSummary,
                 SpeedRank: CalculateRank(run.TopSpeed, speedStatistics, lowerIsBetter: false),
                 FinishStatistics: finishSummary,
                 CumulativeStatistics: cumulativeStatistics,
-                CompetitionClassPriority: session.CompetitionClassPriority))
+                CompetitionClassPriority: session.CompetitionClassPriority)
+            {
+                PreparedCumulativeTimes = (run, cumulativeTimes[runIndex])
+            })
             .ToArray();
         return PrepareField(precomputed);
     }
@@ -234,27 +277,42 @@ internal sealed partial class DownhillPaceCalculator
                 prepared.AddRange(field);
                 continue;
             }
-            var losses = classified.ToDictionary(s => s.Run.RiderId, EstimateIncidentLoss);
-            var correctedTimes = classified.Select(s => s.Run.FinishTimeSeconds!.Value - losses[s.Run.RiderId]).ToArray();
-            var statistics = ToFieldSummary(BuildFieldStatistics(correctedTimes));
-            prepared.AddRange(field.Select(s => s with
+            var losses = new Dictionary<string, (double Loss, IReadOnlyList<SectorAnomaly>? Anomalies)>(classified.Length);
+            var correctedTimes = new double[classified.Length];
+            for (var index = 0; index < classified.Length; index++)
             {
-                PaceFinish = new(losses.ContainsKey(s.Run.RiderId)
-                    ? s.Run.FinishTimeSeconds - losses[s.Run.RiderId] : null,
-                    losses.GetValueOrDefault(s.Run.RiderId), statistics)
-            }));
+                var session = classified[index];
+                var loss = EstimateIncidentLoss(session, out var anomalies);
+                losses.Add(session.Run.RiderId, (loss, anomalies));
+                correctedTimes[index] = session.Run.FinishTimeSeconds!.Value - loss;
+            }
+            var statistics = ToFieldSummary(BuildFieldStatistics(correctedTimes));
+            foreach (var session in field)
+            {
+                var hasLoss = losses.TryGetValue(session.Run.RiderId, out var entry);
+                prepared.Add(session with
+                {
+                    PaceFinish = new(hasLoss ? session.Run.FinishTimeSeconds - entry.Loss : null,
+                        hasLoss ? entry.Loss : 0, statistics),
+                    PreparedAnomalies = hasLoss && entry.Anomalies is not null
+                        ? (session.Sectors, _options, entry.Anomalies) : null
+                });
+            }
         }
         return prepared;
     }
 
-    private double EstimateIncidentLoss(PacePrecomputedSessionData session)
+    private double EstimateIncidentLoss(
+        PacePrecomputedSessionData session,
+        out IReadOnlyList<SectorAnomaly>? anomalies)
     {
+        anomalies = null;
         var sectors = session.Sectors.OrderBy(s => s.SectorIndex).ToArray();
         // Never invent a missing finish, checkpoint or repair invalid timing.
         if (sectors.Length < 3 || sectors.Any(s => !IsValidTime(s.TimeSeconds)) ||
             Math.Abs(sectors.Sum(s => s.TimeSeconds!.Value) - session.Run.FinishTimeSeconds!.Value) > .01)
             return 0;
-        var anomalies = SectorIncidentDetector.Analyze(sectors, _options);
+        anomalies = SectorIncidentDetector.Analyze(sectors, _options);
         if (anomalies.Any(a => a.Kind is SectorAnomalyKind.InvalidTiming or SectorAnomalyKind.PossibleIncident ||
                 (a.Kind == SectorAnomalyKind.LikelyIncident && !a.AllowsFinishCorrection)) ||
             anomalies.Count(a => a.Kind == SectorAnomalyKind.Normal) < Math.Max(2, (sectors.Length + 1) / 2))
@@ -278,8 +336,10 @@ internal sealed partial class DownhillPaceCalculator
                 sectorStatistics[index],
                 sector.Rank))
             .ToArray();
-        var anomalies = SectorIncidentDetector.Analyze(
-            orderedSectors, _options);
+        var anomalies = session.PreparedAnomalies is { } prepared &&
+            ReferenceEquals(prepared.Sectors, session.Sectors) &&
+            ReferenceEquals(prepared.Options, _options)
+            ? prepared.Values : SectorIncidentDetector.Analyze(orderedSectors, _options);
         int? incidentIndex = Enumerable.Range(0, raw.Length)
             .Where(i => anomalies[i].Kind == SectorAnomalyKind.LikelyIncident)
             .Select(i => (int?)i).FirstOrDefault();
@@ -298,13 +358,13 @@ internal sealed partial class DownhillPaceCalculator
                     null,
                     null,
                     null,
-                    null));
+                    null) { Anomaly = anomalies[index] });
                 continue;
             }
 
             if (anomalies[index].Kind == SectorAnomalyKind.InvalidTiming)
             {
-                sectorResults.Add(ToSectorResult(index, sector, PaceSectorStatus.InvalidTiming, null));
+                sectorResults.Add(ToSectorResult(index, sector, PaceSectorStatus.InvalidTiming, null, anomalies[index]));
                 continue;
             }
 
@@ -315,7 +375,7 @@ internal sealed partial class DownhillPaceCalculator
                     sector,
                     index > 0 && sectorResults[^1].Status is PaceSectorStatus.Incident or PaceSectorStatus.AfterIncident
                         ? PaceSectorStatus.AfterIncident : PaceSectorStatus.Incident,
-                    null));
+                    null, anomalies[index]));
                 continue;
             }
 
@@ -331,14 +391,14 @@ internal sealed partial class DownhillPaceCalculator
                         index,
                         sector,
                         PaceSectorStatus.AfterIncident,
-                        null));
+                        null, anomalies[index]));
                     continue;
                 }
 
                 status = PaceSectorStatus.RecoveredAfterIncident;
             }
 
-            sectorResults.Add(ToSectorResult(index, sector, status, sector.Score));
+            sectorResults.Add(ToSectorResult(index, sector, status, sector.Score, anomalies[index]));
             if (sector.Score.HasValue)
             {
                 var durationWeight = Math.Sqrt(
@@ -346,9 +406,6 @@ internal sealed partial class DownhillPaceCalculator
                 validScores.Add(new WeightedScore(sector.Score.Value, durationWeight));
             }
         }
-
-        for (var i = 0; i < sectorResults.Count; i++)
-            sectorResults[i] = sectorResults[i] with { Anomaly = anomalies[i] };
 
         var sectorCoverage = raw.Length > 0
             ? (double)validScores.Count / raw.Length
@@ -406,11 +463,7 @@ internal sealed partial class DownhillPaceCalculator
         var fullRunTimeScore = session.PaceFinish is { } finish &&
                 (!incidentIndex.HasValue || finish.RemovedLossSeconds > 0)
             ? CalculateFullRunTimeScore(finish.TimeSeconds, ToFieldStatistics(finish.Statistics))
-            : CalculateEffectiveFullRunTimeScore(
-            run,
-            incidentIndex,
-            session.FinishStatistics,
-            session.CumulativeStatistics);
+            : CalculateEffectiveFullRunTimeScore(session, incidentIndex);
         var sectorAndFullRunPace = CombineSectorAndFullRunPace(
             session.SessionType,
             evidenceAdjustedSectorPace,
@@ -456,28 +509,39 @@ internal sealed partial class DownhillPaceCalculator
         CompetitionClassWeighting? competitionClassWeighting = null)
     {
         using var measurement = ApiTelemetry.Measure("pace");
-        var validSessions = sessions
-            .Where(session =>
-                string.Equals(session.RiderId, riderId, StringComparison.OrdinalIgnoreCase) &&
-                session.IsRepresentative &&
-                session.Pace.HasValue &&
-                session.SectorCoverage > 0 &&
-                IsRatedSessionType(session.SessionType))
-            .ToArray();
+        var validSessions = new List<RiderSessionPaceResult>();
+        var qualifyingSessions = new List<(RiderSessionPaceResult Session, double ClassWeight)>();
+        var semiFinalSessions = new List<(RiderSessionPaceResult Session, double ClassWeight)>();
+        var finalSessions = new List<(RiderSessionPaceResult Session, double ClassWeight)>();
+        var seedingSessions = new List<(RiderSessionPaceResult Session, double ClassWeight)>();
+        double totalEvidence = 0, finalEvidence = 0;
+        foreach (var session in sessions)
+        {
+            if (!string.Equals(session.RiderId, riderId, StringComparison.OrdinalIgnoreCase) ||
+                !session.IsRepresentative || !session.Pace.HasValue ||
+                !(session.SectorCoverage > 0) || !IsRatedSessionType(session.SessionType)) continue;
+            validSessions.Add(session);
+            var classWeight = competitionClassWeighting?.GetWeight(session.CompetitionClassPriority) ?? 1.0;
+            var weightedSession = (session, classWeight);
+            if (IsQualifyingSessionType(session.SessionType)) qualifyingSessions.Add(weightedSession);
+            else if (session.SessionType == PaceSessionType.SemiFinal) semiFinalSessions.Add(weightedSession);
+            else if (session.SessionType == PaceSessionType.Final) finalSessions.Add(weightedSession);
+            else seedingSessions.Add(weightedSession);
+            var normalizedConfidence = NormalizeConfidence(session.Confidence);
+            totalEvidence += normalizedConfidence * session.SessionWeight * classWeight;
+            if (session.SessionType == PaceSessionType.Final)
+                finalEvidence += normalizedConfidence * classWeight;
+        }
 
-        if (validSessions.Length == 0)
+        if (validSessions.Count == 0)
         {
             return new RiderPaceResult(riderId, Pace: null, RawPace: null, Confidence: 0, UsedSessions: 0);
         }
 
-        var qualifyingPace = CalculateStagePace(validSessions.Where(session =>
-            IsQualifyingSessionType(session.SessionType)), competitionClassWeighting);
-        var semiFinalPace = CalculateStagePace(validSessions.Where(session =>
-            session.SessionType == PaceSessionType.SemiFinal), competitionClassWeighting);
-        var finalPace = CalculateStagePace(validSessions.Where(session =>
-            session.SessionType == PaceSessionType.Final), competitionClassWeighting);
-        var seedingPace = CalculateStagePace(validSessions.Where(session =>
-            session.SessionType == PaceSessionType.Seeding), competitionClassWeighting);
+        var qualifyingPace = CalculateStagePace(qualifyingSessions);
+        var semiFinalPace = CalculateStagePace(semiFinalSessions);
+        var finalPace = CalculateStagePace(finalSessions);
+        var seedingPace = CalculateStagePace(seedingSessions);
 
         double rawPace;
         PaceSessionType highestStage;
@@ -523,25 +587,15 @@ internal sealed partial class DownhillPaceCalculator
             stageCappedPace,
             highestStage,
             usedSectorCount);
-        var totalEvidence = validSessions.Sum(session =>
-            NormalizeConfidence(session.Confidence) *
-            session.SessionWeight *
-            (competitionClassWeighting?.GetWeight(session.CompetitionClassPriority) ?? 1.0));
-        var finalSessions = validSessions
-            .Where(session => session.SessionType == PaceSessionType.Final)
-            .ToArray();
-        var finalEvidence = finalSessions.Sum(session =>
-            NormalizeConfidence(session.Confidence) *
-            (competitionClassWeighting?.GetWeight(session.CompetitionClassPriority) ?? 1.0));
         var rawConfidence = 100.0 *
             (1.0 - Math.Exp(-totalEvidence / _options.OverallEvidenceScale));
         var finalConfidenceCap = CalculateFinalConfidenceCap(
             finalEvidence,
             availableFinalSessions);
         var confidence = Clamp(Math.Min(rawConfidence, finalConfidenceCap), 0, 100);
-        var usedSessions = new[] { qualifyingPace, semiFinalPace, finalPace, seedingPace }
-            .Where(stage => stage is not null)
-            .Sum(stage => stage!.UsedSessions);
+        var usedSessions = (qualifyingPace?.UsedSessions ?? 0) +
+            (semiFinalPace?.UsedSessions ?? 0) + (finalPace?.UsedSessions ?? 0) +
+            (seedingPace?.UsedSessions ?? 0);
 
         return new RiderPaceResult(
             riderId,
@@ -549,7 +603,7 @@ internal sealed partial class DownhillPaceCalculator
             RawPace: Clamp(stageAdjustedPace, 0, 100),
             Confidence: confidence,
             UsedSessions: usedSessions,
-            UsedFinals: finalSessions.Length,
+            UsedFinals: finalSessions.Count,
             TotalEvidence: totalEvidence,
             FinalEvidence: finalEvidence,
             ConfidenceStatus: GetConfidenceStatus(confidence));
@@ -588,38 +642,37 @@ internal sealed partial class DownhillPaceCalculator
     internal StagePaceResult? CalculateStagePace(
         IEnumerable<RiderSessionPaceResult> stageSessions,
         CompetitionClassWeighting? competitionClassWeighting = null)
-    {
-        var weightedSessions = stageSessions
-            .Where(session =>
-                session.IsRepresentative &&
-                session.Pace.HasValue &&
-                session.SectorCoverage > 0)
-            .Select(session => new
-            {
-                Pace = session.Pace!.Value,
-                Weight = Math.Pow(
-                        Clamp(session.SectorCoverage, 0, 1),
-                        _options.CoverageWeightPower) *
-                    (competitionClassWeighting?.GetWeight(session.CompetitionClassPriority) ?? 1.0),
-                RoundWeight = session.SessionWeight
-            })
-            .Where(item => item.Weight > 0)
-            .ToArray();
+        => CalculateStagePace(stageSessions.Select(session =>
+            (session, competitionClassWeighting?.GetWeight(session.CompetitionClassPriority) ?? 1.0)));
 
-        if (weightedSessions.Length == 0)
+    private StagePaceResult? CalculateStagePace(
+        IEnumerable<(RiderSessionPaceResult Session, double ClassWeight)> stageSessions)
+    {
+        double weightSum = 0, weightedPowerSum = 0, roundWeightSum = 0;
+        var usedSessions = 0;
+        foreach (var (session, classWeight) in stageSessions)
+        {
+            if (!session.IsRepresentative || !session.Pace.HasValue || !(session.SectorCoverage > 0)) continue;
+            var weight = Math.Pow(Clamp(session.SectorCoverage, 0, 1), _options.CoverageWeightPower) *
+                classWeight;
+            if (weight <= 0 || double.IsNaN(weight)) continue;
+            weightSum += weight;
+            weightedPowerSum += weight * Math.Pow(session.Pace.Value, _options.TempoPower);
+            roundWeightSum += session.SessionWeight;
+            usedSessions++;
+        }
+
+        if (usedSessions == 0)
         {
             return null;
         }
 
-        var weightSum = weightedSessions.Sum(item => item.Weight);
-        var weightedPowerSum = weightedSessions.Sum(item =>
-            item.Weight * Math.Pow(item.Pace, _options.TempoPower));
         var pace = Math.Pow(weightedPowerSum / weightSum, 1.0 / _options.TempoPower);
         return new StagePaceResult(
             Clamp(pace, 0, 100),
             weightSum,
-            weightedSessions.Sum(item => item.RoundWeight),
-            weightedSessions.Length);
+            roundWeightSum,
+            usedSessions);
     }
 
     internal static double CalculateCombinedStagePace(
@@ -785,30 +838,34 @@ internal sealed partial class DownhillPaceCalculator
     }
 
     private double? CalculateEffectiveFullRunTimeScore(
-        PaceRiderRun run,
-        int? incidentIndex,
-        PaceFieldSummary? finishStatistics,
-        IReadOnlyList<PaceFieldSummary?> cumulativeStatistics)
+        PacePrecomputedSessionData session,
+        int? incidentIndex)
     {
+        var run = session.Run;
         if (!incidentIndex.HasValue)
         {
-            return run.IsClassified && finishStatistics is not null
+            return run.IsClassified && session.FinishStatistics is not null
                 ? CalculateFullRunTimeScore(
                     run.FinishTimeSeconds,
-                    ToFieldStatistics(finishStatistics))
+                    ToFieldStatistics(session.FinishStatistics))
                 : null;
         }
 
         var cleanSectorCount = incidentIndex.Value;
         if (cleanSectorCount < 2 ||
-            cleanSectorCount > cumulativeStatistics.Count ||
-            cumulativeStatistics[cleanSectorCount - 1] is not { } checkpointStatistics)
+            cleanSectorCount > session.CumulativeStatistics.Count ||
+            session.CumulativeStatistics[cleanSectorCount - 1] is not { } checkpointStatistics)
         {
             return null;
         }
 
+        var prefix = session.PreparedCumulativeTimes;
+        var time = prefix is { } prepared && ReferenceEquals(prepared.Run, run) &&
+            cleanSectorCount <= prepared.Times.Count
+            ? prepared.Times[cleanSectorCount - 1]
+            : GetCumulativeTime(run, cleanSectorCount);
         return CalculateFullRunTimeScore(
-            GetCumulativeTime(run, cleanSectorCount),
+            time,
             ToFieldStatistics(checkpointStatistics));
     }
 
@@ -1085,7 +1142,7 @@ internal sealed partial class DownhillPaceCalculator
 
         var sectorCountEvidence = Math.Min(
             1.0,
-            validSectorCount / _options.FullEvidenceSectorCount);
+            (double)validSectorCount / _options.FullEvidenceSectorCount);
         var evidenceFactor =
             Math.Sqrt(Clamp(sectorCoverage, 0, 1)) *
             sectorCountEvidence;
@@ -1126,7 +1183,7 @@ internal sealed partial class DownhillPaceCalculator
         var medianFieldSize = Median(validSectors.Select(sector =>
             (double)sectorStatistics[sector.SectorIndex].Count));
         var sectorEvidence = 1.0 - Math.Exp(
-            -validSectorCount / _options.FullConfidenceSectorCount);
+            -(double)validSectorCount / _options.FullConfidenceSectorCount);
         var coverageEvidence = Math.Pow(
             Clamp((double)validSectorCount / sectorCount, 0, 1),
             _options.CoverageConfidencePower);
@@ -1193,7 +1250,8 @@ internal sealed partial class DownhillPaceCalculator
         int index,
         RawSectorEvaluation evaluation,
         PaceSectorStatus status,
-        double? score)
+        double? score,
+        SectorAnomaly anomaly)
     {
         return new PaceSectorResult(
             index,
@@ -1202,7 +1260,7 @@ internal sealed partial class DownhillPaceCalculator
             evaluation.Rank,
             evaluation.Percentile,
             evaluation.PerformanceZ,
-            score);
+            score) { Anomaly = anomaly };
     }
 
     private static double CalculatePercentile(int rank, int fieldSize)

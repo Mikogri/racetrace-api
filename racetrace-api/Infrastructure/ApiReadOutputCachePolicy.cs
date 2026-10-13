@@ -19,10 +19,12 @@ public sealed class ApiReadOutputCachePolicy : IOutputCachePolicy
     {
         var method = context.HttpContext.Request.Method;
         var cacheable = HttpMethods.IsGet(method) || HttpMethods.IsHead(method);
+        var refresh = context.HttpContext.Request.Path.StartsWithSegments("/api/v1/ranking") &&
+            context.HttpContext.Request.Query["refresh"] == "1";
         context.HttpContext.Items[ApiTelemetry.OutputCacheOutcomeKey] = cacheable ? "miss" : "bypass";
         context.EnableOutputCaching = cacheable;
-        context.AllowCacheLookup = cacheable;
-        context.AllowCacheStorage = cacheable;
+        context.AllowCacheLookup = cacheable && !refresh;
+        context.AllowCacheStorage = cacheable && !refresh;
         context.AllowLocking = true;
         context.CacheVaryByRules.QueryKeys = "*";
         var revisions = context.HttpContext.RequestServices?.GetService<DataRevisionService>();

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
@@ -83,6 +84,42 @@ static Dictionary<string, string> Calculate(string path)
         }
         for (var i = 0; i < 8; i++)
             Capture("pace.aggregate.r" + i, Invoke(pace, "CalculatePace", $"r{i}", Typed("RiderSessionPaceResult", sessions), 4, null));
+
+        var benchmarkRuns = Enumerable.Range(0, 80).Select(i => Make("PaceRiderRun",
+            ("RiderId", $"benchmark-{i}"),
+            ("SectorTimes", Enumerable.Range(0, 5).Select(s => (double?)(25 + s * 4 + i * .12)).ToArray()),
+            ("TopSpeed", 65.0 - i * .05), ("FinishRank", (int?)(i + 1)),
+            ("FinishTimeSeconds", (double?)(165 + i * .6)), ("IsClassified", true), ("Status", null))).ToArray();
+        var benchmarkSession = Make("PaceSessionData", ("SessionType", Stage("Final")),
+            ("Runs", Typed("PaceRiderRun", benchmarkRuns)));
+        for (var i = 0; i < 20; i++) Invoke(pace, "CalculateSession", benchmarkSession);
+        var samples = new double[5];
+        for (var batch = 0; batch < samples.Length; batch++)
+        {
+            var watch = Stopwatch.StartNew();
+            for (var i = 0; i < 20; i++) Invoke(pace, "CalculateSession", benchmarkSession);
+            samples[batch] = watch.Elapsed.TotalMilliseconds / 20;
+        }
+        Array.Sort(samples);
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 20; i++) Invoke(pace, "CalculateSession", benchmarkSession);
+        var bytesPerOperation = (GC.GetAllocatedBytesForCurrentThread() - allocatedBefore) / 20;
+        Console.WriteLine($"pace.benchmark.80-rider-session median={samples[2]:F3} ms/op allocated={bytesPerOperation} B/op");
+
+        var aggregateSessions = Typed("RiderSessionPaceResult", sessions);
+        for (var i = 0; i < 100; i++) Invoke(pace, "CalculatePace", "r2", aggregateSessions, 4, null);
+        var aggregateSamples = new double[5];
+        for (var batch = 0; batch < aggregateSamples.Length; batch++)
+        {
+            var watch = Stopwatch.StartNew();
+            for (var i = 0; i < 1000; i++) Invoke(pace, "CalculatePace", "r2", aggregateSessions, 4, null);
+            aggregateSamples[batch] = watch.Elapsed.TotalMilliseconds / 1000;
+        }
+        Array.Sort(aggregateSamples);
+        allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 1000; i++) Invoke(pace, "CalculatePace", "r2", aggregateSessions, 4, null);
+        bytesPerOperation = (GC.GetAllocatedBytesForCurrentThread() - allocatedBefore) / 1000;
+        Console.WriteLine($"pace.benchmark.aggregate median={aggregateSamples[2]:F4} ms/op allocated={bytesPerOperation} B/op");
 
         var consistency = Make("DownhillConsistencyCalculator");
         foreach (var scenario in new[] { "clean", "variable", "dnf" })

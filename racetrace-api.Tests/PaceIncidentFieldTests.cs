@@ -6,6 +6,32 @@ namespace RaceTrace.Api.Tests;
 public sealed class PaceIncidentFieldTests
 {
     [Fact]
+    public void PreparedIncidentAnalysisMatchesIndependentPrecomputedCalculation()
+    {
+        var session = DomainQueryService.ParseRiderDetailDataBundle(Package())
+            .PaceSessions.Single(s => s.Run.RiderId == "1");
+        var calculator = new DownhillPaceCalculator();
+        Assert.NotNull(session.PreparedAnomalies);
+
+        var reused = calculator.CalculatePrecomputedSession(session);
+        var independent = calculator.CalculatePrecomputedSession(session with { PreparedAnomalies = null });
+        Assert.Equal(independent.Pace, reused.Pace);
+        Assert.Equal(independent.Confidence, reused.Confidence);
+        Assert.Equal(independent.Sectors, reused.Sectors);
+        Assert.Equal(30, session.PaceFinish!.RemovedLossSeconds);
+
+        var changed = session with { Sectors = session.Sectors.Reverse().ToArray() };
+        Assert.Equal(
+            calculator.CalculatePrecomputedSession(changed with { PreparedAnomalies = null }).Sectors,
+            calculator.CalculatePrecomputedSession(changed).Sectors);
+
+        var otherCalculator = new DownhillPaceCalculator(new PaceOptions { MinimumFieldSize = 100 });
+        Assert.Equal(
+            otherCalculator.CalculatePrecomputedSession(session with { PreparedAnomalies = null }).Sectors,
+            otherCalculator.CalculatePrecomputedSession(session).Sectors);
+    }
+
+    [Fact]
     public void DetailContextMatchesWholeRankingWithoutReturningOtherRiderRows()
     {
         var full = Package();

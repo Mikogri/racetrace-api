@@ -6,6 +6,29 @@ namespace RaceTrace.Api.Tests;
 public sealed class PacePreparationTests
 {
     [Fact]
+    public void PreparedCumulativeTimeMatchesIndependentIncidentCalculation()
+    {
+        var runs = new List<PaceRiderRun>
+        {
+            new("target", [50, 50, 80, 50, 50], IsClassified: false)
+        };
+        runs.AddRange(Enumerable.Range(1, 6).Select(index =>
+            new PaceRiderRun(index.ToString(), [50, 50, 50, 50, 50],
+                FinishTimeSeconds: 250)));
+        var calculator = new DownhillPaceCalculator();
+        var prepared = calculator.PrepareSession(new(PaceSessionType.Final, runs))[0];
+        var withPreparedTime = calculator.CalculatePrecomputedSession(prepared);
+        var independent = calculator.CalculatePrecomputedSession(prepared with
+        {
+            PreparedCumulativeTimes = null
+        });
+
+        Assert.Equal(2, withPreparedTime.IncidentSectorIndex);
+        Assert.Equal(independent.FullRunTimeScore, withPreparedTime.FullRunTimeScore);
+        Assert.Equal(independent.Pace, withPreparedTime.Pace);
+    }
+
+    [Fact]
     public void FractionalCumulativeTimesKeepLeftToRightPrecision()
     {
         var session = new PaceSessionData(PaceSessionType.Final, [new("rider", [.1, .2, .3])]);

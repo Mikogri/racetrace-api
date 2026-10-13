@@ -74,6 +74,7 @@ public sealed class RankingService
 
     public async Task<RankingResponseDto> ListRankingAsync(IQueryCollection queryString, CancellationToken cancellationToken)
     {
+        var forceRefresh = queryString["refresh"] == "1";
         var page = _validator.Page(queryString);
         var requestedSort = _validator.Sort(queryString, Sorts, "points", "desc");
         var sort = new SortRequest(Sorts[requestedSort.Sort], requestedSort.Order);
@@ -85,7 +86,8 @@ public sealed class RankingService
         var snapshot = await BuildSnapshotAsync(
             context,
             cancellationToken,
-            nation: nation);
+            nation: nation,
+            forceRefresh: forceRefresh);
         var totalSessions = snapshot.Sessions
             .Select(session => session.String("id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -129,14 +131,15 @@ public sealed class RankingService
                 context,
                 cancellationToken,
                 resolvedSessions: previousSessions,
-                nation: nation);
+                nation: nation,
+                forceRefresh: forceRefresh);
             comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: true);
             resolvedComparisonBasis = "previousRound";
         }
         else if (string.Equals(requestedComparison, "defaultFilters", StringComparison.OrdinalIgnoreCase))
         {
             var defaultContext = DefaultRankingContext(context);
-            var defaultSnapshot = await BuildSnapshotAsync(defaultContext, cancellationToken);
+            var defaultSnapshot = await BuildSnapshotAsync(defaultContext, cancellationToken, forceRefresh: forceRefresh);
             var defaultRows = PrepareRows(defaultSnapshot, applyCurrentRowFilters: false);
             AssignCanonicalPositions(defaultRows, sort.Sort);
 
@@ -148,7 +151,8 @@ public sealed class RankingService
                     context,
                     cancellationToken,
                     resolvedSessions: defaultPreviousSessions,
-                    nation: nation);
+                    nation: nation,
+                    forceRefresh: forceRefresh);
                 comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: true);
                 resolvedComparisonBasis = "previousRound";
             }
@@ -164,7 +168,8 @@ public sealed class RankingService
             var previousContext = await _domainQueries.ParseMetricsContextAsync(previousFilterQuery, _validator, cancellationToken);
             var previousSnapshot = await BuildSnapshotAsync(
                 previousContext,
-                cancellationToken);
+                cancellationToken,
+                forceRefresh: forceRefresh);
             comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: false);
             resolvedComparisonBasis = "previousFilters";
         }
@@ -203,12 +208,13 @@ public sealed class RankingService
         IReadOnlyList<JsonObject>? resolvedSessions = null,
         string? riderQuery = null,
         string? nation = null,
-        string? riderId = null)
+        string? riderId = null,
+        bool forceRefresh = false)
     {
-        var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken) : null;
+        var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken, forceRefresh) : null;
         var key = BuildSingleFlightKey(context, resolvedSessions, riderQuery, nation, riderId) +
             (revision is null ? "" : ":" + revision.ForContext(context) + ":" + AlgorithmCatalog.Current.Fingerprint("rating"));
-        if (_cache.TryGetValue<RankingSnapshot>(key, out var cached))
+        if (!forceRefresh && _cache.TryGetValue<RankingSnapshot>(key, out var cached))
         {
             ApiTelemetry.Cache("memory", "hit");
             _provenance?.Include(cached!.Metadata);
@@ -217,10 +223,10 @@ public sealed class RankingService
 
         ApiTelemetry.Cache("memory", "miss");
         var result = await _singleFlight.RunAsync(
-            key,
+            forceRefresh ? key + ":refresh" : key,
             async () =>
             {
-                if (_cache.TryGetValue<RankingSnapshot>(key, out var sharedCached))
+                if (!forceRefresh && _cache.TryGetValue<RankingSnapshot>(key, out var sharedCached))
                 {
                     return sharedCached!;
                 }
