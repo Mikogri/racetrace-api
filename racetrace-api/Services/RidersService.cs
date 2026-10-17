@@ -536,7 +536,7 @@ public sealed class RidersService
 
         var sorted = SortRoundResults(rows, sort.Sort, sort.Descending);
         var items = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
-        return PublicPagedResponse<RiderRoundResultDto>.Create(items, page.Page, page.Limit, sorted.Count);
+        return PublicPagedResponse<RiderRoundResultDto>.Create(items, page.Page, page.Limit, sorted.Length);
     }
 
     public Task<PublicPagedResponse<RiderTrackStatisticsDto>> ListPublicTrackStatisticsAsync(
@@ -585,7 +585,7 @@ public sealed class RidersService
 
         var sorted = SortTrackResults(rows, sort.Sort, sort.Descending);
         var items = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
-        return PublicPagedResponse<RiderTrackStatisticsDto>.Create(items, page.Page, page.Limit, sorted.Count);
+        return PublicPagedResponse<RiderTrackStatisticsDto>.Create(items, page.Page, page.Limit, sorted.Length);
     }
 
     public async Task<ListResponse<JsonObject>> ListRiderResultsAsync(string riderId, IQueryCollection queryString, CancellationToken cancellationToken)
@@ -630,7 +630,7 @@ public sealed class RidersService
 
     private JsonObject BuildRiderAggregate(
         string riderId,
-        IReadOnlyList<JsonObject> results,
+        JsonObject[] results,
         IReadOnlyDictionary<string, decimal> pointsByResultId,
         IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId,
         RiderMetricsContext context)
@@ -671,7 +671,7 @@ public sealed class RidersService
         rider["top_20"] = finalPositions.Count(position => position <= 20);
         rider["top_30"] = finalPositions.Count(position => position <= 30);
         rider["avg_position"] = Average(finalPositions);
-        rider["starts"] = results.Count;
+        rider["starts"] = results.Length;
         rider["teams"] = DomainQueryService.BuildTeamHistory(results);
         rider["id"] = riderId;
         return rider;
@@ -827,7 +827,7 @@ public sealed class RidersService
             result.Int("position"));
     }
 
-    private static IReadOnlyList<JsonObject> DistinctSessions(IEnumerable<JsonObject> results)
+    private static JsonObject[] DistinctSessions(IEnumerable<JsonObject> results)
     {
         return results
             .Select(result => result.Object("sessions"))
@@ -1038,7 +1038,7 @@ public sealed class RidersService
 
     private static SpeedGroupDto BuildSpeedGroup(
         IReadOnlyList<JsonObject> results,
-        IReadOnlyList<decimal> splitSpeeds)
+        decimal[] splitSpeeds)
     {
         var topSpeeds = results
             .Select(result => result.Decimal("top_speed"))
@@ -1047,7 +1047,7 @@ public sealed class RidersService
             .ToArray();
         return new SpeedGroupDto(
             topSpeeds.Length == 0 ? null : topSpeeds.Max(),
-            splitSpeeds.Count == 0 ? null : Math.Round(splitSpeeds.Average(), 3));
+            splitSpeeds.Length == 0 ? null : Math.Round(splitSpeeds.Average(), 3));
     }
 
     private static bool IsCompleted(JsonObject result)
@@ -1067,7 +1067,7 @@ public sealed class RidersService
 
     internal static RiderRoundResultDto ToRoundResult(
         string roundId,
-        IReadOnlyList<JsonObject> results,
+        JsonObject[] results,
         RiderPerformanceMetricValues? performance)
     {
         var session = results[0].Object("sessions");
@@ -1110,7 +1110,7 @@ public sealed class RidersService
 
     private static RiderTrackStatisticsDto ToTrackStatistics(
         string trackId,
-        IReadOnlyList<JsonObject> results,
+        JsonObject[] results,
         RiderPerformanceMetricValues? performance)
     {
         var track = results[0].Object("sessions")?.Object("rounds")?.Object("tracks");
@@ -1130,10 +1130,10 @@ public sealed class RidersService
             AveragePositionForType(results, "qualifying_2"),
             AveragePositionForType(results, "semi_final"),
             AveragePositionForType(results, "final"),
-            results.Count);
+            results.Length);
     }
 
-    private static IReadOnlyList<RiderRoundResultDto> SortRoundResults(
+    private static RiderRoundResultDto[] SortRoundResults(
         IReadOnlyList<RiderRoundResultDto> rows,
         string sort,
         bool descending)
@@ -1155,7 +1155,7 @@ public sealed class RidersService
             .ToArray();
     }
 
-    private static IReadOnlyList<RiderTrackStatisticsDto> SortTrackResults(
+    private static RiderTrackStatisticsDto[] SortTrackResults(
         IReadOnlyList<RiderTrackStatisticsDto> rows,
         string sort,
         bool descending)

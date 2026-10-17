@@ -17,7 +17,7 @@ public sealed class AdminDataService
         "Q1", "Q2", "SEMI", "FINAL", "QUALI", "PRACTICE", "OTHER"
     };
 
-    private static readonly IReadOnlyDictionary<string, AdminResourceDefinition> Resources =
+    private static readonly Dictionary<string, AdminResourceDefinition> Resources =
         new Dictionary<string, AdminResourceDefinition>(StringComparer.OrdinalIgnoreCase)
         {
             ["tracks"] = Definition("tracks", "name", "venue", "country_code", "length_m", "avg_slope"),
@@ -492,17 +492,17 @@ public sealed class AdminDataService
         var trimFields = resourceName.ToLowerInvariant() switch
         {
             "tracks" => new[] { "name", "venue", "country_code" },
-            "conditions" => new[] { "name" },
-            "competition-classes" => new[] { "name", "code", "description" },
-            "categories" => new[] { "name", "code" },
-            "rounds" => new[] { "context_name", "start_date", "end_date", "status" },
-            "sessions" => new[] { "name", "status", "session_type", "points_session_type_override", "session_date" },
-            "riders" => new[] { "uci_code", "last_name", "first_name", "nation", "birth_date", "profile_image_url", "profile_image_updated_at" },
-            "teams" => new[] { "name", "code" },
-            "results" => new[] { "status" },
-            "points-series" => new[] { "code", "name" },
-            "points-systems" => new[] { "code", "name", "discipline", "source_url", "notes" },
-            "point-system-stages" => new[] { "session_type" },
+            "conditions" => ["name"],
+            "competition-classes" => ["name", "code", "description"],
+            "categories" => ["name", "code"],
+            "rounds" => ["context_name", "start_date", "end_date", "status"],
+            "sessions" => ["name", "status", "session_type", "points_session_type_override", "session_date"],
+            "riders" => ["uci_code", "last_name", "first_name", "nation", "birth_date", "profile_image_url", "profile_image_updated_at"],
+            "teams" => ["name", "code"],
+            "results" => ["status"],
+            "points-series" => ["code", "name"],
+            "points-systems" => ["code", "name", "discipline", "source_url", "notes"],
+            "point-system-stages" => ["session_type"],
             _ => []
         };
 

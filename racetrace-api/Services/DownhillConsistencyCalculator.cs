@@ -241,9 +241,9 @@ internal sealed partial class DownhillConsistencyCalculator
     }
 
     private double CalculateIncidentReliability(
-        IReadOnlyCollection<ConsistencyRunInput> runs)
+        ConsistencyRunInput[] runs)
     {
-        if (runs.Count == 0)
+        if (runs.Length == 0)
         {
             return 0;
         }
@@ -264,18 +264,18 @@ internal sealed partial class DownhillConsistencyCalculator
     }
 
     private double IncidentReliabilityScore(
-        IReadOnlyCollection<ConsistencyRunInput> runs)
+        ConsistencyRunInput[] runs)
     {
         var incidentCount = runs.Count(IsIncidentRun);
         var cleanRate = 1.0 - incidentCount /
-            (runs.Count + _options.IncidentToleranceRuns);
+            (runs.Length + _options.IncidentToleranceRuns);
         var baseReliability = 100.0 * Math.Pow(
             Clamp(cleanRate, 0, 1),
             _options.IncidentRateExponent);
         var repeatedIncidentRate = incidentCount <= 1
             ? 0
             : (incidentCount - 1.0) /
-                (runs.Count + _options.IncidentToleranceRuns);
+                (runs.Length + _options.IncidentToleranceRuns);
         var repeatedIncidentPenalty =
             _options.MaximumRepeatedIncidentPenalty * Math.Pow(
                 repeatedIncidentRate,
@@ -288,9 +288,9 @@ internal sealed partial class DownhillConsistencyCalculator
         run.HasIncident;
 
     private (double Final, double Quality) CalculateQualification(
-        IReadOnlyCollection<ConsistencyRunInput[]> events)
+        ConsistencyRunInput[][] events)
     {
-        if (events.Count == 0) return (0, 0);
+        if (events.Length == 0) return (0, 0);
 
         var qualified = 0;
         double qualitySum = 0;
@@ -304,7 +304,7 @@ internal sealed partial class DownhillConsistencyCalculator
                     ? _options.Q2QualificationScore
                     : 100.0;
         }
-        return (100.0 * qualified / events.Count, qualitySum / events.Count);
+        return (100.0 * qualified / events.Length, qualitySum / events.Length);
     }
 
     private double CalculatePositionRepeatability(

@@ -758,7 +758,7 @@ public sealed class ChronoRaceImportService
         return new RiderImportMap(map, sourceByUciId.Count - updated, updated);
     }
 
-    private static IReadOnlySet<string> ImportedResultRiderIds(JsonArray results, JsonObject riders, RiderImportMap riderMap, List<string> warnings)
+    private static HashSet<string> ImportedResultRiderIds(JsonArray results, JsonObject riders, RiderImportMap riderMap, List<string> warnings)
     {
         var importedRiderIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var result in results.OfType<JsonObject>())
@@ -784,7 +784,7 @@ public sealed class ChronoRaceImportService
         return importedRiderIds;
     }
 
-    private async Task<int> DeleteStaleSessionResultsAsync(string sessionId, IReadOnlySet<string> importedRiderIds, CancellationToken cancellationToken)
+    private async Task<int> DeleteStaleSessionResultsAsync(string sessionId, HashSet<string> importedRiderIds, CancellationToken cancellationToken)
     {
         if (importedRiderIds.Count == 0)
         {
@@ -1066,7 +1066,7 @@ public sealed class ChronoRaceImportService
     }
 
     private async Task<IReadOnlyDictionary<string, string>> ResolveFallbackTeamIdsAsync(
-        IReadOnlyCollection<string> riderIds,
+        HashSet<string> riderIds,
         DateOnly? effectiveDate,
         CancellationToken cancellationToken)
     {

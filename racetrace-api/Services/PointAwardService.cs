@@ -188,10 +188,10 @@ public sealed class PointAwardService : IPointAwardService
     }
 
     private async Task DeleteExistingPointsAsync(
-        IReadOnlyList<string> resultIds,
+        string[] resultIds,
         CancellationToken cancellationToken)
     {
-        if (resultIds.Count == 0)
+        if (resultIds.Length == 0)
         {
             return;
         }

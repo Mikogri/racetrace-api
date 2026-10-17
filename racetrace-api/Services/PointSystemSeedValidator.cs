@@ -82,10 +82,10 @@ public static class PointSystemSeedValidator
         }
     }
 
-    private static IReadOnlyList<PointSystemStageSeedDefinition> NormalizeStages(
+    private static List<PointSystemStageSeedDefinition> NormalizeStages(
         IReadOnlyList<PointSystemStageSeedDefinition> sourceStages,
         string systemPath,
-        ICollection<string> errors)
+        List<string> errors)
     {
         var stages = new List<PointSystemStageSeedDefinition>(sourceStages.Count);
         var sessionTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -157,7 +157,7 @@ public static class PointSystemSeedValidator
 
     private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static void Required(string value, string path, ICollection<string> errors)
+    private static void Required(string value, string path, List<string> errors)
     {
         if (string.IsNullOrWhiteSpace(value))
         {

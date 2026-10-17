@@ -51,7 +51,7 @@ public static class FantasyCalibration
         return new(probabilities, calibration.Blend * nonScoring);
     }
 
-    private static IReadOnlyDictionary<int, decimal> ExchangeableBaseline(int fieldSize, decimal nonScoring)
+    private static Dictionary<int, decimal> ExchangeableBaseline(int fieldSize, decimal nonScoring)
     {
         // A coherent joint baseline: each rider independently finishes with probability 1-q,
         // then the finishers receive a uniformly random order. Given K finishers, at most

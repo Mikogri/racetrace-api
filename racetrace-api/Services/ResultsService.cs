@@ -351,7 +351,7 @@ public sealed class ResultsService
             .ToArray();
     }
 
-    private IReadOnlyList<JsonObject> ApplyPublicResultFilters(
+    private JsonObject[] ApplyPublicResultFilters(
         IReadOnlyList<JsonObject> rows,
         IQueryCollection queryString)
     {
@@ -425,7 +425,7 @@ public sealed class ResultsService
             .ToArray();
     }
 
-    private static IReadOnlyList<JsonObject> ExtractEmbeddedSplits(IReadOnlyList<JsonObject> results)
+    private static JsonObject[] ExtractEmbeddedSplits(IReadOnlyList<JsonObject> results)
     {
         return results.SelectMany(result =>
         {
@@ -644,7 +644,7 @@ public sealed class ResultsService
             .ToArray();
     }
 
-    private static IReadOnlyDictionary<string, int> BuildDisplayedPositions(
+    private static Dictionary<string, int> BuildDisplayedPositions(
         IReadOnlyList<JsonObject> rows,
         string timingMode,
         int? timingSortIndex)

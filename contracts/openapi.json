@@ -4254,368 +4254,6 @@
         ],
         "type": "object"
       },
-      "RiderSectorProfileDto": {
-        "properties": {
-          "consistency": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "fast": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "finish": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "middle": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "peak": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "start": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "technical": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "variance": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "weak": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          }
-        },
-        "required": [
-          "start",
-          "middle",
-          "finish",
-          "technical",
-          "fast",
-          "consistency",
-          "peak",
-          "weak",
-          "variance"
-        ],
-        "type": "object"
-      },
-      "RiderSimilarityClusterDto": {
-        "properties": {
-          "centroid": {
-            "$ref": "#/components/schemas/RiderSectorProfileDto"
-          },
-          "clusterId": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "riderIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "size": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "clusterId",
-          "riderIds",
-          "size",
-          "centroid",
-          "tags"
-        ],
-        "type": "object"
-      },
-      "RiderSimilarityFiltersDto": {
-        "properties": {
-          "categories": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "clusterCount": {
-            "format": "int32",
-            "type": [
-              "null",
-              "integer"
-            ]
-          },
-          "conditions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "minSectors": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "minSessions": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "minSharedFeatures": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "trackIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "categories",
-          "trackIds",
-          "conditions",
-          "minSectors",
-          "minSessions",
-          "minSharedFeatures",
-          "clusterCount"
-        ],
-        "type": "object"
-      },
-      "RiderSimilarityMergeDto": {
-        "properties": {
-          "distance": {
-            "format": "double",
-            "type": "number"
-          },
-          "leftId": {
-            "type": "string"
-          },
-          "nodeId": {
-            "type": "string"
-          },
-          "rightId": {
-            "type": "string"
-          },
-          "size": {
-            "format": "int32",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "nodeId",
-          "leftId",
-          "rightId",
-          "distance",
-          "size"
-        ],
-        "type": "object"
-      },
-      "RiderSimilarityMetaDto": {
-        "properties": {
-          "dataSource": {
-            "type": "string"
-          },
-          "featureNames": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "riderCount": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "sectorObservationCount": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "sessionCount": {
-            "format": "int32",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "riderCount",
-          "sectorObservationCount",
-          "sessionCount",
-          "featureNames",
-          "dataSource"
-        ],
-        "type": "object"
-      },
-      "RiderSimilarityPairDto": {
-        "properties": {
-          "riderAId": {
-            "type": "string"
-          },
-          "riderBId": {
-            "type": "string"
-          },
-          "sharedFeatures": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "similarity": {
-            "format": "double",
-            "type": [
-              "null",
-              "number"
-            ]
-          }
-        },
-        "required": [
-          "riderAId",
-          "riderBId",
-          "similarity",
-          "sharedFeatures"
-        ],
-        "type": "object"
-      },
-      "RiderSimilarityResponseDto": {
-        "properties": {
-          "clusters": {
-            "items": {
-              "$ref": "#/components/schemas/RiderSimilarityClusterDto"
-            },
-            "type": "array"
-          },
-          "dendrogram": {
-            "items": {
-              "$ref": "#/components/schemas/RiderSimilarityMergeDto"
-            },
-            "type": "array"
-          },
-          "filters": {
-            "$ref": "#/components/schemas/RiderSimilarityFiltersDto"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/RiderSimilarityMetaDto"
-          },
-          "riders": {
-            "items": {
-              "$ref": "#/components/schemas/RiderSimilarityRiderDto"
-            },
-            "type": "array"
-          },
-          "similarityMatrix": {
-            "items": {
-              "$ref": "#/components/schemas/RiderSimilarityPairDto"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "filters",
-          "riders",
-          "similarityMatrix",
-          "clusters",
-          "dendrogram",
-          "meta"
-        ],
-        "type": "object"
-      },
-      "RiderSimilarityRiderDto": {
-        "properties": {
-          "category": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "clusterId": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "countryCode": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "evidence": {
-            "format": "double",
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "profile": {
-            "$ref": "#/components/schemas/RiderSectorProfileDto"
-          },
-          "profileId": {
-            "type": "string"
-          },
-          "riderId": {
-            "type": "string"
-          },
-          "sectorCount": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "sessionCount": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "styleTags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "profileId",
-          "riderId",
-          "name",
-          "countryCode",
-          "category",
-          "sectorCount",
-          "sessionCount",
-          "evidence",
-          "profile",
-          "clusterId",
-          "styleTags"
-        ],
-        "type": "object"
-      },
       "RiderSpeedDto": {
         "properties": {
           "final": {
@@ -10546,6 +10184,335 @@
         ]
       }
     },
+    "/api/admin/round-images/convert-webp": {
+      "post": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonObject"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonObject"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonObject"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "detail": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "errors": {
+                          "additionalProperties": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "type": "object"
+                        },
+                        "instance": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "status": {
+                          "format": "int32",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "title": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "type": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Invalid query, payload or model binding. Framework validation uses Problem Details; domain validation uses the API error envelope."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "API access, database or upstream error."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "API access, database or upstream error."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Requested resource unavailable, conflicting operation or invalid imported data."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Requested resource unavailable, conflicting operation or invalid imported data."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Requested resource unavailable, conflicting operation or invalid imported data."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "API access, database or upstream error."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "API access, database or upstream error."
+          }
+        },
+        "tags": [
+          "AdminData"
+        ]
+      }
+    },
     "/api/admin/rounds": {
       "post": {
         "requestBody": {
@@ -13043,696 +13010,6 @@
         },
         "tags": [
           "AdminData"
-        ]
-      }
-    },
-    "/api/v1/analytics/rider-similarity": {
-      "get": {
-        "parameters": [
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "season",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "seasons",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "seasonYears",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "season_years",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "seasonYear",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "season_year",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "trackId",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "track_id",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "tracks",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "venueId",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "venue_id",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "venue",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "venueName",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "venue_name",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "countryCode",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "country_code",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "category",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "categories",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "categoryCode",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "categoryCodes",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "category_code",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "category_codes",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "sessionType",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "session_type",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "dateFrom",
-            "schema": {
-              "format": "date",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "date_from",
-            "schema": {
-              "format": "date",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "from_date",
-            "schema": {
-              "format": "date",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "dateTo",
-            "schema": {
-              "format": "date",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "date_to",
-            "schema": {
-              "format": "date",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "to_date",
-            "schema": {
-              "format": "date",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "competitionClassId",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "competition_class_id",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "competitionClassCode",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "competition_class_code",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "class",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "conditionId",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "condition_id",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "conditions",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "condition",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "roundId",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "round_id",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "trackName",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "track_name",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "minSectors",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "min_sectors",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "minSessions",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "min_sessions",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "minSharedFeatures",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "min_shared_features",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "clusterCount",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Existing query parameter/alias; CSV filters remain comma-separated strings. Validation and defaults are owned by the backend.",
-            "in": "query",
-            "name": "cluster_count",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RiderSimilarityResponseDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RiderSimilarityResponseDto"
-                }
-              },
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/RiderSimilarityResponseDto"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "properties": {
-                        "error": {
-                          "properties": {
-                            "code": {
-                              "type": "string"
-                            },
-                            "message": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "code",
-                            "message"
-                          ],
-                          "type": "object"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "type": "object"
-                    },
-                    {
-                      "properties": {
-                        "detail": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
-                        },
-                        "errors": {
-                          "additionalProperties": {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          },
-                          "type": "object"
-                        },
-                        "instance": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
-                        },
-                        "status": {
-                          "format": "int32",
-                          "type": [
-                            "null",
-                            "integer"
-                          ]
-                        },
-                        "title": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
-                        },
-                        "type": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
-                        }
-                      },
-                      "type": "object"
-                    }
-                  ]
-                }
-              }
-            },
-            "description": "Invalid query, payload or model binding. Framework validation uses Problem Details; domain validation uses the API error envelope."
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "API access, database or upstream error."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "API access, database or upstream error."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Requested resource unavailable, conflicting operation or invalid imported data."
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "API access, database or upstream error."
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "API access, database or upstream error."
-          }
-        },
-        "tags": [
-          "Analytics"
         ]
       }
     },

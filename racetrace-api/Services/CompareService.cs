@@ -515,7 +515,7 @@ public sealed class CompareService
         return metrics;
     }
 
-    private static IReadOnlyList<ComparePointsProgressDto> BuildPointsProgress(
+    private static ComparePointsProgressDto[] BuildPointsProgress(
         IReadOnlyList<JsonObject> results)
     {
         decimal cumulative = 0m;
@@ -542,7 +542,7 @@ public sealed class CompareService
             .ToArray();
     }
 
-    private static IReadOnlyList<CompareRoundMetricsDto> BuildRoundMetrics(
+    private static CompareRoundMetricsDto[] BuildRoundMetrics(
         CompareRiderSource source,
         IReadOnlyList<JsonObject> results)
     {
@@ -557,10 +557,7 @@ public sealed class CompareService
                 var track = round?.Object("tracks");
                 var competitionClass = round?.Object("competition_levels") ?? round?.Object("competition_class");
                 RiderPerformanceMetricValues? performance = null;
-                if (source.RoundMetrics is not null)
-                {
-                    source.RoundMetrics.TryGetValue(group.Key, out performance);
-                }
+                source.RoundMetrics?.TryGetValue(group.Key, out performance);
                 return new CompareRoundMetricsDto(
                     PublicDtoMapping.Long(group.Key),
                     round?.Int("season_year"),
@@ -590,7 +587,7 @@ public sealed class CompareService
 
     private static int CountTimingWins(
         IReadOnlyList<JsonObject> splits,
-        IReadOnlySet<string> resultIds,
+        HashSet<string> resultIds,
         string rankField)
     {
         return splits
@@ -628,8 +625,8 @@ public sealed class CompareService
         result.Object("sessions")?.Object("rounds")?.String("start_date") ??
         string.Empty;
 
-    private static decimal? Average(IReadOnlyList<int> values) =>
-        values.Count == 0
+    private static decimal? Average(int[] values) =>
+        values.Length == 0
             ? null
             : Math.Round((decimal)values.Average(), 2, MidpointRounding.AwayFromZero);
 

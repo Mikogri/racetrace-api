@@ -97,7 +97,7 @@ public static class MetricsQueryParser
         var conditionNames = validator.CsvAny(query, "condition");
 
         return new RiderMetricsContext(
-            seasonYears.Count == 1 ? seasonYears[0] : null,
+            seasonYears.Length == 1 ? seasonYears[0] : null,
             categoryCodes.Length == 1 ? categoryCodes[0] : null,
             dateFrom,
             dateTo,
@@ -124,7 +124,7 @@ public static class MetricsQueryParser
         };
     }
 
-    private static IReadOnlyList<int> ParseSeasonYears(IQueryCollection query, QueryValidationService validator)
+    private static int[] ParseSeasonYears(IQueryCollection query, QueryValidationService validator)
     {
         var years = validator.IntCsvAny(query, "season", "seasons", "seasonYears", "season_years");
         if (years.Length > 0)

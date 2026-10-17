@@ -77,7 +77,7 @@ public static class ApiContractExtensions
                         Description = "API access, database or upstream error.",
                         Content = new Dictionary<string, OpenApiMediaType> { ["application/json"] = new() { Schema = error } }
                     });
-                foreach (var code in action.ControllerName.StartsWith("Admin", StringComparison.Ordinal) ? new[] { "404", "409", "422" } : new[] { "404" })
+                foreach (var code in action.ControllerName.StartsWith("Admin", StringComparison.Ordinal) ? new[] { "404", "409", "422" } : ["404"])
                     operation.Responses!.TryAdd(code, new OpenApiResponse
                     {
                         Description = "Requested resource unavailable, conflicting operation or invalid imported data.",

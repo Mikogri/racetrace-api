@@ -29,7 +29,7 @@ internal static class RiderTeamHistoryMapper
     }
 
     internal static JsonArray ToPublicTeamHistoryJson(IEnumerable<JsonObject> history) =>
-        new JsonArray(history.Select(row => (JsonNode)new JsonObject
+        new(history.Select(row => (JsonNode)new JsonObject
         {
             ["id"] = row["id"]?.DeepClone(),
             ["riderId"] = row["rider_id"]?.DeepClone(),

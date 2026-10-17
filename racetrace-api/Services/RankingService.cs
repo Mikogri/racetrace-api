@@ -466,7 +466,7 @@ public sealed class RankingService
 
     private JsonObject BuildRow(
         string riderId,
-        IReadOnlyList<RankingReadResult> results,
+        RankingReadResult[] results,
         IReadOnlyDictionary<string, decimal> pointsByResultId,
         IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId,
         JsonArray? fallbackTeamHistory)
@@ -490,10 +490,7 @@ public sealed class RankingService
             teamHistory = fallbackTeamHistory.DeepClone().AsArray();
         }
 
-        if (rider is not null)
-        {
-            rider["teams"] = teamHistory;
-        }
+        rider?["teams"] = teamHistory;
         var finalResults = results
             .Where(r => r.Session is not null && DomainQueryService.IsFinalSession(r.Session))
             .Where(HasStarted)
@@ -521,7 +518,7 @@ public sealed class RankingService
             ["top_10"] = finalPositions.Count(value => value <= 10),
             ["top_20"] = finalPositions.Count(value => value <= 20),
             ["top_30"] = finalPositions.Count(value => value <= 30),
-            ["starts"] = results.Count,
+            ["starts"] = results.Length,
             ["final_starts"] = finalResults.Length,
             ["finals_count"] = participationRates.FinalsCount,
             ["quali_rate"] = participationRates.QualifyingRate,
@@ -945,7 +942,7 @@ public sealed class RankingService
 
     private static void CopyComparisonValue(
         IQueryCollection source,
-        IDictionary<string, StringValues> destination,
+        Dictionary<string, StringValues> destination,
         string sourceKey,
         string destinationKey)
     {

@@ -8,32 +8,11 @@ namespace RaceTrace.Api.Controllers;
 [Route("api/v1/analytics")]
 public sealed class AnalyticsController : ControllerBase
 {
-    private readonly RiderSimilarityService _riderSimilarity;
     private readonly AnalyticsService _analytics;
 
-    public AnalyticsController(
-        RiderSimilarityService riderSimilarity,
-        AnalyticsService analytics)
+    public AnalyticsController(AnalyticsService analytics)
     {
-        _riderSimilarity = riderSimilarity;
         _analytics = analytics;
-    }
-
-    /// <summary>
-    /// Returns normalized sector-performance profiles, pairwise rider similarity,
-    /// flat clusters and hierarchical merge data for a dendrogram.
-    /// </summary>
-    /// <remarks>
-    /// Similarity is normalized to 0-1. A value of 1 means nearly identical
-    /// sector characteristics. Lower values indicate increasingly different profiles.
-    /// Evidence describes the amount of sector and session data behind each profile.
-    /// </remarks>
-    [HttpGet("rider-similarity")]
-    [OutputCache(PolicyName = "analytics")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.RiderSimilarityResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> RiderSimilarity(CancellationToken cancellationToken)
-    {
-        return Ok(await _riderSimilarity.GetAsync(Request.Query, cancellationToken));
     }
 
     [HttpGet("round-profile")]

@@ -408,10 +408,10 @@ public sealed class AnalyticsService
         var categories = sessions.ToDictionary(session => session.String("id")!,
             session => session.Object("categories")?.String("code") ?? session.String("category_id"));
         var observations = paceSessions.Count > 0
-            ? _pace.CalculateSimilarityObservations(
+            ? _pace.CalculateSectorObservations(
                 paceSessions.Where(item => categories.ContainsKey(item.SessionId)).ToArray(),
                 categories)
-            : _pace.CalculateSimilarityObservations(data, categories)
+            : _pace.CalculateSectorObservations(data, categories)
                 .Where(item => categories.ContainsKey(item.SessionId))
                 .ToArray();
         var spreads = observations
@@ -443,7 +443,7 @@ public sealed class AnalyticsService
     private PressurePerformancePointDto BuildPressurePoint(
         string roundId,
         IEnumerable<RiderSessionPaceObservation> observations,
-        IReadOnlyDictionary<string, JsonObject> sessionsById)
+        Dictionary<string, JsonObject> sessionsById)
     {
         var values = observations
             .OrderBy(item => SessionDate(sessionsById[item.SessionId]))

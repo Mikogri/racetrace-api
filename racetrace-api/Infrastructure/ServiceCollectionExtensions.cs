@@ -113,7 +113,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RidersService>();
         services.AddScoped<RankingService>();
         services.AddScoped<CompareService>();
-        services.AddScoped<RiderSimilarityService>();
         services.AddScoped<AnalyticsService>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<SeasonSummaryService>();

@@ -206,7 +206,7 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         return int.TryParse(value![(slashIndex.Value + 1)..], out var total) ? total : null;
     }
 
-    private static IReadOnlyList<JsonObject> ParseArray(string content)
+    private static JsonObject[] ParseArray(string content)
     {
         if (string.IsNullOrWhiteSpace(content))
         {

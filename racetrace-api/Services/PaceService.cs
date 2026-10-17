@@ -31,7 +31,7 @@ public sealed class PaceService
             sessionWeights: paceOptions.SessionWeights);
     }
 
-    internal IReadOnlyList<RiderSectorObservation> CalculateSimilarityObservations(
+    internal IReadOnlyList<RiderSectorObservation> CalculateSectorObservations(
         IReadOnlyList<PacePrecomputedSessionData> sessions,
         IReadOnlyDictionary<string, string?> categoriesBySessionId)
     {
@@ -45,19 +45,19 @@ public sealed class PaceService
                 Session = session,
                 Result = _paceCalculator.CalculatePrecomputedSession(session)
             })
-            .SelectMany(item => SimilarityObservations(
+            .SelectMany(item => SectorObservations(
                 item.Session.SessionId,
                 item.Result,
                 categoriesBySessionId.GetValueOrDefault(item.Session.SessionId)))
             .ToArray();
     }
 
-    internal IReadOnlyList<RiderSectorObservation> CalculateSimilarityObservations(
+    internal IReadOnlyList<RiderSectorObservation> CalculateSectorObservations(
         RankingDataBundle bundle,
         IReadOnlyDictionary<string, string?> categoriesBySessionId)
     {
         return CalculateSessionPaceObservations(bundle)
-            .SelectMany(observation => SimilarityObservations(
+            .SelectMany(observation => SectorObservations(
                 observation.SessionId,
                 observation.Result,
                 categoriesBySessionId.GetValueOrDefault(observation.SessionId)))
@@ -140,7 +140,7 @@ public sealed class PaceService
     internal double? CalculateStagePace(IEnumerable<RiderSessionPaceResult> sessions) =>
         _paceCalculator.CalculateStagePace(sessions)?.Pace;
 
-    private static IEnumerable<RiderSectorObservation> SimilarityObservations(
+    private static IEnumerable<RiderSectorObservation> SectorObservations(
         string sessionId,
         RiderSessionPaceResult result,
         string? categoryCode)
@@ -573,13 +573,13 @@ public sealed class PaceService
             round?.Object("competition_levels")?.Int("priority");
     }
 
-    private static IReadOnlyDictionary<string, int?> BuildAvailableFinalCounts(
+    private static Dictionary<string, int?> BuildAvailableFinalCounts(
         IReadOnlyList<string> riderIds,
         IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> selectedResultsByRiderId,
         IReadOnlyList<JsonObject>? availableSessions)
         => BuildAvailableFinalCounts(riderIds, selectedResultsByRiderId.ToDictionary(p => p.Key, p => (IReadOnlyList<RankingReadResult>)p.Value.Select(RankingReadResult.FromLegacy).ToArray(), StringComparer.OrdinalIgnoreCase), availableSessions);
 
-    private static IReadOnlyDictionary<string, int?> BuildAvailableFinalCounts(
+    private static Dictionary<string, int?> BuildAvailableFinalCounts(
         IReadOnlyList<string> riderIds,
         IReadOnlyDictionary<string, IReadOnlyList<RankingReadResult>> selectedResultsByRiderId,
         IReadOnlyList<JsonObject>? availableSessions)
@@ -619,13 +619,13 @@ public sealed class PaceService
             StringComparer.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyDictionary<string, bool> BuildNonFinalistFlags(
+    private static Dictionary<string, bool> BuildNonFinalistFlags(
         IReadOnlyList<string> riderIds,
         IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> selectedResultsByRiderId,
         IReadOnlyList<JsonObject>? availableSessions)
         => BuildNonFinalistFlags(riderIds, selectedResultsByRiderId.ToDictionary(p => p.Key, p => (IReadOnlyList<RankingReadResult>)p.Value.Select(RankingReadResult.FromLegacy).ToArray(), StringComparer.OrdinalIgnoreCase), availableSessions);
 
-    private static IReadOnlyDictionary<string, bool> BuildNonFinalistFlags(
+    private static Dictionary<string, bool> BuildNonFinalistFlags(
         IReadOnlyList<string> riderIds,
         IReadOnlyDictionary<string, IReadOnlyList<RankingReadResult>> selectedResultsByRiderId,
         IReadOnlyList<JsonObject>? availableSessions)
@@ -870,13 +870,13 @@ public sealed class PaceService
             !string.Equals(status, "DSQ", StringComparison.OrdinalIgnoreCase);
     }
 
-    private IReadOnlyList<ConsistencyRunInput> BuildConsistencyRuns(
+    private ConsistencyRunInput[] BuildConsistencyRuns(
         string riderId,
         IReadOnlyList<JsonObject> riderResults,
-        IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> splitsByResultId,
+        Dictionary<string, IReadOnlyList<JsonObject>> splitsByResultId,
         IReadOnlyDictionary<string, SessionSplitLayout> splitLayoutsBySessionId,
-        IReadOnlyDictionary<string, int> classifiedFieldSizesBySessionId,
-        IReadOnlyDictionary<string, RiderSessionPaceResult> sessionPaceResultsByRider)
+        Dictionary<string, int> classifiedFieldSizesBySessionId,
+        Dictionary<string, RiderSessionPaceResult> sessionPaceResultsByRider)
     {
         var runs = riderResults
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
@@ -990,7 +990,7 @@ public sealed class PaceService
         return sectors;
     }
 
-    private static IReadOnlyDictionary<string, SessionSplitLayout> BuildSessionSplitLayouts(
+    private static Dictionary<string, SessionSplitLayout> BuildSessionSplitLayouts(
         IReadOnlyList<JsonObject> fieldResults,
         IReadOnlyDictionary<string, IReadOnlyList<JsonObject>> splitsByResultId)
     {
@@ -1156,7 +1156,7 @@ public sealed class PaceService
         };
     }
 
-    private static IReadOnlyDictionary<string, RiderPerformanceMetricValues> EmptyPace(
+    private static Dictionary<string, RiderPerformanceMetricValues> EmptyPace(
         IEnumerable<string> riderIds)
     {
         return riderIds.ToDictionary(

@@ -339,7 +339,7 @@ internal static class CompactMetricsPackageParser
 
             var sectorRows = sectorRowsByResultId.GetValueOrDefault(
                 resultId,
-                Array.Empty<JsonArray>());
+                []);
             var sectors = sectorRows
                 .Select(row => new PacePrecomputedSector(
                     CompactInt(row, 1) ?? 0,

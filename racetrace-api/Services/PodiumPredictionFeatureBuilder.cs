@@ -31,7 +31,7 @@ internal sealed class PodiumPredictionFeatureBuilder
             .ThenBy(result => result.String("id"), StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var observations = BuildObservations(riderResults, historicalResults);
-        var normalPerformance = observations.Count == 0
+        var normalPerformance = observations.Length == 0
             ? (double)(currentMetric.Pace ?? currentMetric.Rating ?? 50m)
             : observations.Average(value => value.Performance);
         var recentForm = RecentForm(observations, normalPerformance);
@@ -56,7 +56,7 @@ internal sealed class PodiumPredictionFeatureBuilder
             weekendResults.Where(result => string.Equals(
                 result.String("rider_id"), riderId, StringComparison.OrdinalIgnoreCase)).ToArray(),
             weekendResults);
-        var weekendPerformance = weekendObservations.Count == 0
+        var weekendPerformance = weekendObservations.Length == 0
             ? 0
             : WeightedSessionPerformance(weekendObservations) - normalPerformance;
         var wchObservations = observations
@@ -107,7 +107,7 @@ internal sealed class PodiumPredictionFeatureBuilder
             titleLeverage,
             pressureResponse,
             incidentProbability,
-            observations.Count + weekendObservations.Count);
+            observations.Length + weekendObservations.Length);
     }
 
     private double RecentForm(
@@ -142,7 +142,7 @@ internal sealed class PodiumPredictionFeatureBuilder
         return weights <= 0 ? observations.Average(value => value.Performance) : weighted / weights;
     }
 
-    private static IReadOnlyList<PerformanceObservation> BuildObservations(
+    private static PerformanceObservation[] BuildObservations(
         IReadOnlyList<JsonObject> riderResults,
         IReadOnlyList<JsonObject> fieldResults)
     {

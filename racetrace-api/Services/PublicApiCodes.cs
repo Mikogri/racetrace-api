@@ -2,7 +2,7 @@ namespace RaceTrace.Api.Services;
 
 public static class PublicApiCodes
 {
-    private static readonly IReadOnlyDictionary<string, string> PublicToDatabaseCategories =
+    private static readonly Dictionary<string, string> PublicToDatabaseCategories =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["elite_men"] = "EM",

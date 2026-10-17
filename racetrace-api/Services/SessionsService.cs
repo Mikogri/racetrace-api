@@ -7,7 +7,7 @@ namespace RaceTrace.Api.Services;
 
 public sealed class SessionsService
 {
-    private static readonly IReadOnlyDictionary<string, string> Sorts =
+    private static readonly Dictionary<string, string> Sorts =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["sessionDate"] = "session_date",

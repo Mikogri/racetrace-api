@@ -238,10 +238,10 @@ public sealed class TeamsService
 
     private async Task<IReadOnlyList<JsonObject>> FetchResultsAsync(
         string filterColumn,
-        IReadOnlyList<string> ids,
+        string[] ids,
         CancellationToken cancellationToken)
     {
-        if (ids.Count == 0)
+        if (ids.Length == 0)
         {
             return [];
         }

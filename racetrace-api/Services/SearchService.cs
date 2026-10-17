@@ -173,13 +173,13 @@ public sealed class SearchService
             var team = DomainQueryService.FindTeamPeriod(history, riderId, today)?
                 .Object("teams");
             rider["teams"] = team is null
-                ? new JsonArray()
+                ? []
                 : new JsonArray(team.DeepClone());
         }
     }
 
     private static JsonArray ToArray(IEnumerable<JsonObject> rows)
     {
-        return new JsonArray(rows.Select(row => row.DeepClone()).ToArray());
+        return [.. rows.Select(row => row.DeepClone()).ToArray()];
     }
 }

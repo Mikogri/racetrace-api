@@ -280,10 +280,10 @@ public sealed class SeasonSummaryService
     }
 
     private async Task<IReadOnlyList<JsonObject>> LoadSessionsAsync(
-        IReadOnlyList<string> roundIds,
+        string[] roundIds,
         CancellationToken cancellationToken)
     {
-        if (roundIds.Count == 0)
+        if (roundIds.Length == 0)
         {
             return [];
         }
@@ -297,10 +297,10 @@ public sealed class SeasonSummaryService
     }
 
     private async Task<IReadOnlySet<string>> LoadFinalWinnerIdsAsync(
-        IReadOnlyList<string> finalSessionIds,
+        string[] finalSessionIds,
         CancellationToken cancellationToken)
     {
-        if (finalSessionIds.Count == 0)
+        if (finalSessionIds.Length == 0)
         {
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -319,7 +319,7 @@ public sealed class SeasonSummaryService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyList<SeasonSummaryResultDto> BuildLastRoundResults(
+    private static SeasonSummaryResultDto[] BuildLastRoundResults(
         IReadOnlyList<JsonObject> results,
         JsonObject? round)
     {
@@ -375,7 +375,7 @@ public sealed class SeasonSummaryService
         }).ToArray();
     }
 
-    private static IReadOnlyList<SeasonTopRatedRiderDto> BuildTopRated(
+    private static SeasonTopRatedRiderDto[] BuildTopRated(
         IReadOnlyList<JsonObject> rows)
     {
         return rows
@@ -403,7 +403,7 @@ public sealed class SeasonSummaryService
             .ToArray();
     }
 
-    private static IReadOnlyList<SeasonStandingRiderDto> BuildStandings(
+    private static SeasonStandingRiderDto[] BuildStandings(
         IReadOnlyList<JsonObject> rows)
     {
         return rows

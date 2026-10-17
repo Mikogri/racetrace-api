@@ -209,7 +209,7 @@ public sealed class UciMtbWorldSeriesSupplementService
         }
     }
 
-    private static IReadOnlyList<SourceResult> ParseSourceResults(
+    private static List<SourceResult> ParseSourceResults(
         JsonArray sourceArray,
         List<string> warnings)
     {
@@ -238,7 +238,7 @@ public sealed class UciMtbWorldSeriesSupplementService
             }
 
             var splits = ParseSplits(source, sourceKey, finishTimeMs, warnings);
-            if (splits is null || splits.Count == 0)
+            if (splits is null || splits.Length == 0)
             {
                 continue;
             }
@@ -262,7 +262,7 @@ public sealed class UciMtbWorldSeriesSupplementService
         return results;
     }
 
-    private static IReadOnlyList<SourceSplit>? ParseSplits(
+    private static SourceSplit[]? ParseSplits(
         JsonObject source,
         string sourceKey,
         int finishTimeMs,
@@ -338,7 +338,7 @@ public sealed class UciMtbWorldSeriesSupplementService
             row.Int("race_time_ms"));
     }
 
-    private static IReadOnlyList<ResultMatch> MatchResults(
+    private static List<ResultMatch> MatchResults(
         IReadOnlyList<SourceResult> sourceResults,
         IReadOnlyList<ExistingResult> existingResults,
         List<string> warnings)
@@ -467,7 +467,7 @@ public sealed class UciMtbWorldSeriesSupplementService
         return builder.ToString().Normalize(NormalizationForm.FormC);
     }
 
-    private static IReadOnlyList<string> NormalizeNameParts(string value)
+    private static string[] NormalizeNameParts(string value)
     {
         return value
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
