@@ -1,5 +1,7 @@
 # Konserwatywny detektor — korekta eksperymentu 2026-10-01
 
+> Archiwum etapu badań sprzed promocji detektora. Poniższe „tylko eksperyment” opisuje tamten etap; później wariant wdrożono. Aktualne reguły: [ALGORITHMS.md](../ALGORITHMS.md).
+
 Status: tylko eksperyment offline, bez zmian API, bazy i kalkulatora Pace. Skrypt: `tools/incident-conservative-refinement.py`.
 
 ## Reguła

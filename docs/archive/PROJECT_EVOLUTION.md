@@ -1,5 +1,7 @@
 # RaceTrace — historia zmian technicznych
 
+> Archiwum: historia do 17.09.2026, nie specyfikacja obecnego działania. Bieżący opis zaczyna się w [README](../../README.md).
+
 Stan: 17.09.2026. Zakres: większe zmiany odtworzone z dostępnej historii czatu, kodu i dokumentacji projektu. Pominięto kosmetykę oraz niepotwierdzone operacje.
 
 ## Architektura
@@ -117,7 +119,7 @@ Stan: 17.09.2026. Zakres: większe zmiany odtworzone z dostępnej historii czatu
 
 ## Dokumentacja szczegółowa
 
-- [Fantasy](fantasy.md)
+- [Fantasy — aktualna dokumentacja](../PREDICTIONS.md)
 - [Test historyczny Fantasy](fantasy-backtest-2026-09-16.md)
 
 Raporty testów opisują stan konkretnego przebiegu. Aktualne reguły działania Fantasy, w tym brak obowiązkowej listy startowej, opisuje dokumentacja modułu.

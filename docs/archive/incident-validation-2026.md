@@ -1,5 +1,7 @@
 # Walidacja potwierdzonych incydentów 2026
 
+> Archiwalne wyniki wcześniejszego detektora względem CSV; nie przeliczono ich aktualnym kodem. Reguły produkcyjne: [ALGORITHMS.md](../ALGORITHMS.md).
+
 Etykiety pochodzą z dostarczonego CSV. Brak wpisu nie oznacza czystego przejazdu. Nie wyliczamy precision ani false-positive rate bez zweryfikowanych negatywów. Dopasowanie: sezon, klasa, venue, kategoria, sesja, nazwisko; niejednoznaczności pozostają niedopasowane. Przypadki treningowe/DSQ/DNS są oddzielone od detekcji sektorów. Jest to ocena na danych użytych w rozwoju reguł, nie niezależny test.
 
 Numery w CSV opisują strefę punktu pomiarowego (`reported_numbered_split_zone`), nie zawsze dokładny sektor czasowy. Dlatego porównujemy wykrycie przejazdu; podajemy też strefę z CSV do ręcznej oceny lokalizacji. Nazwy skrócone w źródle są jawnie mapowane tylko w narzędziu audytu (Vali/Valentina, Hattie/Harriet itd.).

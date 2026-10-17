@@ -1,5 +1,7 @@
 # Ranking — conservative incident detector comparison
 
+> Archiwalne porównanie przed/po promocji detektora. Oceny dotyczą wskazanego snapshotu, nie dzisiejszego rankingu. Aktualne reguły: [ALGORITHMS.md](../ALGORITHMS.md).
+
 Snapshot: 2026-10-01. Elite Men (API category=ME, canonical EM), season 2026 / 2025,
 all competition classes and sessions, rating descending, no search or metric thresholds.
 Before = running API and local calculator BEFORE promotion; NOT the previous research conservative candidate.

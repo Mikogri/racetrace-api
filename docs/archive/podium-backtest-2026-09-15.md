@@ -1,5 +1,7 @@
 # Podium Predictor — eksperyment historyczny, 15 września 2026
 
+> Archiwalny eksperyment sześciu modeli, nie specyfikacja produkcyjnego predictora. Implementacja: [PREDICTIONS.md](../PREDICTIONS.md).
+
 ## Zakres i odcięcie danych
 
 Przetestowano sześć modeli na **40 wyścigach kategorii**: Elite Men i Elite Women,
@@ -75,7 +77,7 @@ kandydatów; prawdopodobieństwa nie uwzględniają wiarygodnie nieobecności na
 
 ## Powtórzenie i weryfikacja
 
-Instrukcja: [README narzędzia](../tools/racetrace-api.PodiumBacktest/README.md).
+Instrukcja: [README narzędzia](../../tools/racetrace-api.PodiumBacktest/README.md).
 Pełne wyniki lokalne: `artifacts/podium-backtest/report.md` oraz `results.json`.
 Ostatni pełny przebieg wykonano z `--offline --iterations 50000`; baza nie była
 odpytywana podczas właściwych symulacji i nie zmieniono żadnych rekordów.

@@ -1,5 +1,7 @@
 # Calculator-independent input packages
 
+> Archiwalny raport wdrożenia i pomiarów z 11.10.2026. Zasada pakietów pozostaje używana; jej aktualny opis jest w [DATA_PIPELINE.md](../DATA_PIPELINE.md).
+
 ## Contract
 
 - Frontend and public endpoint/DTO contracts are unchanged.

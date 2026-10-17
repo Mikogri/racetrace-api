@@ -1,5 +1,7 @@
 # Database deployment verification — 11 October 2026
 
+> Archiwalny protokół jednego wdrożenia. Nie potwierdza obecnej konfiguracji bazy ani flag hosta. Bieżące zasady: [DATA_PIPELINE.md](../DATA_PIPELINE.md).
+
 Target: RaceTrace Analytics. Scope: publish the current API/web code and architecture report; deploy the two existing infrastructure migrations. No sports formulas or runtime feature flags were changed during publication.
 
 ## Applied migrations
@@ -24,7 +26,7 @@ Remote timestamps are UTC; deployment occurred on 11 October in Europe/Warsaw. T
 
 ## Activation is separate
 
-The SQL prerequisites are deployed. This publication does not restart API instances, enable `CacheCoherence:Enabled` or `Fantasy:DistributedCoordinationEnabled`, migrate local Fantasy artifacts, or rebuild prepared calculations. Follow [the rollout procedure](../calculation-consistency.md) to activate those mechanisms coherently across instances.
+The SQL prerequisites are deployed. This publication does not restart API instances, enable `CacheCoherence:Enabled` or `Fantasy:DistributedCoordinationEnabled`, migrate local Fantasy artifacts, or rebuild prepared calculations. Current rollout constraints are described in [data and cache](../DATA_PIPELINE.md) and [Fantasy coordination](../PREDICTIONS.md).
 
 ## Existing security advisories
 

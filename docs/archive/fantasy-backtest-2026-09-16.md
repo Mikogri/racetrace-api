@@ -1,5 +1,7 @@
 # Fantasy — kontrola na rzeczywistych danych, 16.09.2026
 
+> Archiwalny backtest na wskazanym snapshotcie. Nie jest bieżącą oceną skuteczności. Implementacja: [PREDICTIONS.md](../PREDICTIONS.md).
+
 Silnik: `ridge-monte-carlo-v1`. Warstwa Fantasy: `fantasy-empirical-blend-v3`.
 Scoring: `pinkbike-dh-2026-v1`. Odczyty bazy, bez modyfikacji historycznych wyników.
 

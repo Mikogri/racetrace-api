@@ -1,5 +1,7 @@
 # Prepared ranking read — verification
 
+> Archiwalny eksperyment z pakietami zależnymi od kalkulatora. Bieżąca ścieżka: [DATA_PIPELINE.md](../DATA_PIPELINE.md).
+
 Historical implementation report. The calculator-dependent prepared-finish path was superseded by [source input packages](2026-10-11-input-packages.md). The comparisons below tested old versus new implementations separately on each path; they did not prove equality between the raw and preaggregated paths themselves.
 
 ## Scope

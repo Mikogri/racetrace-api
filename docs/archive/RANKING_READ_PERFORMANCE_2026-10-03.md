@@ -1,5 +1,7 @@
 # Ranking and rider overview read performance — 2026-10-03
 
+> Archiwalny pomiar konkretnej wersji i danych. Nie opisuje dzisiejszej latencji. Aktualny workflow: [PERFORMANCE.md](../PERFORMANCE.md).
+
 ## Implemented
 
 - `Database/optimize_ranking_reads.sql`: `get_ranking_data` retains the original SQL predicates, joins, compact fields and security model. Parameterized PL/pgSQL `EXECUTE` replans for the actual filter values instead of reusing the pathological generic plan. Request values are not concatenated into SQL.

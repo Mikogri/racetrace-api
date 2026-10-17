@@ -1,5 +1,7 @@
 # Eksperymenty detekcji incydentów — 2026
 
+> Archiwalne porównanie kandydatów na zamrożonych danych. Nie przedstawia obecnej skuteczności. Reguły produkcyjne: [ALGORITHMS.md](../ALGORITHMS.md).
+
 Stan: 2026-10-01. Badanie offline; **nie wdraża nowego detektora do API**, nie zmienia bazy, oficjalnych wyników ani Pace. Punktem odniesienia jest zapis `current.json` z audytu lokalnego detektora C#.
 
 ## Próbka i sposób oceny
