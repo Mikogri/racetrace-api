@@ -419,7 +419,7 @@ public sealed class RankingServiceTests
     }
 
     [Fact]
-    public void ParticipationMetricsCountDnsFinalAsQualifiedButExcludeDnsQualifyingRound()
+    public void DnsFinalRetainsQualificationWithoutIncreasingFinalStarts()
     {
         var results = new[]
         {
@@ -431,7 +431,7 @@ public sealed class RankingServiceTests
 
         var rates = RankingService.CalculateParticipationRates(results);
 
-        Assert.Equal(2, rates.FinalsCount);
+        Assert.Equal(1, rates.FinalsCount);
         Assert.Equal(50m, rates.QualifyingRate);
     }
 
@@ -448,7 +448,40 @@ public sealed class RankingServiceTests
 
         var rates = RankingService.CalculateParticipationRates(results);
 
-        Assert.Equal(4, rates.FinalsCount);
+        Assert.Equal(3, rates.FinalsCount);
+        Assert.Equal(100m, rates.QualifyingRate);
+    }
+
+    [Theory]
+    [InlineData("DNS", 0)]
+    [InlineData("dns", 0)]
+    [InlineData(" DNS ", 0)]
+    [InlineData("DNF", 1)]
+    [InlineData("DSQ", 1)]
+    [InlineData("Finished", 1)]
+    public void FinalStartCountAndQualificationUseSeparateStatusRules(string status, int expectedStarts)
+    {
+        var final = Result("10", "2026-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: status);
+
+        var rates = RankingService.CalculateParticipationRates([final]);
+
+        Assert.Equal(expectedStarts, rates.FinalsCount);
+        Assert.Equal(100m, rates.QualifyingRate);
+    }
+
+    [Fact]
+    public void FinalSessionsAreCountedOnceAndDnsDoesNotEraseAStartedResult()
+    {
+        JsonObject[] results =
+        [
+            Result("10", "2026-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "DNS"),
+            Result("10", "2026-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "DNF"),
+            Result("10", "2026-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "DNF")
+        ];
+
+        var rates = RankingService.CalculateParticipationRates(results);
+
+        Assert.Equal(1, rates.FinalsCount);
         Assert.Equal(100m, rates.QualifyingRate);
     }
 

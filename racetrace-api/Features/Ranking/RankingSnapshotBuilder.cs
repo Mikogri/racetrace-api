@@ -275,7 +275,8 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
         var qualifiedFinalResults = results
             .Where(r => r.Session is not null && DomainQueryService.IsFinalSession(r.Session))
             .ToArray();
-        var qualifiedFinalSessions = qualifiedFinalResults
+        var startedFinalSessions = qualifiedFinalResults
+            .Where(HasStarted)
             .Select(ResultSessionId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -293,7 +294,7 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
         participatedRoundIds.UnionWith(qualifiedRoundIds);
 
         return new RankingParticipationRates(
-            qualifiedFinalSessions,
+            startedFinalSessions,
             Percentage(qualifiedRoundIds.Count, participatedRoundIds.Count));
     }
 
