@@ -10,17 +10,17 @@ namespace RaceTrace.Api.Tests;
 public sealed class DtoSerializationTests
 {
     [Fact]
-    public void FantasyRulesKeepCanonicalNamesWithoutANamingPolicy()
+    public void FantasyRulesUseCanonicalNamesWithWebOptions()
     {
         var rules = new FantasyRulesDto(2026, "test", 100m, 2, 1, 1,
             [new FantasyPlacementDto(1, 10, 10)], [new FantasyBonusDto(1, 5)], false, "test");
         var expected = JsonNode.Parse("""{"season":2026,"version":"test","budget":100,"teamSize":2,"men":1,"women":1,"finalPlacementPoints":[{"position":1,"menPoints":10,"womenPoints":10}],"q1Bonus":[{"position":1,"points":5}],"dynamicPricing":false,"sourceUrl":"test"}""");
 
-        Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(rules)));
+        Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(rules, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
     }
 
     [Fact]
-    public void PublicResultsKeepCamelCaseWhileLegacyPaginationKeepsSnakeCase()
+    public void PublicResultsAndPaginationUseCamelCase()
     {
         using var services = new ServiceCollection().AddLogging().AddRaceTraceHttp().BuildServiceProvider();
         var options = services.GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>().Value.JsonSerializerOptions;
@@ -30,16 +30,16 @@ public sealed class DtoSerializationTests
         Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(result, options)));
         Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(result, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         var pagination = JsonSerializer.SerializeToNode(new PaginationMetadata(1, 30, 90, 3), options)!;
-        Assert.Equal(3, pagination["total_pages"]!.GetValue<int>());
-        Assert.Null(pagination["totalPages"]);
+        Assert.Equal(3, pagination["totalPages"]!.GetValue<int>());
+        Assert.Null(pagination["total_pages"]);
     }
 
     [Fact]
-    public void RequestRecordsKeepOptionalValuesAndLegacyInputNames()
+    public void RequestRecordsUseCamelCaseAndKeepOptionalValues()
     {
         using var services = new ServiceCollection().AddLogging().AddRaceTraceHttp().BuildServiceProvider();
         var options = services.GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>().Value.JsonSerializerOptions;
-        var request = JsonSerializer.Deserialize<PointsRecalculateRequest>("""{"season_year":2026,"category_code":"EM"}""", options)!;
+        var request = JsonSerializer.Deserialize<PointsRecalculateRequest>("""{"seasonYear":2026,"categoryCode":"EM"}""", options)!;
         Assert.Equal(2026, request.SeasonYear);
         Assert.Equal("EM", request.CategoryCode);
         Assert.Null(request.SessionId);

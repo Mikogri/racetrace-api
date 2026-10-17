@@ -52,8 +52,9 @@ public static class ServiceCollectionExtensions
         services.AddControllers(options => options.Filters.AddService<CalculationResponseFilter>())
             .AddJsonOptions(options =>
             {
-                options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower;
-                options.JsonSerializerOptions.DictionaryKeyPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower;
+                options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+                options.JsonSerializerOptions.DictionaryKeyPolicy = null;
+                options.JsonSerializerOptions.Converters.Add(new ApiJsonNodeConverterFactory());
             });
         services.AddRaceTraceOpenApi();
         services.AddResponseCompression(options =>

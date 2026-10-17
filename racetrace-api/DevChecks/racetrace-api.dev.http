@@ -67,7 +67,7 @@ Authorization: Bearer {{adminSecret}}
 Content-Type: application/json
 
 {
-  "session_id": "{{sessionId}}",
+  "sessionId": "{{sessionId}}",
   "scope": "world_cup_overall"
 }
 
@@ -78,37 +78,37 @@ Content-Type: application/json
 
 {
   "round": {
-    "context_name": "20260619_mtb",
-    "season_year": 2026,
-    "round_number": 1,
-    "start_date": "2026-06-19T00:00:00Z",
-    "end_date": "2026-06-21T00:00:00Z"
+    "contextName": "20260619_mtb",
+    "seasonYear": 2026,
+    "roundNumber": 1,
+    "startDate": "2026-06-19T00:00:00Z",
+    "endDate": "2026-06-21T00:00:00Z"
   },
   "track": {
     "name": "Example Downhill Track",
     "venue": "Example Gravity Park",
-    "country_code": "AUT",
-    "length_m": 2400,
-    "avg_slope": 18.5
+    "countryCode": "AUT",
+    "lengthM": 2400,
+    "avgSlope": 18.5
   },
-  "competition_class": {
+  "competitionClass": {
     "code": "world_cup",
     "name": "UCI Downhill World Cup",
     "priority": 2
   },
   "condition": {
     "name": "Dry",
-    "is_dry": true
+    "isDry": true
   },
-  "category_code": "EM",
+  "categoryCode": "EM",
   "session": {
     "name": "Final",
-    "session_type": "FINAL",
-    "start_date": "2026-06-21T12:00:00Z",
-    "end_date": "2026-06-21T15:00:00Z",
+    "sessionType": "FINAL",
+    "startDate": "2026-06-21T12:00:00Z",
+    "endDate": "2026-06-21T15:00:00Z",
     "status": "completed"
   },
-  "chronorace_json": {
+  "chronoraceJson": {
     "ContextName": "20260619_mtb",
     "DisplayName": "Final",
     "Riders": {
@@ -153,46 +153,46 @@ Content-Type: application/json
 
 {
   "round": {
-    "context_name": "20260619_mtb",
-    "season_year": 2026,
-    "round_number": 1,
-    "start_date": "2026-06-19T00:00:00Z",
-    "end_date": "2026-06-21T00:00:00Z"
+    "contextName": "20260619_mtb",
+    "seasonYear": 2026,
+    "roundNumber": 1,
+    "startDate": "2026-06-19T00:00:00Z",
+    "endDate": "2026-06-21T00:00:00Z"
   },
   "track": {
     "name": "Example Downhill Track",
     "venue": "Example Gravity Park",
-    "country_code": "AUT",
-    "length_m": 2400,
-    "avg_slope": 18.5
+    "countryCode": "AUT",
+    "lengthM": 2400,
+    "avgSlope": 18.5
   },
-  "competition_class": {
+  "competitionClass": {
     "code": "world_cup",
     "name": "UCI Downhill World Cup",
     "priority": 2
   },
   "condition": {
     "name": "Dry",
-    "is_dry": true
+    "isDry": true
   },
   "image": {
-    "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-    "file_name": "example-round.png",
-    "alt_text": "Example Gravity Park downhill course",
-    "width_px": 1,
-    "height_px": 1
+    "imageBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "fileName": "example-round.png",
+    "altText": "Example Gravity Park downhill course",
+    "widthPx": 1,
+    "heightPx": 1
   },
   "sessions": [
     {
       "name": "Final",
-      "session_type": "FINAL",
-      "start_date": "2026-06-21T12:00:00Z",
-      "end_date": "2026-06-21T15:00:00Z",
+      "sessionType": "FINAL",
+      "startDate": "2026-06-21T12:00:00Z",
+      "endDate": "2026-06-21T15:00:00Z",
       "status": "completed",
       "categories": [
         {
-          "category_code": "EM",
-          "chronorace_url": "https://prod.chronorace.be/angular/results.html#/uci/event/20260619_mtb/DHI/CG1/dh/3/res?ll=178389027912"
+          "categoryCode": "EM",
+          "chronoraceUrl": "https://prod.chronorace.be/angular/results.html#/uci/event/20260619_mtb/DHI/CG1/dh/3/res?ll=178389027912"
         }
       ]
     }

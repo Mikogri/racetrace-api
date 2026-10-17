@@ -58,8 +58,8 @@ public sealed class FantasyPreparationService(
     {
         using var measurement = ApiTelemetry.Measure("fantasy");
         var season = target.Int("season_year") ?? throw new InvalidDataException("The upcoming round has no season.");
-        if (season != FantasyRules2026.Rules.Season)
-            throw new InvalidDataException("Official Fantasy scoring is not verified for this season.");
+        var rules = FantasyRuleCatalog.ForSeason(season)
+            ?? throw new InvalidDataException("Official Fantasy scoring is not verified for this season.");
         var roundId = target.String("id") ?? throw new InvalidDataException("The upcoming round has no ID.");
         var starts = DateTimeOffset.Parse(target.String("start_date")!, CultureInfo.InvariantCulture);
         var eventOptions = options.Value.Events.GetValueOrDefault(roundId);
@@ -90,7 +90,7 @@ public sealed class FantasyPreparationService(
             if (IsHistoricalSalaryContext(historical, snapshot, options.Value.Events.GetValueOrDefault(historical.Id)))
                 salarySnapshots[historical.Id] = snapshot!;
         }
-        warnings.Add("Historical backtests apply the 2026 Fantasy scoring retrospectively; they are not historical Pinkbike season totals.");
+        warnings.Add($"Historical backtests apply the {rules.Season} Fantasy scoring retrospectively; they are not historical Pinkbike season totals.");
         warnings.Add("Historical salary optimization is evaluated only when matching pre-round price snapshots, verified entry lists and complete eligible-rider outcomes exist.");
         if (eventOptions?.StartListRiderIds is null)
             warnings.Add("Race projections use the historical field until a confirmed entry list is available.");
@@ -118,12 +118,12 @@ public sealed class FantasyPreparationService(
                     var actualFinal = ResolveFinalResult(historical, stages.Final, actualQ1, forecast.RiderId);
                     if (actualFinal is not null && finalFit is not null && (!historicalQ1Applies || q1Fit is not null))
                     {
-                        var actual = ActualPoints(actualFinal, actualQ1, historicalQ1Applies, gender, warnings);
+                        var actual = ActualPoints(actualFinal, actualQ1, historicalQ1Applies, gender, warnings, rules);
                         if (actual.HasValue)
                         {
                             var projection = FantasyScoring.Project(FantasyCalibration.Apply(forecast.Positions, finalFit),
                                 !historicalQ1Applies ? null : FantasyCalibration.Apply(forecast.Positions, q1Fit!),
-                                FantasyRules2026.Rules, historicalQ1Applies, gender);
+                                rules, historicalQ1Applies, gender);
                             observations.Add(new(forecast.RiderId, forecast.RiderId, gender, projection.ExpectedFantasyPoints, actual.Value));
                         }
                     }
@@ -134,7 +134,7 @@ public sealed class FantasyPreparationService(
                 {
                     var trainedThrough = MaxTrainingDate(finalFit!, historicalQ1Applies ? q1Fit : null);
                     backtests.Add(new(historical.Season, historical.Id, category, FantasyBacktester.Evaluate(observations,
-                        FantasyRules2026.Rules, historical.Id, historical.Start,
+                        rules, historical.Id, historical.Start,
                         trainedThrough, [], cancellationToken: token)));
                     if (salaryEvent is not null)
                     {
@@ -166,7 +166,7 @@ public sealed class FantasyPreparationService(
                 var finalDistribution = FantasyCalibration.Apply(forecast.Positions, currentFinalFit);
                 var projection = FantasyScoring.Project(finalDistribution,
                     currentQ1Fit is null ? null : FantasyCalibration.Apply(forecast.Positions, currentQ1Fit),
-                    FantasyRules2026.Rules, q1Applies.Value, gender);
+                    rules, q1Applies.Value, gender);
                 preparedRiders.Add(new(forecast.RiderId, forecast.Name, forecast.CountryCode, gender,
                     forecast.Confidence, FantasyScoring.ExpectedClassifiedPosition(finalDistribution), projection.ExpectedFinalPoints,
                     projection.ExpectedQ1Bonus, projection.ExpectedFantasyPoints));
@@ -175,7 +175,7 @@ public sealed class FantasyPreparationService(
         foreach (var historical in archive.Where(round => salarySnapshots.ContainsKey(round.Id)))
         {
             var salary = EvaluateHistoricalSalary(historical, salarySnapshots[historical.Id], options.Value.Events[historical.Id],
-                salaryObservations.GetValueOrDefault(historical.Id) ?? [], salaryTrainingThrough.GetValueOrDefault(historical.Id), warnings, token);
+                salaryObservations.GetValueOrDefault(historical.Id) ?? [], salaryTrainingThrough.GetValueOrDefault(historical.Id), warnings, token, rules);
             if (salary is not null) backtests.Add(new(historical.Season, historical.Id, "ALL", salary));
         }
         warnings.Add("Absent final riders count as non-scoring only after confirmed Q1 participation and a completed, non-empty final dataset; otherwise missing observations are excluded.");
@@ -184,7 +184,7 @@ public sealed class FantasyPreparationService(
         if (dataRevision != await source.DataRevisionAsync(token, forceRefresh: true))
             throw new InvalidDataException("Race data changed during Fantasy preparation. Retry to prepare a consistent forecast.");
         var prepared = new FantasyPreparedRound(season, roundId, starts, timeProvider.GetUtcNow(), FantasyRacePrediction.EngineVersion,
-            FantasyCalibration.Version, FantasyRules2026.Rules.Version, EventFingerprint(eventOptions),
+            FantasyCalibration.Version, rules.Version, EventFingerprint(eventOptions),
             preparedRiders.OrderByDescending(rider => rider.ExpectedFantasyPoints).ToArray(), warnings.Order(StringComparer.Ordinal).ToArray(), backtests, calibrations, dataRevision, trainingFields,
             AlgorithmCatalog.Current.Fingerprint("fantasy"),
             AlgorithmCatalog.Hash(new { Configuration = AlgorithmCatalog.Current.ConfigurationHash("fantasy"), Event = EventFingerprint(eventOptions), Calibrations = calibrations }),
@@ -210,8 +210,9 @@ public sealed class FantasyPreparationService(
 
     internal static FantasyBacktestMetrics? EvaluateHistoricalSalary(FantasyRoundData round, FantasyPriceSnapshot snapshot,
         FantasyEventOptions? eventOptions, IReadOnlyList<FantasyBacktestRider> observations, DateTimeOffset trainedThrough,
-        HashSet<string> warnings, CancellationToken token = default)
+        HashSet<string> warnings, CancellationToken token = default, FantasyRules? rules = null)
     {
+        rules ??= FantasyRuleCatalog.Default;
         if (!IsHistoricalSalaryContext(round, snapshot, eventOptions)) return null;
         var startList = eventOptions!.StartListRiderIds!.ToHashSet(StringComparer.Ordinal);
         var eligible = snapshot.Riders.Where(rider => rider.RiderId is not null && startList.Contains(rider.RiderId) && !rider.InjuryFlag).ToArray();
@@ -227,7 +228,7 @@ public sealed class FantasyPreparationService(
         }
         var mapped = eligible.Select(rider => byRider[rider.RiderId!][0] with { PinkbikeExternalId = rider.ExternalId }).ToArray();
         var historicalPrices = eligible.Select(rider => new FantasyHistoricalPrice(rider.ExternalId, round.Id, rider.Price, snapshot.FetchedAtUtc)).ToArray();
-        var result = FantasyBacktester.Evaluate(mapped, FantasyRules2026.Rules, round.Id, round.Start, trainedThrough, historicalPrices, cancellationToken: token);
+        var result = FantasyBacktester.Evaluate(mapped, rules, round.Id, round.Start, trainedThrough, historicalPrices, cancellationToken: token);
         if (result.PredictedTeamActualPoints is null)
         {
             warnings.Add($"Round {round.Id}: confirmed historical candidates cannot form a legal salary-constrained lineup.");
@@ -282,7 +283,7 @@ public sealed class FantasyPreparationService(
         return position > 0 ? position : null;
     }
 
-    private static int? ActualPoints(JsonObject final, JsonObject? q1, bool bonusApplies, string gender, HashSet<string> warnings)
+    private static int? ActualPoints(JsonObject final, JsonObject? q1, bool bonusApplies, string gender, HashSet<string> warnings, FantasyRules rules)
     {
         var finalOutcome = Outcome(final);
         if (!finalOutcome.HasValue || bonusApplies && (q1 is null || !Outcome(q1).HasValue)) return null;
@@ -295,6 +296,6 @@ public sealed class FantasyPreparationService(
             return null;
         }
         return FantasyScoring.ActualPoints(finalOutcome, finalStatus, q1Position, bonusApplies,
-            finalStatus == "DNF" ? FantasyQ1Retention.Retained : FantasyQ1Retention.Unverified, FantasyRules2026.Rules, gender);
+            finalStatus == "DNF" ? FantasyQ1Retention.Retained : FantasyQ1Retention.Unverified, rules, gender);
     }
 }

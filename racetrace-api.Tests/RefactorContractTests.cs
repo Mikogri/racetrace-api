@@ -46,7 +46,7 @@ public sealed class RefactorContractTests
         var dto = ResultsService.ToPublicResult(row, "sectors", 1);
         var json = JsonSerializer.SerializeToNode(dto, new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         })!;
         Assert.Equal(123.456m, json["finalTime"]!.GetValue<decimal>());
         Assert.Equal(-1.234m, json["finalGapToBest"]!.GetValue<decimal>());

@@ -1,66 +1,62 @@
-using System.Text.Json.Serialization;
-
 namespace RaceTrace.Api.Models;
 
 // Explicit names preserve the public analytics contract despite the legacy global snake_case policy.
 public sealed record RoundRaceAnalyticsDto(
-    [property: JsonPropertyName("methodVersion")] string MethodVersion,
-    [property: JsonPropertyName("sectorEfficiency")] IReadOnlyList<SectorEfficiencyDto> SectorEfficiency,
+    string MethodVersion,
+    IReadOnlyList<SectorEfficiencyDto> SectorEfficiency,
     ChaosIndexDto Chaos,
     QualiFinalCorrelationDto Correlation,
-    [property: JsonPropertyName("winningMargin")] WinningMarginDto? WinningMargin,
-    [property: JsonPropertyName("runEfficiency")] RunEfficiencyDto? RunEfficiency,
+    WinningMarginDto? WinningMargin,
+    RunEfficiencyDto? RunEfficiency,
     PerformanceDistributionDto Distribution);
 
 public sealed record SectorEfficiencyDto(
-    [property: JsonPropertyName("sectorIndex")] int SectorIndex,
-    [property: JsonPropertyName("ridersCount")] int RidersCount,
-    [property: JsonPropertyName("positionsPerSecond")] decimal? PositionsPerSecond);
+    int SectorIndex,
+    int RidersCount,
+    decimal? PositionsPerSecond);
 public sealed record ChaosComponentDto(
     string Key,
     decimal? Score,
     decimal Weight,
-    [property: JsonPropertyName("sampleSize")] int SampleSize);
+    int SampleSize);
 public sealed record ChaosIndexDto(
     decimal? Score,
     int Starters,
-    [property: JsonPropertyName("dnfCount")] int DnfCount,
-    [property: JsonPropertyName("incidentCount")] int IncidentCount,
+    int DnfCount,
+    int IncidentCount,
     IReadOnlyList<ChaosComponentDto> Components);
 public sealed record CorrelationRiderDto(
-    [property: JsonPropertyName("riderId")] long RiderId,
-    [property: JsonPropertyName("fullName")] string FullName,
-    [property: JsonPropertyName("preFinalPosition")] int PreFinalPosition,
-    [property: JsonPropertyName("finalPosition")] int FinalPosition);
+    long RiderId,
+    string FullName,
+    int PreFinalPosition,
+    int FinalPosition);
 public sealed record QualiFinalCorrelationDto(
-    [property: JsonPropertyName("preFinalSession")] string? PreFinalSession,
+    string? PreFinalSession,
     decimal? Spearman,
     IReadOnlyList<CorrelationRiderDto> Points);
 public sealed record SectorContributionDto(
-    [property: JsonPropertyName("sectorIndex")] int SectorIndex,
-    [property: JsonPropertyName("gapSeconds")] decimal GapSeconds,
-    [property: JsonPropertyName("sharePercent")] decimal? SharePercent);
+    int SectorIndex,
+    decimal GapSeconds,
+    decimal? SharePercent);
 public sealed record WinningMarginDto(
-    [property: JsonPropertyName("winnerId")] long WinnerId,
-    [property: JsonPropertyName("winnerName")] string WinnerName,
-    [property: JsonPropertyName("runnerUpId")] long RunnerUpId,
-    [property: JsonPropertyName("runnerUpName")] string RunnerUpName,
-    [property: JsonPropertyName("marginSeconds")] decimal MarginSeconds,
+    long WinnerId,
+    string WinnerName,
+    long RunnerUpId,
+    string RunnerUpName,
+    decimal MarginSeconds,
     IReadOnlyList<SectorContributionDto> Sectors);
 public sealed record RunEfficiencyDto(
-    [property: JsonPropertyName("riderId")] long RiderId,
-    [property: JsonPropertyName("fullName")] string FullName,
-    [property: JsonPropertyName("sectorsCount")] int SectorsCount,
-    [property: JsonPropertyName("measuredSectors")] int MeasuredSectors,
-    [property: JsonPropertyName("sectorsWon")] int SectorsWon,
-    [property: JsonPropertyName("sectorsTop3")] int SectorsTop3,
-    [property: JsonPropertyName("averageSectorPosition")] decimal? AverageSectorPosition,
-    [property: JsonPropertyName("sectorsFor80PercentGain")] int? SectorsFor80PercentGain)
+    long RiderId,
+    string FullName,
+    int SectorsCount,
+    int MeasuredSectors,
+    int SectorsWon,
+    int SectorsTop3,
+    decimal? AverageSectorPosition,
+    int? SectorsFor80PercentGain)
 {
-    [JsonPropertyName("sectorsWonPercent")]
     public decimal? SectorsWonPercent => MeasuredSectors > 0 ? Math.Round(100m * SectorsWon / MeasuredSectors, 1) : null;
 
-    [JsonPropertyName("sectorsTop3Percent")]
     public decimal? SectorsTop3Percent => MeasuredSectors > 0 ? Math.Round(100m * SectorsTop3 / MeasuredSectors, 1) : null;
 }
 public sealed record PerformanceBinDto(
@@ -68,12 +64,12 @@ public sealed record PerformanceBinDto(
     int To,
     int Count);
 public sealed record PerformanceOutlierDto(
-    [property: JsonPropertyName("riderId")] long RiderId,
-    [property: JsonPropertyName("fullName")] string FullName,
+    long RiderId,
+    string FullName,
     decimal Pace);
 public sealed record PerformanceDistributionDto(
-    [property: JsonPropertyName("ridersCount")] int RidersCount,
-    [property: JsonPropertyName("classifiedCount")] int ClassifiedCount,
+    int RidersCount,
+    int ClassifiedCount,
     decimal? Median,
     IReadOnlyList<PerformanceBinDto> Bins,
     IReadOnlyList<PerformanceOutlierDto> Outliers);

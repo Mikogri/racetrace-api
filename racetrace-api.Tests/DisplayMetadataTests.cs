@@ -65,7 +65,7 @@ public sealed class DisplayMetadataTests
     }
 
     [Fact]
-    public async Task ControllerReturnsCamelCaseDespiteGlobalSnakeCaseSettings()
+    public async Task ControllerReturnsCamelCaseWithApplicationJsonSettings()
     {
         using var handler = new MetadataHandler(Metadata);
         using var http = new HttpClient(handler);
@@ -73,7 +73,7 @@ public sealed class DisplayMetadataTests
         var result = Assert.IsType<OkObjectResult>(await controller.Get(default));
         var json = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         });
 
         Assert.True(json.TryGetProperty("sessionTypes", out var sessions));

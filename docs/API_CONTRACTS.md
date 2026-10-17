@@ -27,7 +27,9 @@ The `--algorithms` mode writes the current catalog's effective parameter values,
 
 ## Compatibility checks
 
-`ApiContractExtensions` aligns OpenAPI names with MVC snake_case defaults while preserving explicit `JsonPropertyName` overrides. Response-only DTO properties are documented as present when the serializer always writes them, including nullable values. Canonical JSON number types are emitted; MVC still accepts numeric strings in request bodies for backward compatibility. Dates remain `date`/`date-time` when the backend declares `DateOnly`/`DateTimeOffset`; arbitrary string dates are not guessed.
+MVC and OpenAPI use the same `camelCase` property policy. DTOs follow C# PascalCase without redundant naming attributes. Dynamic first-party JSON response fields are converted at the HTTP writer boundary without mutating database rows. Dictionary identifiers remain data, not property names. Response-only DTO properties are documented as present when the serializer always writes them, including nullable values. Canonical JSON number types are emitted; MVC still accepts numeric strings in request bodies. Dates remain `date`/`date-time` when the backend declares `DateOnly`/`DateTimeOffset`.
+
+This is a breaking naming change for legacy snake_case HTTP bodies and responses (for example `total_pages` becomes `totalPages`). Administrative PATCH fields use camelCase and are mapped to database columns only in the controller boundary. Existing query aliases, SQL/RPC keys, local seed-file formats and external ChronoRace/Tissot payloads are unchanged. Request JSON nodes are read verbatim; do not rewrite raw provider documents to match the public DTO policy. Deploy the API and regenerated frontend together.
 
 Legacy query parameters read from `Request.Query` are documented in `ApiQueryContracts`, including aliases and CSV string filters. This metadata must be updated alongside parser changes. Parameters with alternative aliases remain individually optional; runtime validation still enforces required combinations and valid ranges. The generator does not replace backend validation.
 

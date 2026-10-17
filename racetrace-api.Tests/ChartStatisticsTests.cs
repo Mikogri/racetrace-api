@@ -59,10 +59,10 @@ public sealed class ChartStatisticsTests
                 ["rounds"] = new JsonObject { ["id"] = id, ["track_id"] = 7 } }
         };
         var rounds = new[] {
-            JsonSerializer.Deserialize<RiderRoundResultDto>("""{"roundId":2,"roundStartDate":"2026-06-01","roundNumber":2,"awardedPoints":20}""")!,
-            JsonSerializer.Deserialize<RiderRoundResultDto>("""{"roundId":1,"roundStartDate":"2026-05-01","roundNumber":1,"awardedPoints":10}""")!
+            JsonSerializer.Deserialize<RiderRoundResultDto>("""{"roundId":2,"roundStartDate":"2026-06-01","roundNumber":2,"awardedPoints":20}""", new JsonSerializerOptions(JsonSerializerDefaults.Web))!,
+            JsonSerializer.Deserialize<RiderRoundResultDto>("""{"roundId":1,"roundStartDate":"2026-05-01","roundNumber":1,"awardedPoints":10}""", new JsonSerializerOptions(JsonSerializerDefaults.Web))!
         };
-        var tracks = new[] { JsonSerializer.Deserialize<RiderTrackStatisticsDto>("""{"trackId":7}""")! };
+        var tracks = new[] { JsonSerializer.Deserialize<RiderTrackStatisticsDto>("""{"trackId":7}""", new JsonSerializerOptions(JsonSerializerDefaults.Web))! };
         var statistics = RiderChartStatistics.Build([
             Result(1, 2, "Q1", "Finished"), Result(2, 4, "Q2", "Classified"),
             Result(3, 1, "Final Run", "Finished"), Result(4, 90, "Q1", "Did not finish"),

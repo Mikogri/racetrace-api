@@ -59,7 +59,7 @@ public sealed class AdminImportController : ControllerBase
             request = JsonSerializer.Deserialize<PdfRoundFormImportRequest>(requestJson, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             }) ?? throw new JsonException();
         }
         catch (JsonException)

@@ -167,7 +167,7 @@ MVC model-binding failures can use `ValidationProblemDetails`, so error response
 
 Validation includes sort allowlists, ascending/descending validation, CSV normalization, numeric/date parsing and pagination limits (default 30, maximum 150 in `QueryValidationService`). Domain-specific validators add constraints such as category compatibility.
 
-Typed DTOs coexist with legacy `JsonObject`/`JsonNode` responses. MVC defaults to snake_case; explicit JSON property attributes preserve established public names. Mappers/adapters bridge nested database JSON, compact transport tuples and typed presentation DTOs. This preserves compatibility but makes contracts harder to infer from a single model folder.
+Typed DTOs and HTTP/OpenAPI use camelCase. Legacy `JsonObject`/`JsonNode` response fields are normalized by an HTTP-only writer; database rows, SQL/RPC keys and raw provider input are not mutated. Administrative camelCase PATCH fields are mapped to database columns at the controller boundary. Mappers/adapters bridge nested database JSON, compact transport tuples and typed presentation DTOs. Dictionary identifiers and private stored formats retain their own contracts.
 
 Key references: [composition](../../racetrace-api/Infrastructure/ServiceCollectionExtensions.cs), [pipeline](../../racetrace-api/Program.cs), [query validation](../../racetrace-api/Services/QueryValidationService.cs), [exceptions](../../racetrace-api/Infrastructure/ApiExceptionMiddleware.cs).
 

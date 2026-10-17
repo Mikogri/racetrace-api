@@ -45,9 +45,9 @@ public sealed class RoundRaceAnalyticsTests
     }
 
     [Fact]
-    public void AnalyticsUsesPublicCamelCaseContractUnderApplicationSnakeCasePolicy()
+    public void AnalyticsUsesPublicCamelCaseApplicationContract()
     {
-        var json = JsonSerializer.SerializeToNode(Calculate(), new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower })!;
+        var json = JsonSerializer.SerializeToNode(Calculate(), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
         Assert.NotNull(json["sectorEfficiency"]);
         Assert.NotNull(json["chaos"]!["dnfCount"]);
         Assert.NotNull(json["correlation"]!["points"]![0]!["riderId"]);

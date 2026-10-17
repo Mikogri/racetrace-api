@@ -30,8 +30,9 @@ public sealed class FantasyService(
         var priceStatus = await prices.GetStatusAsync(season, token);
         var snapshot = priceStatus.Snapshot;
         var warnings = new List<string>();
-        var rules = FantasyRules2026.Rules;
-        if (season != rules.Season) warnings.Add("Official Fantasy scoring has not been configured for this season.");
+        var configuredRules = FantasyRuleCatalog.ForSeason(season);
+        var rules = configuredRules ?? FantasyRuleCatalog.Default;
+        if (configuredRules is null) warnings.Add("Official Fantasy scoring has not been configured for this season.");
         if (snapshot is null) warnings.Add("Pinkbike prices have not been imported. An administrator must synchronize the athlete catalogue.");
         if (priceStatus.LastSyncError is not null) warnings.Add(priceStatus.LastSyncError);
         if (snapshot is not null && priceStatus.IsStale) warnings.Add("Price refresh is overdue. Showing the last successfully imported prices; check current prices on Pinkbike before selecting your team.");
@@ -115,7 +116,7 @@ public sealed class FantasyService(
 
     public static FantasyRulesDto Rules()
     {
-        var rules = FantasyRules2026.Rules;
+        var rules = FantasyRuleCatalog.Default;
         return new(rules.Season, rules.Version, rules.Budget, rules.TeamSize, rules.Men, rules.Women,
             rules.MenFinalPlacementPoints.Keys.Union(rules.WomenFinalPlacementPoints.Keys).Order().Select(position =>
                 new FantasyPlacementDto(position, rules.MenFinalPlacementPoints.TryGetValue(position, out var men) ? men : null,

@@ -7,8 +7,6 @@ namespace RaceTrace.Api.Services;
 
 public sealed class ChronoRaceImportService
 {
-    private const int LookupBatchSize = 100;
-    private const int WriteBatchSize = 500;
     private static readonly HashSet<string> PlannedRoundStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
 		"scheduled",
@@ -18,6 +16,7 @@ public sealed class ChronoRaceImportService
     };
 
     private readonly ISupabaseRestClient _supabase;
+    private readonly RaceTrace.Api.Features.Imports.ChronoRace.ChronoRaceBatchStore _batches;
     private readonly DomainQueryService _domainQueries;
     private readonly IPointAwardService _pointAwards;
     private readonly RoundImageStorageService? _imageStorage;
@@ -29,6 +28,7 @@ public sealed class ChronoRaceImportService
         RoundImageStorageService? imageStorage = null)
     {
         _supabase = supabase;
+        _batches = new(supabase);
         _domainQueries = domainQueries;
         _pointAwards = pointAwards;
         _imageStorage = imageStorage;
@@ -717,7 +717,7 @@ public sealed class ChronoRaceImportService
                 Updated: 0);
         }
 
-        var existingRows = await GetRowsByValuesAsync(
+        var existingRows = await _batches.GetRowsByValuesAsync(
             "riders",
             "*",
             "uci_id",
@@ -733,7 +733,7 @@ public sealed class ChronoRaceImportService
                 existingByUciId.GetValueOrDefault(pair.Key),
                 gender))
             .ToArray();
-        var savedRows = await PostRowsAsync(
+        var savedRows = await _batches.PostRowsAsync(
             "riders",
             payloads,
             onConflict: "uci_id",
@@ -810,12 +810,12 @@ public sealed class ChronoRaceImportService
             return 0;
         }
 
-        await DeleteRowsByValuesAsync(
+        await _batches.DeleteRowsByValuesAsync(
             "time_splits",
             "result_id",
             staleResultIds,
             cancellationToken);
-        await DeleteRowsByValuesAsync(
+        await _batches.DeleteRowsByValuesAsync(
             "results",
             "id",
             staleResultIds,
@@ -864,7 +864,7 @@ public sealed class ChronoRaceImportService
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
-        var existingRows = await GetRowsByValuesAsync(
+        var existingRows = await _batches.GetRowsByValuesAsync(
             "teams",
             "*",
             "code",
@@ -887,7 +887,7 @@ public sealed class ChronoRaceImportService
                 };
             })
             .ToArray();
-        var savedRows = await PostRowsAsync(
+        var savedRows = await _batches.PostRowsAsync(
             "teams",
             payloads,
             onConflict: "code",
@@ -999,7 +999,7 @@ public sealed class ChronoRaceImportService
             return new ResultBatchImport(0, 0, 0, []);
         }
 
-        var savedRows = await PostRowsAsync(
+        var savedRows = await _batches.PostRowsAsync(
             "results",
             pendingByRiderId.Values.Select(pending => pending.Payload).ToArray(),
             onConflict: "session_id,rider_id",
@@ -1046,12 +1046,12 @@ public sealed class ChronoRaceImportService
 
         if (resultIdsWithSplits.Count > 0)
         {
-            await DeleteRowsByValuesAsync(
+            await _batches.DeleteRowsByValuesAsync(
                 "time_splits",
                 "result_id",
                 resultIdsWithSplits,
                 cancellationToken);
-            await PostRowsAsync(
+            await _batches.PostRowsAsync(
                 "time_splits",
                 splitRows,
                 onConflict: null,
@@ -1167,79 +1167,6 @@ public sealed class ChronoRaceImportService
         await _supabase.DeleteAsync("time_splits", new SupabaseQuery("time_splits").Filter("result_id", "eq", resultId), SupabaseRole.Service, cancellationToken);
         await _supabase.PostAsync("time_splits", new JsonArray(rows), SupabaseRole.Service, cancellationToken: cancellationToken);
         return rows.Length;
-    }
-
-    private async Task<IReadOnlyList<JsonObject>> GetRowsByValuesAsync(
-        string table,
-        string select,
-        string column,
-        IEnumerable<string> values,
-        CancellationToken cancellationToken)
-    {
-        var rows = new List<JsonObject>();
-        foreach (var batch in values
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Chunk(LookupBatchSize))
-        {
-            var response = await _supabase.GetAsync(
-                new SupabaseQuery(table)
-                    .Select(select)
-                    .In(column, batch),
-                role: SupabaseRole.Service,
-                cancellationToken: cancellationToken);
-            rows.AddRange(response.Data);
-        }
-
-        return rows;
-    }
-
-    private async Task<IReadOnlyList<JsonObject>> PostRowsAsync(
-        string table,
-        IReadOnlyCollection<JsonObject> rows,
-        string? onConflict,
-        CancellationToken cancellationToken)
-    {
-        if (rows.Count == 0)
-        {
-            return [];
-        }
-
-        var savedRows = new List<JsonObject>();
-        foreach (var batch in rows.Chunk(WriteBatchSize))
-        {
-            var payload = new JsonArray(batch
-                .Select(row => (JsonNode)row.DeepClone())
-                .ToArray());
-            var saved = await _supabase.PostAsync(
-                table,
-                payload,
-                SupabaseRole.Service,
-                onConflict,
-                cancellationToken);
-            savedRows.AddRange(saved);
-        }
-
-        return savedRows;
-    }
-
-    private async Task DeleteRowsByValuesAsync(
-        string table,
-        string column,
-        IEnumerable<string> values,
-        CancellationToken cancellationToken)
-    {
-        foreach (var batch in values
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Chunk(LookupBatchSize))
-        {
-            await _supabase.DeleteAsync(
-                table,
-                new SupabaseQuery(table).In(column, batch),
-                SupabaseRole.Service,
-                cancellationToken);
-        }
     }
 
     private static Dictionary<string, JsonObject> IndexUniqueRows(

@@ -29,7 +29,7 @@ public sealed class AdminDataController : ControllerBase
     [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public IActionResult EditableResources()
     {
-        return Ok(_adminData.EditableResources());
+        return Ok(AdminJsonFields.EditableResources(_adminData.EditableResources()));
     }
 
     [HttpPatch("riders/{riderId:long}")]
@@ -39,7 +39,7 @@ public sealed class AdminDataController : ControllerBase
         [FromBody] JsonObject? patch,
         CancellationToken cancellationToken)
     {
-        return Ok(await _adminData.UpdateRiderAsync(riderId, patch, cancellationToken));
+        return Ok(await _adminData.UpdateRiderAsync(riderId, AdminJsonFields.ToDatabasePatch(patch), cancellationToken));
     }
 
     [HttpPatch("{resource}/{id:long}")]
@@ -50,7 +50,7 @@ public sealed class AdminDataController : ControllerBase
         [FromBody] JsonObject? patch,
         CancellationToken cancellationToken)
     {
-        return Ok(await _adminData.UpdateAsync(resource, id, patch, cancellationToken));
+        return Ok(await _adminData.UpdateAsync(resource, id, AdminJsonFields.ToDatabasePatch(patch), cancellationToken));
     }
 
     [HttpPatch("rounds/{roundId:long}/track")]
@@ -60,7 +60,7 @@ public sealed class AdminDataController : ControllerBase
         [FromBody] JsonObject? patch,
         CancellationToken cancellationToken)
     {
-        return Ok(await _adminData.UpdateRoundTrackAsync(roundId, patch, cancellationToken));
+        return Ok(await _adminData.UpdateRoundTrackAsync(roundId, AdminJsonFields.ToDatabasePatch(patch), cancellationToken));
     }
 
     [HttpPut("rounds/{roundId:long}/image")]

@@ -137,5 +137,5 @@ Nie ma automatycznego udawania, że nowa wersja scoringu 2027 jest taka sama jak
 Testy obejmują pełną punktację, statusy i bonusy, sumowanie EV, spójność rozkładów, brak leakage,
 dokładność optimizera względem brute force i kontrprzykład greedy, mapowania, prawdziwy zapis formatu Pinkbike,
 duplikaty, 403, uszkodzone dane, współbieżne synchronizacje, zachowanie snapshotów,
-warunki dopuszczenia składu i camelCase kontraktów przy globalnej serializacji snake_case.
+warunki dopuszczenia składu i kontrakty camelCase we wspólnej konfiguracji HTTP/OpenAPI.
 Frontend ma testy schematów, sortowania, wartości brakujących i daty rundy ze strefą czasową.

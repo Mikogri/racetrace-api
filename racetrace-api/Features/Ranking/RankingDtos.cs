@@ -1,46 +1,43 @@
-using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
 
 namespace RaceTrace.Api.Models;
 
 public sealed record RankingRiderDto(
     int Position,
-    [property: JsonPropertyName("riderId")] long RiderId,
-    [property: JsonPropertyName("uciId")] string? UciId,
-    [property: JsonPropertyName("firstName")] string? FirstName,
-    [property: JsonPropertyName("lastName")] string? LastName,
-    [property: JsonPropertyName("fullName")] string FullName,
-    [property: JsonPropertyName("countryCode")] string? CountryCode,
-    [property: JsonPropertyName("teamId")] long? TeamId,
-    [property: JsonPropertyName("teamName")] string? TeamName,
-    [property: JsonPropertyName("totalPoints")] decimal TotalPoints,
+    long RiderId,
+    string? UciId,
+    string? FirstName,
+    string? LastName,
+    string FullName,
+    string? CountryCode,
+    long? TeamId,
+    string? TeamName,
+    decimal TotalPoints,
     decimal? Rating,
     decimal? Pace,
     decimal? Consistency,
     decimal Confidence,
-    [property: JsonPropertyName("finalsCount")] int FinalsCount,
-    [property: JsonPropertyName("qualifyingRate")] decimal QualifyingRate,
-    [property: JsonPropertyName("profileImageUrl")] string? ProfileImageUrl)
+    int FinalsCount,
+    decimal QualifyingRate,
+    string? ProfileImageUrl)
 {
-    [JsonPropertyName("consistencyEvidence")]
     public decimal ConsistencyEvidence { get; init; }
 
-    [JsonPropertyName("positionChange")]
     public int? PositionChange { get; init; }
 }
 
 public sealed record RankingSummaryDto(
-    [property: JsonPropertyName("sessionsCount")] int SessionsCount,
-    [property: JsonPropertyName("finalsCount")] int FinalsCount,
-    [property: JsonPropertyName("ridersCount")] int RidersCount);
+    int SessionsCount,
+    int FinalsCount,
+    int RidersCount);
 
 public sealed record RankingResponseDto(
     IReadOnlyList<RankingRiderDto> Items,
     int Page,
-    [property: JsonPropertyName("pageSize")] int PageSize,
-    [property: JsonPropertyName("totalItems")] int TotalItems,
-    [property: JsonPropertyName("totalPages")] int TotalPages,
-    [property: JsonPropertyName("hasPreviousPage")] bool HasPreviousPage,
-    [property: JsonPropertyName("hasNextPage")] bool HasNextPage,
+    int PageSize,
+    int TotalItems,
+    int TotalPages,
+    bool HasPreviousPage,
+    bool HasNextPage,
     RankingSummaryDto Summary,
-    [property: JsonPropertyName("comparisonBasis"), Infrastructure.ApiContractValues("previousRound", "defaultFilters", "previousFilters")] string? ComparisonBasis = null);
+    [property: Infrastructure.ApiContractValues("previousRound", "defaultFilters", "previousFilters")] string? ComparisonBasis = null);

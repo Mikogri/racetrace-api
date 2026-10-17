@@ -94,11 +94,11 @@ public sealed class FantasyServiceTests
     }
 
     [Fact]
-    public async Task PublicContractsKeepCamelCaseWithGlobalSnakeCaseSerialization()
+    public async Task PublicContractsUseCamelCaseSerialization()
     {
         using var fixture = new Fixture("ready");
         await fixture.SeedAsync("ready");
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var json = JsonSerializer.SerializeToElement(await fixture.Service.CurrentAsync(default), options);
         Assert.Equal("p0", json.GetProperty("riders")[0].GetProperty("pinkbikeExternalId").GetString());
         Assert.True(json.TryGetProperty("priceSnapshotId", out _));

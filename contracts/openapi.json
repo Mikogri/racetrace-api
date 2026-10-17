@@ -79,7 +79,7 @@
           "eligible": {
             "type": "boolean"
           },
-          "session_types": {
+          "sessionTypes": {
             "items": {
               "type": "string"
             },
@@ -88,13 +88,13 @@
         },
         "required": [
           "eligible",
-          "session_types"
+          "sessionTypes"
         ],
         "type": "object"
       },
       "ChampionshipProjection": {
         "properties": {
-          "can_change": {
+          "canChange": {
             "type": [
               "null",
               "boolean"
@@ -128,7 +128,7 @@
         "required": [
           "items",
           "lead",
-          "can_change",
+          "canChange",
           "status"
         ],
         "type": "object"
@@ -142,19 +142,19 @@
             "format": "int32",
             "type": "integer"
           },
-          "rider_id": {
+          "riderId": {
             "type": [
               "null",
               "string"
             ]
           },
-          "uci_id": {
+          "uciId": {
             "type": "string"
           }
         },
         "required": [
-          "rider_id",
-          "uci_id",
+          "riderId",
+          "uciId",
           "name",
           "points"
         ],
@@ -182,7 +182,7 @@
             ],
             "type": "string"
           },
-          "uci_id": {
+          "uciId": {
             "type": [
               "null",
               "string"
@@ -190,7 +190,7 @@
           }
         },
         "required": [
-          "uci_id",
+          "uciId",
           "name",
           "position",
           "state"
@@ -208,12 +208,12 @@
             },
             "type": "array"
           },
-          "session_type": {
+          "sessionType": {
             "type": "string"
           }
         },
         "required": [
-          "session_type",
+          "sessionType",
           "complete",
           "riders"
         ],
@@ -287,13 +287,13 @@
       },
       "ChronoRaceImportRequest": {
         "properties": {
-          "category_code": {
+          "categoryCode": {
             "type": "string"
           },
-          "chronorace_json": {
+          "chronoraceJson": {
             "$ref": "#/components/schemas/JsonObject"
           },
-          "competition_class": {
+          "competitionClass": {
             "oneOf": [
               {
                 "type": "null"
@@ -326,38 +326,38 @@
         "required": [
           "round",
           "track",
-          "competition_class",
+          "competitionClass",
           "condition",
-          "category_code",
+          "categoryCode",
           "session",
-          "chronorace_json"
+          "chronoraceJson"
         ],
         "type": "object"
       },
       "ChronoRaceImportResponse": {
         "properties": {
-          "points_recalculated": {
+          "pointsRecalculated": {
             "type": "boolean"
           },
-          "results_upserted": {
+          "resultsUpserted": {
             "format": "int32",
             "type": "integer"
           },
-          "riders_created": {
+          "ridersCreated": {
             "format": "int32",
             "type": "integer"
           },
-          "riders_updated": {
+          "ridersUpdated": {
             "format": "int32",
             "type": "integer"
           },
-          "round_id": {
+          "roundId": {
             "type": "string"
           },
-          "session_id": {
+          "sessionId": {
             "type": "string"
           },
-          "splits_upserted": {
+          "splitsUpserted": {
             "format": "int32",
             "type": "integer"
           },
@@ -369,23 +369,23 @@
           }
         },
         "required": [
-          "round_id",
-          "session_id",
-          "riders_created",
-          "riders_updated",
-          "results_upserted",
-          "splits_upserted",
-          "points_recalculated",
+          "roundId",
+          "sessionId",
+          "ridersCreated",
+          "ridersUpdated",
+          "resultsUpserted",
+          "splitsUpserted",
+          "pointsRecalculated",
           "warnings"
         ],
         "type": "object"
       },
       "ChronoRaceRoundFormCategoryPayload": {
         "properties": {
-          "category_code": {
+          "categoryCode": {
             "type": "string"
           },
-          "chronorace_json": {
+          "chronoraceJson": {
             "oneOf": [
               {
                 "type": "null"
@@ -395,13 +395,13 @@
               }
             ]
           },
-          "chronorace_url": {
+          "chronoraceUrl": {
             "type": [
               "null",
               "string"
             ]
           },
-          "result_json": {
+          "resultJson": {
             "oneOf": [
               {
                 "type": "null"
@@ -411,7 +411,7 @@
               }
             ]
           },
-          "result_url": {
+          "resultUrl": {
             "type": [
               "null",
               "string"
@@ -419,63 +419,63 @@
           }
         },
         "required": [
-          "category_code",
-          "chronorace_url",
-          "chronorace_json"
+          "categoryCode",
+          "chronoraceUrl",
+          "chronoraceJson"
         ],
         "type": "object"
       },
       "ChronoRaceRoundFormImportItemResponse": {
         "properties": {
-          "category_code": {
+          "categoryCode": {
             "type": "string"
           },
-          "chronorace_url": {
+          "chronoraceUrl": {
             "type": [
               "null",
               "string"
             ]
           },
-          "points_recalculated": {
+          "pointsRecalculated": {
             "type": "boolean"
           },
-          "resolved_chronorace_json_url": {
+          "resolvedChronoraceJsonUrl": {
             "type": [
               "null",
               "string"
             ]
           },
-          "results_upserted": {
+          "resultsUpserted": {
             "format": "int32",
             "type": "integer"
           },
-          "riders_created": {
+          "ridersCreated": {
             "format": "int32",
             "type": "integer"
           },
-          "riders_updated": {
+          "ridersUpdated": {
             "format": "int32",
             "type": "integer"
           },
-          "round_id": {
+          "roundId": {
             "type": [
               "null",
               "string"
             ]
           },
-          "session_id": {
+          "sessionId": {
             "type": [
               "null",
               "string"
             ]
           },
-          "session_name": {
+          "sessionName": {
             "type": "string"
           },
-          "session_type": {
+          "sessionType": {
             "type": "string"
           },
-          "splits_upserted": {
+          "splitsUpserted": {
             "format": "int32",
             "type": "integer"
           },
@@ -487,25 +487,25 @@
           }
         },
         "required": [
-          "session_name",
-          "session_type",
-          "category_code",
-          "chronorace_url",
-          "resolved_chronorace_json_url",
-          "round_id",
-          "session_id",
-          "riders_created",
-          "riders_updated",
-          "results_upserted",
-          "splits_upserted",
-          "points_recalculated",
+          "sessionName",
+          "sessionType",
+          "categoryCode",
+          "chronoraceUrl",
+          "resolvedChronoraceJsonUrl",
+          "roundId",
+          "sessionId",
+          "ridersCreated",
+          "ridersUpdated",
+          "resultsUpserted",
+          "splitsUpserted",
+          "pointsRecalculated",
           "warnings"
         ],
         "type": "object"
       },
       "ChronoRaceRoundFormImportRequest": {
         "properties": {
-          "competition_class": {
+          "competitionClass": {
             "oneOf": [
               {
                 "type": "null"
@@ -551,7 +551,7 @@
         "required": [
           "round",
           "track",
-          "competition_class",
+          "competitionClass",
           "condition",
           "sessions"
         ],
@@ -559,11 +559,11 @@
       },
       "ChronoRaceRoundFormImportResponse": {
         "properties": {
-          "categories_imported": {
+          "categoriesImported": {
             "format": "int32",
             "type": "integer"
           },
-          "image_upserted": {
+          "imageUpserted": {
             "type": "boolean"
           },
           "items": {
@@ -572,33 +572,33 @@
             },
             "type": "array"
           },
-          "points_recalculated": {
+          "pointsRecalculated": {
             "format": "int32",
             "type": "integer"
           },
-          "results_upserted": {
+          "resultsUpserted": {
             "format": "int32",
             "type": "integer"
           },
-          "riders_created": {
+          "ridersCreated": {
             "format": "int32",
             "type": "integer"
           },
-          "riders_updated": {
+          "ridersUpdated": {
             "format": "int32",
             "type": "integer"
           },
-          "round_id": {
+          "roundId": {
             "type": [
               "null",
               "string"
             ]
           },
-          "sessions_imported": {
+          "sessionsImported": {
             "format": "int32",
             "type": "integer"
           },
-          "splits_upserted": {
+          "splitsUpserted": {
             "format": "int32",
             "type": "integer"
           },
@@ -610,17 +610,17 @@
           }
         },
         "required": [
-          "round_id",
-          "sessions_imported",
-          "categories_imported",
-          "riders_created",
-          "riders_updated",
-          "results_upserted",
-          "splits_upserted",
-          "points_recalculated",
+          "roundId",
+          "sessionsImported",
+          "categoriesImported",
+          "ridersCreated",
+          "ridersUpdated",
+          "resultsUpserted",
+          "splitsUpserted",
+          "pointsRecalculated",
           "items",
           "warnings",
-          "image_upserted"
+          "imageUpserted"
         ],
         "type": "object"
       },
@@ -645,14 +645,14 @@
           "name": {
             "type": "string"
           },
-          "session_date": {
+          "sessionDate": {
             "format": "date",
             "type": [
               "null",
               "string"
             ]
           },
-          "session_type": {
+          "sessionType": {
             "type": "string"
           },
           "status": {
@@ -664,8 +664,8 @@
         },
         "required": [
           "name",
-          "session_type",
-          "session_date",
+          "sessionType",
+          "sessionDate",
           "status",
           "condition",
           "categories"
@@ -674,7 +674,7 @@
       },
       "ChronoRaceSessionReimportRequest": {
         "properties": {
-          "chronorace_json": {
+          "chronoraceJson": {
             "oneOf": [
               {
                 "type": "null"
@@ -684,13 +684,13 @@
               }
             ]
           },
-          "chronorace_url": {
+          "chronoraceUrl": {
             "type": [
               "null",
               "string"
             ]
           },
-          "result_json": {
+          "resultJson": {
             "oneOf": [
               {
                 "type": "null"
@@ -702,14 +702,14 @@
           }
         },
         "required": [
-          "chronorace_url",
-          "chronorace_json"
+          "chronoraceUrl",
+          "chronoraceJson"
         ],
         "type": "object"
       },
       "ChronoRaceSessionReimportResponse": {
         "properties": {
-          "chronorace_url": {
+          "chronoraceUrl": {
             "type": [
               "null",
               "string"
@@ -718,13 +718,13 @@
           "import": {
             "$ref": "#/components/schemas/ChronoRaceImportResponse"
           },
-          "resolved_chronorace_json_url": {
+          "resolvedChronoraceJsonUrl": {
             "type": [
               "null",
               "string"
             ]
           },
-          "session_id": {
+          "sessionId": {
             "type": "string"
           },
           "warnings": {
@@ -735,9 +735,9 @@
           }
         },
         "required": [
-          "session_id",
-          "chronorace_url",
-          "resolved_chronorace_json_url",
+          "sessionId",
+          "chronoraceUrl",
+          "resolvedChronoraceJsonUrl",
           "import",
           "warnings"
         ],
@@ -1664,18 +1664,18 @@
       },
       "FantasyBacktestMetrics": {
         "properties": {
-          "mean_absolute_error": {
+          "meanAbsoluteError": {
             "format": "double",
             "type": "number"
           },
-          "oracle_actual_points": {
+          "oracleActualPoints": {
             "format": "double",
             "type": [
               "null",
               "number"
             ]
           },
-          "predicted_team_actual_points": {
+          "predictedTeamActualPoints": {
             "format": "double",
             "type": [
               "null",
@@ -1689,42 +1689,42 @@
               "number"
             ]
           },
-          "rider_count": {
+          "riderCount": {
             "format": "int32",
             "type": "integer"
           },
-          "root_mean_squared_error": {
+          "rootMeanSquaredError": {
             "format": "double",
             "type": "number"
           },
-          "salary_optimization_unavailable_reason": {
+          "salaryOptimizationUnavailableReason": {
             "type": [
               "null",
               "string"
             ]
           },
-          "spearman_rank_correlation": {
+          "spearmanRankCorrelation": {
             "format": "double",
             "type": [
               "null",
               "number"
             ]
           },
-          "top_k_recall": {
+          "topKRecall": {
             "format": "double",
             "type": "number"
           }
         },
         "required": [
-          "rider_count",
-          "mean_absolute_error",
-          "root_mean_squared_error",
-          "spearman_rank_correlation",
-          "top_k_recall",
-          "predicted_team_actual_points",
-          "oracle_actual_points",
+          "riderCount",
+          "meanAbsoluteError",
+          "rootMeanSquaredError",
+          "spearmanRankCorrelation",
+          "topKRecall",
+          "predictedTeamActualPoints",
+          "oracleActualPoints",
           "regret",
-          "salary_optimization_unavailable_reason"
+          "salaryOptimizationUnavailableReason"
         ],
         "type": "object"
       },
@@ -1939,21 +1939,21 @@
             "format": "double",
             "type": "number"
           },
-          "country_code": {
+          "countryCode": {
             "type": [
               "null",
               "string"
             ]
           },
-          "expected_fantasy_points": {
+          "expectedFantasyPoints": {
             "format": "double",
             "type": "number"
           },
-          "expected_final_points": {
+          "expectedFinalPoints": {
             "format": "double",
             "type": "number"
           },
-          "expected_q1_bonus": {
+          "expectedQ1Bonus": {
             "format": "double",
             "type": "number"
           },
@@ -1963,27 +1963,27 @@
           "name": {
             "type": "string"
           },
-          "predicted_position": {
+          "predictedPosition": {
             "format": "double",
             "type": [
               "null",
               "number"
             ]
           },
-          "rider_id": {
+          "riderId": {
             "type": "string"
           }
         },
         "required": [
-          "rider_id",
+          "riderId",
           "name",
-          "country_code",
+          "countryCode",
           "gender",
           "confidence",
-          "predicted_position",
-          "expected_final_points",
-          "expected_q1_bonus",
-          "expected_fantasy_points"
+          "predictedPosition",
+          "expectedFinalPoints",
+          "expectedQ1Bonus",
+          "expectedFantasyPoints"
         ],
         "type": "object"
       },
@@ -1995,7 +1995,7 @@
             },
             "type": "array"
           },
-          "calculation_fingerprint": {
+          "calculationFingerprint": {
             "type": [
               "null",
               "string"
@@ -2010,36 +2010,36 @@
               "object"
             ]
           },
-          "configuration_hash": {
+          "configurationHash": {
             "type": [
               "null",
               "string"
             ]
           },
-          "data_revision": {
+          "dataRevision": {
             "type": [
               "null",
               "string"
             ]
           },
-          "engine_version": {
+          "engineVersion": {
             "type": "string"
           },
-          "event_fingerprint": {
+          "eventFingerprint": {
             "type": "string"
           },
-          "prediction_as_of": {
+          "predictionAsOf": {
             "format": "date-time",
             "type": [
               "null",
               "string"
             ]
           },
-          "prepared_at_utc": {
+          "preparedAtUtc": {
             "format": "date-time",
             "type": "string"
           },
-          "projection_version": {
+          "projectionVersion": {
             "type": "string"
           },
           "riders": {
@@ -2048,42 +2048,42 @@
             },
             "type": "array"
           },
-          "round_id": {
+          "roundId": {
             "type": "string"
           },
-          "round_start_utc": {
+          "roundStartUtc": {
             "format": "date-time",
             "type": "string"
           },
-          "rules_version": {
+          "rulesVersion": {
             "type": "string"
           },
           "season": {
             "format": "int32",
             "type": "integer"
           },
-          "simulation_iterations": {
+          "simulationIterations": {
             "format": "int32",
             "type": [
               "null",
               "integer"
             ]
           },
-          "simulation_seed": {
+          "simulationSeed": {
             "format": "int32",
             "type": [
               "null",
               "integer"
             ]
           },
-          "training_data_cutoff": {
+          "trainingDataCutoff": {
             "format": "date-time",
             "type": [
               "null",
               "string"
             ]
           },
-          "training_fields": {
+          "trainingFields": {
             "items": {
               "$ref": "#/components/schemas/FantasyTrainingField"
             },
@@ -2101,25 +2101,25 @@
         },
         "required": [
           "season",
-          "round_id",
-          "round_start_utc",
-          "prepared_at_utc",
-          "engine_version",
-          "projection_version",
-          "rules_version",
-          "event_fingerprint",
+          "roundId",
+          "roundStartUtc",
+          "preparedAtUtc",
+          "engineVersion",
+          "projectionVersion",
+          "rulesVersion",
+          "eventFingerprint",
           "riders",
           "warnings",
           "backtests",
           "calibrations",
-          "data_revision",
-          "training_fields",
-          "calculation_fingerprint",
-          "configuration_hash",
-          "training_data_cutoff",
-          "prediction_as_of",
-          "simulation_seed",
-          "simulation_iterations"
+          "dataRevision",
+          "trainingFields",
+          "calculationFingerprint",
+          "configurationHash",
+          "trainingDataCutoff",
+          "predictionAsOf",
+          "simulationSeed",
+          "simulationIterations"
         ],
         "type": "object"
       },
@@ -2268,7 +2268,7 @@
           "metrics": {
             "$ref": "#/components/schemas/FantasyBacktestMetrics"
           },
-          "round_id": {
+          "roundId": {
             "type": "string"
           },
           "year": {
@@ -2278,7 +2278,7 @@
         },
         "required": [
           "year",
-          "round_id",
+          "roundId",
           "category",
           "metrics"
         ],
@@ -2388,7 +2388,7 @@
             "format": "double",
             "type": "number"
           },
-          "empirical_probabilities": {
+          "empiricalProbabilities": {
             "additionalProperties": {
               "format": "double",
               "type": "number"
@@ -2403,17 +2403,17 @@
             "format": "int32",
             "type": "integer"
           },
-          "trained_through_utc": {
+          "trainedThroughUtc": {
             "format": "date-time",
             "type": "string"
           }
         },
         "required": [
           "blend",
-          "empirical_probabilities",
+          "empiricalProbabilities",
           "samples",
           "events",
-          "trained_through_utc"
+          "trainedThroughUtc"
         ],
         "type": "object"
       },
@@ -2422,29 +2422,29 @@
           "context": {
             "type": "string"
           },
-          "fetched_at_utc": {
+          "fetchedAtUtc": {
             "format": "date-time",
             "type": "string"
           },
           "gender": {
             "type": "string"
           },
-          "rider_ids": {
+          "riderIds": {
             "items": {
               "type": "string"
             },
             "type": "array"
           },
-          "source_url": {
+          "sourceUrl": {
             "type": "string"
           }
         },
         "required": [
           "gender",
           "context",
-          "source_url",
-          "fetched_at_utc",
-          "rider_ids"
+          "sourceUrl",
+          "fetchedAtUtc",
+          "riderIds"
         ],
         "type": "object"
       },
@@ -2563,7 +2563,7 @@
               "integer"
             ]
           },
-          "is_dry": {
+          "isDry": {
             "type": [
               "null",
               "boolean"
@@ -2579,35 +2579,35 @@
         "required": [
           "id",
           "name",
-          "is_dry"
+          "isDry"
         ],
         "type": "object"
       },
       "ImportRoundImagePayload": {
         "properties": {
-          "alt_text": {
+          "altText": {
             "type": [
               "null",
               "string"
             ]
           },
-          "file_name": {
+          "fileName": {
             "type": [
               "null",
               "string"
             ]
           },
-          "height_px": {
+          "heightPx": {
             "format": "int32",
             "type": [
               "null",
               "integer"
             ]
           },
-          "image_base64": {
+          "imageBase64": {
             "type": "string"
           },
-          "width_px": {
+          "widthPx": {
             "format": "int32",
             "type": [
               "null",
@@ -2616,55 +2616,55 @@
           }
         },
         "required": [
-          "image_base64",
-          "file_name",
-          "alt_text",
-          "width_px",
-          "height_px"
+          "imageBase64",
+          "fileName",
+          "altText",
+          "widthPx",
+          "heightPx"
         ],
         "type": "object"
       },
       "ImportRoundPayload": {
         "properties": {
-          "competition_class_code": {
+          "competitionClassCode": {
             "type": [
               "null",
               "string"
             ]
           },
-          "competition_class_id": {
+          "competitionClassId": {
             "format": "int64",
             "type": [
               "null",
               "integer"
             ]
           },
-          "context_name": {
+          "contextName": {
             "type": "string"
           },
-          "end_date": {
+          "endDate": {
             "format": "date-time",
             "type": [
               "null",
               "string"
             ]
           },
-          "is_season_final_round": {
+          "isSeasonFinalRound": {
             "default": false,
             "type": "boolean"
           },
-          "round_number": {
+          "roundNumber": {
             "format": "int32",
             "type": [
               "null",
               "integer"
             ]
           },
-          "season_year": {
+          "seasonYear": {
             "format": "int32",
             "type": "integer"
           },
-          "start_date": {
+          "startDate": {
             "format": "date-time",
             "type": [
               "null",
@@ -2679,17 +2679,17 @@
           }
         },
         "required": [
-          "context_name",
-          "season_year",
-          "round_number",
-          "start_date",
-          "end_date"
+          "contextName",
+          "seasonYear",
+          "roundNumber",
+          "startDate",
+          "endDate"
         ],
         "type": "object"
       },
       "ImportSessionPayload": {
         "properties": {
-          "chronorace_url": {
+          "chronoraceUrl": {
             "type": [
               "null",
               "string"
@@ -2698,14 +2698,14 @@
           "name": {
             "type": "string"
           },
-          "session_date": {
+          "sessionDate": {
             "format": "date",
             "type": [
               "null",
               "string"
             ]
           },
-          "session_type": {
+          "sessionType": {
             "type": "string"
           },
           "status": {
@@ -2717,28 +2717,28 @@
         },
         "required": [
           "name",
-          "session_type",
-          "session_date",
+          "sessionType",
+          "sessionDate",
           "status"
         ],
         "type": "object"
       },
       "ImportTrackPayload": {
         "properties": {
-          "avg_slope": {
+          "avgSlope": {
             "format": "double",
             "type": [
               "null",
               "number"
             ]
           },
-          "country_code": {
+          "countryCode": {
             "type": [
               "null",
               "string"
             ]
           },
-          "length_m": {
+          "lengthM": {
             "format": "int32",
             "type": [
               "null",
@@ -2755,9 +2755,9 @@
         "required": [
           "name",
           "venue",
-          "country_code",
-          "length_m",
-          "avg_slope"
+          "countryCode",
+          "lengthM",
+          "avgSlope"
         ],
         "type": "object"
       },
@@ -2812,7 +2812,7 @@
             "format": "int32",
             "type": "integer"
           },
-          "total_pages": {
+          "totalPages": {
             "format": "int32",
             "type": "integer"
           }
@@ -2821,7 +2821,7 @@
           "page",
           "limit",
           "total",
-          "total_pages"
+          "totalPages"
         ],
         "type": "object"
       },
@@ -2909,40 +2909,40 @@
       },
       "PlannedRoundCreateRequest": {
         "properties": {
-          "category_codes": {
+          "categoryCodes": {
             "items": {
               "type": "string"
             },
             "type": "array"
           },
-          "competition_class_code": {
+          "competitionClassCode": {
             "type": "string"
           },
-          "competition_class_id": {
+          "competitionClassId": {
             "format": "int64",
             "type": "integer"
           },
-          "competition_class_name": {
+          "competitionClassName": {
             "type": "string"
           },
-          "competition_class_priority": {
+          "competitionClassPriority": {
             "format": "int32",
             "type": [
               "null",
               "integer"
             ]
           },
-          "condition_id": {
+          "conditionId": {
             "format": "int32",
             "type": "integer"
           },
-          "context_name": {
+          "contextName": {
             "type": [
               "null",
               "string"
             ]
           },
-          "end_date": {
+          "endDate": {
             "format": "date-time",
             "type": "string"
           },
@@ -2956,22 +2956,22 @@
               }
             ]
           },
-          "is_season_final_round": {
+          "isSeasonFinalRound": {
             "default": false,
             "type": "boolean"
           },
-          "round_number": {
+          "roundNumber": {
             "format": "int32",
             "type": [
               "null",
               "integer"
             ]
           },
-          "season_year": {
+          "seasonYear": {
             "format": "int32",
             "type": "integer"
           },
-          "start_date": {
+          "startDate": {
             "format": "date-time",
             "type": "string"
           },
@@ -2988,7 +2988,7 @@
               }
             ]
           },
-          "track_id": {
+          "trackId": {
             "format": "int64",
             "type": [
               "null",
@@ -2997,49 +2997,49 @@
           }
         },
         "required": [
-          "season_year",
-          "round_number",
-          "start_date",
-          "end_date",
+          "seasonYear",
+          "roundNumber",
+          "startDate",
+          "endDate",
           "status",
-          "competition_class_id",
-          "competition_class_code",
-          "competition_class_name",
-          "competition_class_priority",
-          "track_id",
+          "competitionClassId",
+          "competitionClassCode",
+          "competitionClassName",
+          "competitionClassPriority",
+          "trackId",
           "track",
-          "condition_id",
-          "category_codes"
+          "conditionId",
+          "categoryCodes"
         ],
         "type": "object"
       },
       "PlannedRoundCreateResponse": {
         "properties": {
-          "category_codes": {
+          "categoryCodes": {
             "items": {
               "type": "string"
             },
             "type": "array"
           },
-          "image_upserted": {
+          "imageUpserted": {
             "type": "boolean"
           },
-          "round_id": {
+          "roundId": {
             "type": "string"
           },
           "status": {
             "type": "string"
           },
-          "track_id": {
+          "trackId": {
             "type": "string"
           }
         },
         "required": [
-          "round_id",
+          "roundId",
           "status",
-          "track_id",
-          "category_codes",
-          "image_upserted"
+          "trackId",
+          "categoryCodes",
+          "imageUpserted"
         ],
         "type": "object"
       },
@@ -3231,7 +3231,7 @@
       },
       "PointsRecalculateRequest": {
         "properties": {
-          "category_code": {
+          "categoryCode": {
             "type": [
               "null",
               "string"
@@ -3243,14 +3243,14 @@
               "string"
             ]
           },
-          "season_year": {
+          "seasonYear": {
             "format": "int32",
             "type": [
               "null",
               "integer"
             ]
           },
-          "session_id": {
+          "sessionId": {
             "type": [
               "null",
               "string"
@@ -3258,9 +3258,9 @@
           }
         },
         "required": [
-          "session_id",
-          "season_year",
-          "category_code",
+          "sessionId",
+          "seasonYear",
+          "categoryCode",
           "scope"
         ],
         "type": "object"
@@ -4032,19 +4032,19 @@
       },
       "RiderProfileImageImportResponse": {
         "properties": {
-          "files_processed": {
+          "filesProcessed": {
             "format": "int32",
             "type": "integer"
           },
-          "images_found": {
+          "imagesFound": {
             "format": "int32",
             "type": "integer"
           },
-          "invalid_urls": {
+          "invalidUrls": {
             "format": "int32",
             "type": "integer"
           },
-          "riders_updated": {
+          "ridersUpdated": {
             "format": "int32",
             "type": "integer"
           },
@@ -4052,7 +4052,7 @@
             "format": "int32",
             "type": "integer"
           },
-          "unmatched_riders": {
+          "unmatchedRiders": {
             "format": "int32",
             "type": "integer"
           },
@@ -4064,12 +4064,12 @@
           }
         },
         "required": [
-          "files_processed",
-          "images_found",
-          "riders_updated",
+          "filesProcessed",
+          "imagesFound",
+          "ridersUpdated",
           "unchanged",
-          "unmatched_riders",
-          "invalid_urls",
+          "unmatchedRiders",
+          "invalidUrls",
           "warnings"
         ],
         "type": "object"
@@ -5809,29 +5809,29 @@
       },
       "UciMtbWorldSeriesSupplementResponse": {
         "properties": {
-          "matched_results": {
+          "matchedResults": {
             "format": "int32",
             "type": "integer"
           },
-          "points_recalculated": {
+          "pointsRecalculated": {
             "type": "boolean"
           },
-          "results_updated": {
+          "resultsUpdated": {
             "format": "int32",
             "type": "integer"
           },
-          "session_id": {
+          "sessionId": {
             "type": "string"
           },
-          "skipped_results": {
+          "skippedResults": {
             "format": "int32",
             "type": "integer"
           },
-          "source_results": {
+          "sourceResults": {
             "format": "int32",
             "type": "integer"
           },
-          "splits_upserted": {
+          "splitsUpserted": {
             "format": "int32",
             "type": "integer"
           },
@@ -5843,13 +5843,13 @@
           }
         },
         "required": [
-          "session_id",
-          "source_results",
-          "matched_results",
-          "results_updated",
-          "splits_upserted",
-          "skipped_results",
-          "points_recalculated",
+          "sessionId",
+          "sourceResults",
+          "matchedResults",
+          "resultsUpdated",
+          "splitsUpserted",
+          "skippedResults",
+          "pointsRecalculated",
           "warnings"
         ],
         "type": "object"

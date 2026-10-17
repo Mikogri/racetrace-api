@@ -6,7 +6,12 @@ namespace RaceTrace.Api.Features.Metadata;
 
 public sealed class DisplayMetadataService(ISupabaseRestClient client)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { RespectNullableAnnotations = true };
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = true,
+        PropertyNameCaseInsensitive = false,
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict
+    };
 
     public async Task<DisplayMetadataDto> GetAsync(CancellationToken cancellationToken)
     {

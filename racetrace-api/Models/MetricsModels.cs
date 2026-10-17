@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 
 namespace RaceTrace.Api.Models;
 
@@ -43,10 +42,8 @@ public sealed record RiderMetricsContext(
 
 public sealed record RiderPerformanceMetricValues(
     decimal? Rating,
-    [property: JsonPropertyName("raw_rating")]
     decimal? RawRating,
     decimal? Pace,
-    [property: JsonPropertyName("raw_pace")]
     decimal? RawPace,
     decimal PaceConfidence,
     int PaceUsedSessions,
@@ -55,48 +52,33 @@ public sealed record RiderPerformanceMetricValues(
     int ConsistencyUsedRuns,
     int ConsistencyUsedSectors)
 {
-    [JsonPropertyName("consistency_evidence")]
     public decimal ConsistencyEvidence => ConsistencyConfidence;
 
-    [JsonPropertyName("pace_confidence_status")]
     public string PaceConfidenceStatus { get; init; } = "Low";
 
-    [JsonPropertyName("pace_used_finals")]
     public int PaceUsedFinals { get; init; }
 
-    [JsonPropertyName("pace_total_evidence")]
     public decimal PaceTotalEvidence { get; init; }
 
-    [JsonPropertyName("pace_final_evidence")]
     public decimal PaceFinalEvidence { get; init; }
 
-    [JsonPropertyName("result_score")]
     public decimal? ResultScore { get; init; }
 
-    [JsonPropertyName("result_score_confidence")]
     public decimal ResultScoreConfidence { get; init; }
 
-    [JsonPropertyName("result_score_used_sessions")]
     public int ResultScoreUsedSessions { get; init; }
 }
 
 public sealed record RiderMetricValues(
     decimal? Rating,
-    [property: JsonPropertyName("raw_rating")]
     decimal? RawRating,
     decimal? Pace,
-    [property: JsonPropertyName("raw_pace")]
     decimal? RawPace,
-    [property: JsonPropertyName("pace_confidence")]
     decimal PaceConfidence,
-    [property: JsonPropertyName("pace_used_sessions")]
     int PaceUsedSessions,
     decimal? Consistency,
-    [property: JsonPropertyName("consistency_confidence")]
     decimal ConsistencyConfidence,
-    [property: JsonPropertyName("consistency_used_runs")]
     int ConsistencyUsedRuns,
-    [property: JsonPropertyName("consistency_used_sectors")]
     int ConsistencyUsedSectors,
     decimal HighestRating,
     decimal Points,
@@ -117,27 +99,19 @@ public sealed record RiderMetricValues(
     JsonObject? BestResult,
     decimal? BestSpeed)
 {
-    [JsonPropertyName("consistency_evidence")]
     public decimal ConsistencyEvidence => ConsistencyConfidence;
 
-    [JsonPropertyName("pace_confidence_status")]
     public string PaceConfidenceStatus { get; init; } = "Low";
 
-    [JsonPropertyName("pace_used_finals")]
     public int PaceUsedFinals { get; init; }
 
-    [JsonPropertyName("pace_total_evidence")]
     public decimal PaceTotalEvidence { get; init; }
 
-    [JsonPropertyName("pace_final_evidence")]
     public decimal PaceFinalEvidence { get; init; }
 
-    [JsonPropertyName("result_score")]
     public decimal? ResultScore { get; init; }
 
-    [JsonPropertyName("result_score_confidence")]
     public decimal ResultScoreConfidence { get; init; }
 
-    [JsonPropertyName("result_score_used_sessions")]
     public int ResultScoreUsedSessions { get; init; }
 }

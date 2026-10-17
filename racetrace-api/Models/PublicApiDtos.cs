@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
 
 namespace RaceTrace.Api.Models;
@@ -6,11 +5,11 @@ namespace RaceTrace.Api.Models;
 public sealed record PublicPagedResponse<T>(
     IReadOnlyList<T> Items,
     int Page,
-    [property: JsonPropertyName("pageSize")] int PageSize,
-    [property: JsonPropertyName("totalItems")] int TotalItems,
-    [property: JsonPropertyName("totalPages")] int TotalPages,
-    [property: JsonPropertyName("hasPreviousPage")] bool HasPreviousPage,
-    [property: JsonPropertyName("hasNextPage")] bool HasNextPage)
+    int PageSize,
+    int TotalItems,
+    int TotalPages,
+    bool HasPreviousPage,
+    bool HasNextPage)
 {
     public static PublicPagedResponse<T> Create(
         IReadOnlyList<T> items,
@@ -36,10 +35,10 @@ public sealed record ConditionDto(
     string? Name);
 
 public sealed record TrackFilterOptionDto(
-    [property: JsonPropertyName("trackId")] long TrackId,
-    [property: JsonPropertyName("trackName")] string? TrackName,
-    [property: JsonPropertyName("venueId")] long? VenueId,
-    [property: JsonPropertyName("venueName")] string? VenueName,
-    [property: JsonPropertyName("countryCode")] string? CountryCode,
-    [property: JsonPropertyName("lengthM")] int? LengthM,
-    [property: JsonPropertyName("avgSlope")] decimal? AvgSlope);
+    long TrackId,
+    string? TrackName,
+    long? VenueId,
+    string? VenueName,
+    string? CountryCode,
+    int? LengthM,
+    decimal? AvgSlope);

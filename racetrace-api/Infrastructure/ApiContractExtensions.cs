@@ -19,8 +19,10 @@ public static class ApiContractExtensions
         // OpenAPI uses HTTP JSON options, whereas controllers use MVC JSON options.
         services.ConfigureHttpJsonOptions(options =>
         {
-            options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
-            options.SerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower;
+            options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+            options.SerializerOptions.DictionaryKeyPolicy = null;
+            // Keep built-in JsonNode metadata so OpenAPI retains array items and nullable inputs.
+            // MVC alone needs the dynamic-response writer; minimal HTTP handlers return typed errors.
         });
         services.AddOpenApi(options =>
         {

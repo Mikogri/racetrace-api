@@ -34,7 +34,10 @@ public sealed class OpenApiContractTests
             using var client = new HttpClient();
             var document = JsonNode.Parse(await client.GetStringAsync($"{app.Urls.Single()}/openapi/v1.json"))!;
             var schemas = document["components"]!["schemas"]!;
-            Assert.NotNull(schemas["ChampionshipContext"]!["properties"]!["session_types"]);
+            Assert.NotNull(schemas["ChampionshipContext"]!["properties"]!["sessionTypes"]);
+            Assert.Equal("array", schemas["JsonArray"]!["type"]!.GetValue<string>());
+            Assert.NotNull(schemas["ListResponseOfJsonObject"]!["properties"]!["data"]!["items"]);
+            Assert.Contains("null", schemas["ChronoRaceSessionReimportRequest"]!["properties"]!["resultJson"]!.ToJsonString());
             Assert.Equal("integer", schemas["RankingRiderDto"]!["properties"]!["riderId"]!["type"]!.GetValue<string>());
             Assert.Contains("null", schemas["RankingRiderDto"]!["properties"]!["rating"]!["type"]!.ToJsonString());
             Assert.Contains("male", schemas["FantasyRiderDto"]!["properties"]!["gender"]!["enum"]!.ToJsonString());

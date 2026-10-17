@@ -1,4 +1,7 @@
 using RaceTrace.Api.Features.Metrics;
+using RaceTrace.Api.Features.Ranking;
+using static RaceTrace.Api.Features.Ranking.RankingResponseProjection;
+using static RaceTrace.Api.Features.Ranking.RankingSnapshotBuilder;
 using RaceTrace.Api.Infrastructure.Calculations;
 using RaceTrace.Api.Infrastructure.Telemetry;
 using System.Text.Json.Nodes;
@@ -50,7 +53,7 @@ public sealed class RankingService
 
     private readonly QueryValidationService _validator;
     private readonly DomainQueryService _domainQueries;
-    private readonly MetricsService _metrics;
+    private readonly RankingSnapshotBuilder _snapshotBuilder;
     private readonly RankingSingleFlight _singleFlight;
     private readonly IMemoryCache _cache;
     private readonly DataRevisionService? _revisions;
@@ -65,7 +68,7 @@ public sealed class RankingService
     {
         _validator = validator;
         _domainQueries = domainQueries;
-        _metrics = metrics;
+        _snapshotBuilder = new RankingSnapshotBuilder(domainQueries, metrics);
         _singleFlight = singleFlight;
         _cache = cache;
         _revisions = revisions;
@@ -234,7 +237,7 @@ public sealed class RankingService
                 // A shared calculation must not inherit the first waiter's disconnect token.
                 // Each waiter can still cancel its own WaitAsync in RankingSingleFlight.
                 using var computationTimeout = new CancellationTokenSource(SnapshotComputationTimeout);
-                var snapshot = await BuildSnapshotCoreAsync(
+                var snapshot = await _snapshotBuilder.BuildAsync(
                     context,
                     computationTimeout.Token,
                     resolvedSessions,
@@ -253,127 +256,6 @@ public sealed class RankingService
             cancellationToken);
         _provenance?.Include(result.Metadata);
         return result;
-    }
-
-    private async Task<RankingSnapshot> BuildSnapshotCoreAsync(
-        RiderMetricsContext context,
-        CancellationToken cancellationToken,
-        IReadOnlyList<JsonObject>? resolvedSessions,
-        string? riderQuery,
-        string? nation,
-        string? riderId)
-    {
-        if (!string.IsNullOrWhiteSpace(riderId))
-        {
-            var riderBundle = await _domainQueries.GetRiderDetailDataAsync(
-                context,
-                riderId,
-                resolvedSessionIds: resolvedSessions?
-                    .Select(session => session.String("id") ?? string.Empty),
-                cancellationToken: cancellationToken);
-            var riderData = riderBundle.Data;
-            await _domainQueries.DecorateRankingRiderTeamsAsync(
-                riderData.Results,
-                cancellationToken);
-            var riderPerformance = _metrics.CalculatePrecomputedPerformanceByRider(
-                riderData.Results,
-                riderBundle.PaceSessions,
-                riderData.Sessions);
-            var riderRows = riderData.Results
-                .GroupBy(result => result.String("rider_id") ?? string.Empty)
-                .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-                .Select(group => BuildRow(
-                    group.Key,
-                    group.ToArray(),
-                    riderData.PointsByResultId,
-                    riderPerformance,
-                    fallbackTeamHistory: null))
-                .ToArray();
-
-            return new RankingSnapshot(
-                riderRows,
-                riderData.Results,
-                riderData.Results,
-                riderData.Splits,
-                riderData.Sessions,
-                riderBundle.PaceSessions);
-        }
-
-        var matchingSessions = resolvedSessions ?? await _domainQueries.GetMatchingSessionsAsync(
-            context,
-            cancellationToken: cancellationToken);
-        // Session packages contain all statuses. A status-filtered field must use
-        // the corresponding source query, including its reference population.
-        var preaggregated = string.IsNullOrWhiteSpace(context.Status) ? await _domainQueries.GetRankingPreaggregatesAsync(
-            matchingSessions,
-            riderQuery,
-            nation,
-            cancellationToken: cancellationToken,
-            includeSplits: false) : null;
-        if (preaggregated is not null)
-        {
-            preaggregated = DomainQueryService.RestrictToCategories(preaggregated, context);
-        }
-
-        RankingDataBundle bundle;
-        if (preaggregated?.ReadData is { } read)
-        {
-            var performance = _metrics.CalculatePrecomputedPerformanceByRider(read,preaggregated.PaceSessions,matchingSessions);
-            var typedRows = read.Results.GroupBy(r => r.String("rider_id") ?? string.Empty)
-                .Where(g => !string.IsNullOrWhiteSpace(g.Key))
-                .Select(g => BuildRow(g.Key,g.ToArray(),read.PointsByResultId,performance,null)).ToArray();
-            var legacy = read.ToLegacy();
-            return new RankingSnapshot(typedRows,legacy.Results,legacy.FieldResults,legacy.Splits,matchingSessions,preaggregated.PaceSessions,read);
-        }
-        IReadOnlyList<PacePrecomputedSessionData>? precomputedSessions;
-        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId;
-        if (preaggregated is not null)
-        {
-            bundle = preaggregated.Data;
-            precomputedSessions = preaggregated.PaceSessions;
-            performanceByRiderId = _metrics.CalculatePrecomputedPerformanceByRider(
-                bundle.Results,
-                precomputedSessions,
-                matchingSessions);
-        }
-        else
-        {
-            bundle = await _domainQueries.GetRankingDataAsync(
-                context,
-                riderQuery: riderQuery,
-                nation: nation,
-                cancellationToken: cancellationToken,
-                resolvedSessionIds: matchingSessions
-                    .Select(session => session.String("id") ?? string.Empty));
-            matchingSessions = bundle.Sessions;
-            precomputedSessions = null;
-            performanceByRiderId = await _metrics.CalculatePerformanceByRiderAsync(
-                bundle.Results,
-                context,
-                cancellationToken,
-                resultsContainFullField: true,
-                availableSessions: matchingSessions,
-                suppliedSplits: bundle.Splits,
-                suppliedFieldResults: bundle.FieldResults);
-        }
-        var results = bundle.Results;
-        var rows = results
-            .GroupBy(result => result.String("rider_id") ?? string.Empty)
-            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-            .Select(group => BuildRow(
-                group.Key,
-                group.ToArray(),
-                bundle.PointsByResultId,
-                performanceByRiderId,
-                fallbackTeamHistory: null))
-            .ToArray();
-        return new RankingSnapshot(
-            rows,
-            results,
-            bundle.FieldResults,
-            bundle.Splits,
-            matchingSessions,
-            precomputedSessions);
     }
 
     internal static string BuildSingleFlightKey(
@@ -456,213 +338,25 @@ public sealed class RankingService
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-    private JsonObject BuildRow(
-        string riderId,
-        IReadOnlyList<JsonObject> results,
-        IReadOnlyDictionary<string, decimal> pointsByResultId,
-        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId,
-        JsonArray? fallbackTeamHistory)
-        => BuildRow(riderId,results.Select(RankingReadResult.FromLegacy).ToArray(),pointsByResultId,performanceByRiderId,fallbackTeamHistory);
 
-    private JsonObject BuildRow(
-        string riderId,
-        RankingReadResult[] results,
-        IReadOnlyDictionary<string, decimal> pointsByResultId,
-        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId,
-        JsonArray? fallbackTeamHistory)
-    {
-        var rider = results
-            .Select(result => result.Object("riders"))
-            .FirstOrDefault(row => row is not null)?
-            .DeepClone()
-            .AsObject();
-        var resolvedTeam = rider?.Array("teams")?
-            .OfType<JsonObject>()
-            .FirstOrDefault();
-        var explicitTeams = results.Where(result => !string.IsNullOrWhiteSpace(result.String("team_id"))).ToArray();
-        var teamHistory = explicitTeams.Length > 0
-            ? DomainQueryService.BuildTeamHistory(explicitTeams)
-            : resolvedTeam is null
-                ? DomainQueryService.BuildTeamHistory(results)
-                : new JsonArray(resolvedTeam.DeepClone());
-        if (teamHistory.Count == 0 && fallbackTeamHistory is not null)
-        {
-            teamHistory = fallbackTeamHistory.DeepClone().AsArray();
-        }
+    internal static decimal Percentage(int numerator, int denominator) =>
+        RankingSnapshotBuilder.Percentage(numerator, denominator);
 
-        rider?["teams"] = teamHistory;
-        var finalResults = results
-            .Where(r => r.Session is not null && DomainQueryService.IsFinalSession(r.Session))
-            .Where(HasStarted)
-            .ToArray();
-        var participationRates = CalculateParticipationRates(results);
-        var finalPositions = finalResults.Select(result => result.Decimal("position")).Where(value => value is not null).Select(value => value!.Value).ToArray();
-        var allPositions = results.Select(result => result.Decimal("position")).Where(value => value is not null).Select(value => value!.Value).ToArray();
-        var performance = performanceByRiderId.TryGetValue(riderId, out var riderPerformance)
-            ? riderPerformance
-            : new RiderPerformanceMetricValues(null, null, null, null, 0, 0, null, 0, 0, 0);
+    internal static bool HasStarted(JsonObject result) =>
+        RankingSnapshotBuilder.HasStarted(result);
 
-        return new JsonObject
-        {
-            ["rider_id"] = riderId,
-            ["rider"] = rider,
-            ["rider_name"] = rider?.DisplayName(),
-            ["nation"] = rider?.String("nation"),
-            ["team_name"] = teamHistory
-                .OfType<JsonObject>()
-                .FirstOrDefault()?
-                .String("name"),
-            ["points"] = results.Sum(result => pointsByResultId.TryGetValue(result.String("id") ?? string.Empty, out var points) ? points : 0),
-            ["wins"] = finalPositions.Count(value => value == 1),
-            ["podiums"] = finalPositions.Count(value => value <= 3),
-            ["top_10"] = finalPositions.Count(value => value <= 10),
-            ["top_20"] = finalPositions.Count(value => value <= 20),
-            ["top_30"] = finalPositions.Count(value => value <= 30),
-            ["starts"] = results.Length,
-            ["final_starts"] = finalResults.Length,
-            ["finals_count"] = participationRates.FinalsCount,
-            ["quali_rate"] = participationRates.QualifyingRate,
-            ["avg_position"] = allPositions.Length == 0 ? null : allPositions.Average(),
-            ["rating"] = performance.Rating,
-            ["raw_rating"] = performance.RawRating,
-            ["pace"] = performance.Pace,
-            ["raw_pace"] = performance.RawPace,
-            ["pace_confidence"] = performance.PaceConfidence,
-            ["confidence"] = performance.PaceConfidence,
-            ["pace_confidence_status"] = performance.PaceConfidenceStatus,
-            ["pace_used_sessions"] = performance.PaceUsedSessions,
-            ["pace_used_finals"] = performance.PaceUsedFinals,
-            ["pace_total_evidence"] = performance.PaceTotalEvidence,
-            ["pace_final_evidence"] = performance.PaceFinalEvidence,
-            ["consistency"] = performance.Consistency,
-            ["consistency_confidence"] = performance.ConsistencyConfidence,
-            ["consistency_used_runs"] = performance.ConsistencyUsedRuns,
-            ["consistency_used_sectors"] = performance.ConsistencyUsedSectors,
-            ["result_score"] = performance.ResultScore,
-            ["result_score_confidence"] = performance.ResultScoreConfidence,
-            ["result_score_used_sessions"] = performance.ResultScoreUsedSessions
-        };
-    }
-
-    internal static decimal Percentage(int numerator, int denominator)
-    {
-        if (denominator <= 0 || numerator <= 0)
-        {
-            return 0m;
-        }
-
-        return Math.Round(
-            100m * numerator / denominator,
-            2,
-            MidpointRounding.AwayFromZero);
-    }
-
-    private static string? ResultSessionId(JsonObject result)
-        => ResultSessionId(RankingReadResult.FromLegacy(result));
-
-    private static string? ResultSessionId(RankingReadResult result)
-    {
-        return result.String("session_id") ?? result.Object("sessions")?.String("id");
-    }
-
-    private static string? ResultRoundId(JsonObject result)
-        => ResultRoundId(RankingReadResult.FromLegacy(result));
-
-    private static string? ResultRoundId(RankingReadResult result)
-    {
-        var session = result.Object("sessions");
-        return session?.String("round_id") ??
-            session?.Object("rounds")?.String("id") ??
-            session?.Object("round_categories")?.String("round_id") ??
-            session?.Object("round_categories")?.Object("rounds")?.String("id");
-    }
-
-    internal static bool HasStarted(JsonObject result)
-        => HasStarted(RankingReadResult.FromLegacy(result));
-
-    private static bool HasStarted(RankingReadResult result)
-    {
-        return !string.Equals(
-            result.String("status")?.Trim(),
-            "DNS",
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    internal static RankingParticipationRates CalculateParticipationRates(
-        IReadOnlyList<JsonObject> results)
-        => CalculateParticipationRates(results.Select(RankingReadResult.FromLegacy).ToArray());
-
-    private static RankingParticipationRates CalculateParticipationRates(
-        IReadOnlyList<RankingReadResult> results)
-    {
-        var startedResults = results.Where(HasStarted).ToArray();
-        var qualifiedFinalResults = results
-            .Where(r => r.Session is not null && DomainQueryService.IsFinalSession(r.Session))
-            .ToArray();
-        var qualifiedFinalSessions = qualifiedFinalResults
-            .Select(ResultSessionId)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
-        var participatedRoundIds = startedResults
-            .Select(ResultRoundId)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var qualifiedRoundIds = qualifiedFinalResults
-            .Select(ResultRoundId)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        participatedRoundIds.UnionWith(qualifiedRoundIds);
-
-        return new RankingParticipationRates(
-            qualifiedFinalSessions,
-            Percentage(qualifiedRoundIds.Count, participatedRoundIds.Count));
-    }
+    internal static RankingParticipationRates CalculateParticipationRates(IReadOnlyList<JsonObject> results) =>
+        RankingSnapshotBuilder.CalculateParticipationRates(results);
 
     internal static IReadOnlyDictionary<string, JsonArray> BuildFallbackTeamHistories(
-        IReadOnlyList<JsonObject> selectedResults,
-        IReadOnlyList<JsonObject> historicalTeamResults)
-    {
-        var targetDates = selectedResults
-            .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")))
-            .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .Select(DomainQueryService.ResultDate)
-                    .Where(date => !string.IsNullOrWhiteSpace(date))
-                    .OrderByDescending(date => date, StringComparer.Ordinal)
-                    .FirstOrDefault(),
-                StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<JsonObject> selectedResults, IReadOnlyList<JsonObject> historicalTeamResults) =>
+        RankingSnapshotBuilder.BuildFallbackTeamHistories(selectedResults, historicalTeamResults);
 
-        return historicalTeamResults
-            .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")) &&
-                result.Object("teams") is not null)
-            .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group =>
-                {
-                    var rows = group.ToArray();
-                    targetDates.TryGetValue(group.Key, out var targetDate);
-                    var historicalRows = string.IsNullOrWhiteSpace(targetDate)
-                        ? rows
-                        : rows
-                            .Where(result =>
-                            {
-                                var date = DomainQueryService.ResultDate(result);
-                                return !string.IsNullOrWhiteSpace(date) &&
-                                    string.CompareOrdinal(date, targetDate) <= 0;
-                            })
-                            .ToArray();
+    internal static JsonObject[] SortRows(IReadOnlyList<JsonObject> rows, string sort, bool descending) =>
+        RankingResponseProjection.SortRows(rows, sort, descending);
 
-                    return DomainQueryService.BuildTeamHistory(
-                        historicalRows.Length > 0 ? historicalRows : rows);
-                },
-                StringComparer.OrdinalIgnoreCase);
-    }
+    internal static void AssignCanonicalPositions(IReadOnlyList<JsonObject> rows, string requestedSort) =>
+        RankingResponseProjection.AssignCanonicalPositions(rows, requestedSort);
 
     internal MetricFilterValues ReadMetricFilters(IQueryCollection queryString)
     {
@@ -794,77 +488,6 @@ public sealed class RankingService
         }
 
         return value.HasValue && Within(value.Value, min, max);
-    }
-
-    internal static JsonObject[] SortRows(IReadOnlyList<JsonObject> rows, string sort, bool descending)
-    {
-        IOrderedEnumerable<JsonObject> ordered;
-        if (sort is "rating" or "pace" or "consistency" or "confidence" or "finals_count" or "quali_rate" or "points" or "avg_position" or "wins" or "podiums" or "top_10" or "top_20" or "top_30" or "starts" or "final_starts")
-        {
-            ordered = descending
-                ? rows.OrderByDescending(row => row.Decimal(sort) ?? decimal.MinValue)
-                : rows.OrderBy(row => row.Decimal(sort) ?? decimal.MaxValue);
-        }
-        else if (sort == "rank")
-        {
-            ordered = descending
-                ? rows.OrderByDescending(row => row.Int("rank") ?? int.MinValue)
-                : rows.OrderBy(row => row.Int("rank") ?? int.MaxValue);
-        }
-        else
-        {
-            ordered = descending
-                ? rows.OrderByDescending(row => row.String(sort) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-                : rows.OrderBy(row => row.String(sort) ?? string.Empty, StringComparer.OrdinalIgnoreCase);
-        }
-
-        return ordered
-            .ThenBy(row => row.String("rider_name") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => PublicDtoMapping.Long(row.String("rider_id")))
-            .ToArray();
-    }
-
-    internal static void AssignCanonicalPositions(IReadOnlyList<JsonObject> rows, string requestedSort)
-    {
-        var sort = requestedSort == "rank" ? "points" : requestedSort;
-        var bestIsDescending = sort is not ("avg_position" or "rider_name" or "nation" or "team_name");
-        var canonical = SortRows(rows, sort, bestIsDescending);
-        for (var index = 0; index < canonical.Length; index++)
-        {
-            canonical[index]["rank"] = index + 1;
-        }
-    }
-
-    private static RankingRiderDto ToPublicDto(
-        JsonObject row,
-        JsonObject? previousRow = null)
-    {
-        var rider = row.Object("rider") ?? new JsonObject();
-        var team = rider.Array("teams")?.OfType<JsonObject>().FirstOrDefault();
-        return new RankingRiderDto(
-            row.Int("rank") ?? 0,
-            PublicDtoMapping.Long(row.String("rider_id")),
-            rider.String("uci_id"),
-            rider.String("first_name"),
-            rider.String("last_name"),
-            rider.DisplayName(),
-            rider.String("nation"),
-            PublicDtoMapping.NullableLong(team?.String("id")),
-            team?.String("name") ?? row.String("team_name"),
-            row.Decimal("points") ?? 0m,
-            row.Decimal("rating"),
-            row.Decimal("pace"),
-            row.Decimal("consistency"),
-            row.Decimal("confidence") ?? 0m,
-            row.Int("finals_count") ?? 0,
-            Math.Round((row.Decimal("quali_rate") ?? 0m) / 100m, 4, MidpointRounding.AwayFromZero),
-            rider.String("profile_image_url"))
-        {
-            ConsistencyEvidence = row.Decimal("consistency_confidence") ?? 0m,
-            PositionChange = previousRow is null
-                ? null
-                : (previousRow.Int("rank") ?? 0) - (row.Int("rank") ?? 0)
-        };
     }
 
     internal static bool TryWithoutLatestRound(

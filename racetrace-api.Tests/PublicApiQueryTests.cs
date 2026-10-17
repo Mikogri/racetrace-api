@@ -258,7 +258,7 @@ public sealed class PublicApiQueryTests
     }
 
     [Fact]
-    public void PublicDtosKeepCamelCaseUnderSnakeCaseApplicationPolicy()
+    public void PublicDtosUseCamelCaseApplicationPolicy()
     {
         var response = PublicPagedResponse<TrackFilterOptionDto>.Create(
             [new TrackFilterOptionDto(4, "Black Snake", 4, "Val di Sole", "ITA", 2100, 23.5m)],
@@ -267,7 +267,7 @@ public sealed class PublicApiQueryTests
             40);
         var json = JsonSerializer.Serialize(response, new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         });
 
         Assert.Contains("\"pageSize\":30", json, StringComparison.Ordinal);
