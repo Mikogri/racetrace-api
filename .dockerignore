@@ -1,0 +1,15 @@
+**/bin
+**/obj
+**/App_Data
+.git
+.vs
+.serena
+graphify-out
+**/graphify-out
+**/.codex-*
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/.env
+**/.env.*
+**/*.log
+TestResults

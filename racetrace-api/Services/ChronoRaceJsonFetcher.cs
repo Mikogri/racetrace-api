@@ -35,6 +35,12 @@ public sealed class ChronoRaceJsonFetcher
             throw new ApiException(StatusCodes.Status400BadRequest, "CHRONORACE_URL_REQUIRED", "chronorace_url is required.");
         }
 
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var source) ||
+            source.Scheme != Uri.UriSchemeHttps || source.Port != 443 || source.UserInfo.Length != 0 ||
+            source.Host.ToLowerInvariant() is not ("prod.chronorace.be" or "www.chronorace.be" or "chronorace.be"))
+            throw new ApiException(StatusCodes.Status400BadRequest, "CHRONORACE_URL_INVALID",
+                "chronorace_url must use an official ChronoRace HTTPS host without credentials or a custom port.");
+
         var attempted = new List<string>();
         var errors = new List<string>();
         foreach (var candidate in BuildCandidateUrls(url.Trim()))
@@ -49,14 +55,14 @@ public sealed class ChronoRaceJsonFetcher
         {
             try
             {
-                using var response = await _http.GetAsync(candidate, cancellationToken);
+                using var response = await _http.GetAsync(candidate, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
                     errors.Add($"{candidate} returned {(int)response.StatusCode}.");
                     continue;
                 }
 
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                var body = await ExternalJsonResponse.ReadAsync(response, cancellationToken);
                 var json = ParseChronoRaceJson(body);
                 if (json is null)
                 {

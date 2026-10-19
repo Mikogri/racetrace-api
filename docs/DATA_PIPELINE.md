@@ -6,6 +6,10 @@ PostgreSQL przechowuje fakty zawodów: rundy, sesje, zawodników, wyniki, pomiar
 
 Kontrolery administracyjne przyjmują import sesji, formularz rundy i PDF. Fetchery ChronoRace/Tissot pobierają format dostawcy, mappery sprowadzają go do wewnętrznego modelu, a warstwa zapisu wykonuje upserty partiami. Uzupełnianie wyników i ponowny import pozostają osobnymi operacjami. Danych z bieżącego Live nie należy utożsamiać z zapisanymi wynikami historycznymi.
 
+Importer ChronoRace przyjmuje wyłącznie HTTPS na `prod.chronorace.be`, `www.chronorace.be` lub `chronorace.be`, bez danych logowania i portu innego niż 443. Tissot zachowuje własną listę oficjalnych hostów i również odrzuca takie porty oraz dane logowania. Klienci HTTP tych importerów i proxy ChronoRace nie podążają automatycznie za przekierowaniami. Nowy adres dostawcy wymaga świadomego dopuszczenia w kodzie, a nie wyłączenia kontroli dla dowolnego URL.
+
+Odpowiedzi JSON tych trzech klientów mają limit 16 MiB sprawdzany również podczas odbioru bez `Content-Length`. Odczyt body ma budżet 30 s; klient HTTP ma osobny timeout żądania 30 s. Przekroczenie rozmiaru daje `UPSTREAM_RESPONSE_TOO_LARGE`, nie częściowy import. Te zabezpieczenia nie są pełnym audytem wszystkich integracji: obrazy, PDF, przeglądarka Pinkbike, ograniczenia sieci wychodzącej i konfiguracja hostingu wymagają osobnej kontroli przed publikacją.
+
 Splity są czasami narastającymi; sektory powstają z różnic kolejnych wiarygodnych pomiarów i mety. Brak lub nieprawidłowy checkpoint nie może tworzyć fikcyjnie szybkiego sektora. Cztery pośrednie splity i meta dają pięć sektorów, ale brak dowodu pozostaje brakiem. Korekta incydentu w kalkulatorze nie nadpisuje oficjalnego przejazdu.
 
 Team przy wyniku ma pierwszeństwo. Przy jego braku używane jest przypisanie z `rider_team_history` obowiązujące w dniu sesji. Historia zapisuje okres, źródłową rundę i co najwyżej jeden otwarty okres ridera. Import bez teamu nie powinien zamykać historii. Ranking dobiera team do ostatniego wyniku w wybranym zakresie, nie zawsze do obecnego zespołu.

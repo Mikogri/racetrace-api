@@ -8,7 +8,19 @@ RaceTrace udostępnia REST pod `/api/v1` oraz operacje administracyjne pod `/api
 
 Klucze Supabase nie są tokenami HTTP RaceTrace. Klucz service role pozostaje po stronie serwera. Nie umieszczamy go w Vite ani w konfiguracji publicznego klienta.
 
+W środowisku `Production` kontrola startowa wymaga sekretu odczytu długości co najmniej 32 znaków. Jeśli administracja jest skonfigurowana, jej sekret musi mieć co najmniej 32 znaki i różnić się od sekretu odczytu. Długość nie zastępuje losowości: sekret należy wygenerować kryptograficznie, nie składać z powtórzeń. Pusta konfiguracja administracji pozostawia jej operacje niedostępne. Kontrola wykonuje się przed zadaniami aplikacji; Development i narzędziowy eksport OpenAPI nie wymagają produkcyjnych sekretów.
+
 Lokalny serwer Vite przekazuje `/api` do `API_PROXY_TARGET` (domyślnie `http://127.0.0.1:5017`) i dodaje nagłówek autoryzacji. Dla lokalnego API próbuje odczytać sekret .NET z `UserSecretsId=racetrace-api-2026`, następnie używa `API_READ_SECRET`, a na końcu lokalnej wartości deweloperskiej. Kod przeglądarki sam nie dodaje tego sekretu. Po wdrożeniu trzeba zapewnić odpowiednie proxy/bramę i routing; `vite preview` nie jest zastępstwem tej konfiguracji.
+
+## Ochrona kosztu żądań
+
+Przed autoryzacją i Output Cache działa wbudowany limiter .NET. Domyślnie dopuszcza 240 żądań na minutę na adres połączenia, a dla administracji i metod zmieniających stan osobny budżet 12 na minutę. Ciężkie odczyty rankingu, overview/metrics ridera, Compare, Analytics, sezonu i podium oraz mutacje współdzielą limit 8 równoległych żądań na proces. Kolejki są wyłączone. Przekroczenie limitu daje 429 z `error.code=RATE_LIMITED` i `Retry-After`; klient nie powinien natychmiast ponawiać pętli żądań.
+
+Wartości konfiguruje sekcja `RequestLimits`: `RequestsPerMinute`, `AdminRequestsPerMinute`, `HeavyConcurrency`; wszystkie muszą być dodatnie. To punkt startowy do testu obciążenia, nie gwarancja obsłużenia określonego ruchu. Limit ciężkich żądań obejmuje także starszy endpoint venues ridera oraz odpowiedzi z cache i nie zmienia kalkulatorów. Ograniczenia są lokalne dla instancji, nie stanowią rozproszonej ochrony DDoS. Frontend respektuje `Retry-After` przy istniejących ograniczonych ponowieniach zapytań, zamiast ponawiać natychmiast; mutacje nadal nie są automatycznie ponawiane.
+
+Adres klienta pochodzi z `Connection.RemoteIpAddress`, nie z bezkrytycznie odczytanego `X-Forwarded-For`. Dla Cloudflare Pages + Railway ustaw `Gateway__Enabled=true`: przed limiterem `GatewayRequestMiddleware` przyjmuje pojedynczy adres z `X-RaceTrace-Client-IP` i ustawia HTTPS, ale tylko przy poprawnym tokenie odczytu. Pages pobiera adres z kontrolowanego przez Cloudflare `CF-Connecting-IP`, nie z dowolnego nagłówka przeglądarki. Bez tej opcji obowiązuje adres połączenia i użytkownicy za proxy mogą współdzielić budżet. Sekret odczytu jest również granicą zaufania bramy i musi pozostać serwerowy; to nie jest logowanie użytkowników. Brama nadal powinna ograniczać nadużycia i nie wystawia administracji. Konfigurację dostawców opisują README obu repozytoriów.
+
+`GET /health/live` jest publicznym, lekkim sprawdzeniem działania procesu. Nie odczytuje Supabase, nie ujawnia konfiguracji i nie potwierdza gotowości bazy, importera ani zewnętrznych dostawców. Jest poza wersjonowanym kontraktem OpenAPI.
 
 ## Główne zasoby
 

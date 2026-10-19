@@ -25,7 +25,7 @@ public sealed partial class TissotTimingJsonFetcher
 
         try
         {
-            using var response = await _http.GetAsync(apiUrl, cancellationToken);
+            using var response = await _http.GetAsync(apiUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 throw new ApiException(
@@ -34,7 +34,7 @@ public sealed partial class TissotTimingJsonFetcher
                     $"Tissot Timing returned {(int)response.StatusCode} for '{apiUrl}'.");
             }
 
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var body = await ExternalJsonResponse.ReadAsync(response, cancellationToken);
             var json = JsonNode.Parse(body) as JsonObject;
             if (json is null || !UciWorldChampionshipJsonAdapter.IsResultJson(json))
             {
@@ -73,7 +73,8 @@ public sealed partial class TissotTimingJsonFetcher
     {
         if (string.IsNullOrWhiteSpace(url) ||
             !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
-            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            uri.Port != 443 || uri.UserInfo.Length != 0)
         {
             throw InvalidUrl();
         }

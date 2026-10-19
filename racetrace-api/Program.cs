@@ -18,6 +18,9 @@ var app = builder.Build();
 app.UseResponseCompression();
 app.UseMiddleware<ApiTelemetryMiddleware>();
 app.UseMiddleware<ApiExceptionMiddleware>();
+if (app.Configuration.GetValue<bool>("Gateway:Enabled"))
+    app.UseMiddleware<GatewayRequestMiddleware>();
+app.UseRateLimiter();
 app.UseMiddleware<ApiAccessMiddleware>();
 
 // Configure the HTTP request pipeline.
@@ -32,5 +35,6 @@ app.UseOutputCache();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health/live").ExcludeFromDescription();
 
 app.Run();

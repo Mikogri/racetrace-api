@@ -19,6 +19,10 @@ public static class ServiceCollectionExtensions
         services.Configure<ApiAccessOptions>(configuration.GetSection(ApiAccessOptions.SectionName));
         services.Configure<AdminOptions>(configuration.GetSection(AdminOptions.SectionName));
         services.Configure<PointSystemSeedOptions>(configuration.GetSection(PointSystemSeedOptions.SectionName));
+        services.AddOptions<RequestLimitOptions>().Bind(configuration.GetSection("RequestLimits"))
+            .Validate(options => options.RequestsPerMinute > 0 && options.AdminRequestsPerMinute > 0 && options.HeavyConcurrency > 0,
+                "Request limits must be positive.").ValidateOnStart();
+        services.AddHostedService<ProductionConfigurationCheck>();
         services.AddOptions<FantasyOptions>().Bind(configuration.GetSection(FantasyOptions.SectionName))
             .Validate(options => options.SyncInterval >= TimeSpan.FromMinutes(5) && options.LiveSyncInterval >= TimeSpan.FromMinutes(5), "Fantasy sync intervals must be at least five minutes.")
             .Validate(options => !options.DistributedCoordinationEnabled ||
@@ -49,6 +53,7 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddRaceTraceHttp(this IServiceCollection services)
     {
+        services.AddRequestLimits();
         services.AddControllers(options => options.Filters.AddService<CalculationResponseFilter>())
             .AddJsonOptions(options =>
             {
@@ -144,9 +149,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UciMtbWorldSeriesSupplementService>();
         services.AddScoped<ChronoRaceImportService>();
         services.AddScoped<RiderProfileImageImportService>();
-        services.AddHttpClient<ChronoRaceJsonFetcher>();
-        services.AddHttpClient<ChronoRaceLiveProxyService>();
-        services.AddHttpClient<TissotTimingJsonFetcher>();
+        services.AddHttpClient<ChronoRaceJsonFetcher>(client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+        services.AddHttpClient<ChronoRaceLiveProxyService>(client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+        services.AddHttpClient<TissotTimingJsonFetcher>(client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
         services.AddScoped<ChronoRaceRoundFormImportService>();
         services.AddSingleton<UciResultsPdfParser>();
         return services;

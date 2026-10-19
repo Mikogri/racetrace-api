@@ -33,13 +33,13 @@ public sealed partial class ChronoRaceLiveProxyService
         var url = key is null
             ? $"https://prod.chronorace.be/api/results/uci/dh/cms/{encodedContext}"
             : $"https://prod.chronorace.be/api/results/generic/uci/{encodedContext}/dh/{Uri.EscapeDataString(key)}";
-        using var response = await _http.GetAsync(url, cancellationToken);
+        using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiException(StatusCodes.Status502BadGateway, "CHRONORACE_UNAVAILABLE", $"ChronoRace returned {(int)response.StatusCode}.");
         }
 
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        var content = await ExternalJsonResponse.ReadAsync(response, cancellationToken);
         return string.IsNullOrWhiteSpace(content) ? null : JsonNode.Parse(content);
     }
 
