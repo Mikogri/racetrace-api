@@ -8,7 +8,7 @@ public sealed record FantasyRiderDto(
     [property: Infrastructure.ApiContractValues("male", "female")] string Gender,
     decimal? Price,
     int? PinkbikeSeasonPoints,
-    bool InjuryFlag,
+    [property: Infrastructure.ApiContractValues("unknown", "entered", "not_entered")] string EntryStatus,
     decimal? ExpectedFinalPoints,
     decimal? ExpectedQ1Bonus,
     decimal? ExpectedFantasyPoints,

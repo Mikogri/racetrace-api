@@ -1,6 +1,5 @@
 using System.Net;
 using System.Security.Cryptography;
-using System.Text;
 using Microsoft.Extensions.Options;
 using RaceTrace.Api.Infrastructure;
 
@@ -97,9 +96,9 @@ public sealed class PinkbikeFantasyImporter(
             throw new InvalidDataException("Pinkbike athlete count unexpectedly fell by more than 25%; import requires review.");
         var identities = await LoadIdentitiesAsync(cancellationToken);
         var riders = FantasyRiderMapper.Map(athletes, identities, options.Value, previous);
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(html)))[..16].ToLowerInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(riders)))[..16].ToLowerInvariant();
         var snapshot = new FantasyPriceSnapshot($"{season}-{fetchedAt:yyyyMMddTHHmmssfffffff}-{hash}", season, upcomingRoundId,
-            fetchedAt, riders, PinkbikeFantasyParser.SourceUrl, acquisitionMethod);
+            fetchedAt, riders, PinkbikeFantasyParser.SourceUrl, acquisitionMethod) { DataVersion = 1 };
         return snapshot;
     }
 

@@ -25,8 +25,7 @@ public sealed class FantasyImporterTests
         Assert.Equal(350_000m, vali.Price);
         Assert.Equal(3925, vali.SeasonPoints);
         Assert.Equal(FetchedAt, vali.FetchedAtUtc);
-        Assert.False(vali.InjuryFlag);
-        Assert.True(Assert.Single(riders, x => x.ExternalId == "59").InjuryFlag);
+        Assert.Equal("Gracey Hemstreet", Assert.Single(riders, x => x.ExternalId == "59").Name);
     }
 
     [Fact]
@@ -112,6 +111,25 @@ public sealed class FantasyImporterTests
         var options = new FantasyImportOptions { RiderMappings = new() { [rider.ExternalId] = "123", ["other"] = "123" } };
         var duplicates = FantasyRiderMapper.Map([rider, rider with { ExternalId = "other" }], [identity], options);
         Assert.All(duplicates, x => { Assert.Null(x.RiderId); Assert.Equal("duplicate_mapping", x.MappingStatus); });
+    }
+
+    [Fact]
+    public async Task LegacySnapshotsCannotReenterTheActiveCatalogue()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"racetrace-legacy-test-{Guid.NewGuid():N}");
+        var store = new FantasyPriceSnapshotStore(Options.Create(new FantasyImportOptions { SnapshotDirectory = "prices" }),
+            new TestEnvironment(directory), new FixedTime(FetchedAt), NullLogger<FantasyPriceSnapshotStore>.Instance);
+        try
+        {
+            await store.SaveAsync(Snapshot([SampleRider()]));
+            Assert.NotNull(await store.GetLatestAsync(2026));
+            var path = Directory.GetFiles(Path.Combine(directory, "prices", "2026"), "snapshot-*.json").Single();
+            var stored = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+            stored.Remove("dataVersion");
+            await File.WriteAllTextAsync(path, stored.ToJsonString());
+            Assert.Null(await store.GetLatestAsync(2026));
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 
     [Fact]
@@ -202,7 +220,7 @@ public sealed class FantasyImporterTests
         }
     }
 
-    private static PinkbikeFantasyRider SampleRider() => new("2", null, "Jackson Goldstone", "male", 340_000, 1945, false, FetchedAt, "unmapped", "Canada", []);
+    private static PinkbikeFantasyRider SampleRider() => new("2", null, "Jackson Goldstone", "male", 340_000, 1945, FetchedAt, "unmapped", "Canada", []);
     private static FantasyPriceSnapshot Snapshot(IReadOnlyList<PinkbikeFantasyRider> riders) => new("sample", 2026, null, FetchedAt, riders, PinkbikeFantasyParser.SourceUrl, "test");
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider { public override DateTimeOffset GetUtcNow() => now; }
     [Theory]

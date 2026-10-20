@@ -32,6 +32,8 @@ Migracje znajdują się w `supabase/migrations/`, a starsze skrypty również po
 
 `src/app/` zawiera router, providery i stany tras. `src/features/` grupuje Home, Ranking, Riders, Rounds, Compare, Live i Fantasy. Wspólne kontrolki, tabele, komunikaty, tooltipy i wykresy są w `src/components/`; współdzielona analityka jest w `components/analytics`, nie w komponentach Home. Kolory, odstępy, typografia i promienie pochodzą z `src/styles/tokens/`.
 
+`/privacy-policy` renders static English notice content using the shared page/section typography and About layout, with semantic section headings and email links. The controller is Mikołaj Grigoriew (Poland), contact `contact@racetracemtb.com`. The visible notice remains a draft until retention periods and production practices are confirmed; it does not invent a publication date. Updating this local page is not evidence that a production privacy notice or the pending data-erasure migration has been deployed.
+
 `src/lib/api-client.ts` tworzy adres, wysyła `fetch`, łączy anulowanie z limitem czasu, odczytuje JSON i sprawdza go schematem Zod. `api-request-diagnostics.ts` zbiera pomiary odpowiedzi niezależnie od transportu. Hooki w `features/*/api/` definiują parametry, klucze cache i politykę TanStack Query. Typy wygenerowane z OpenAPI sprawdzają zgodność kompilacji; Zod pozostaje walidacją w runtime. Ten podział jest opisany w [API.md](API.md).
 
 Filtry są zapisywane w URL. Nawigacja z rankingu do profilu przekazuje jego kontekst; nie każda nawigacja do zawodnika dziedziczy wszystkie filtry. Prefiksy tras szczegółów zachowują pochodzenie w menu. Przekierowania starszych adresów są obsługiwane w routerze i sprawdzane testami. Zakładki profilu nie resetują wspólnych filtrów.

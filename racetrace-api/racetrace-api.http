@@ -74,7 +74,7 @@ Authorization: Bearer {{AdminApiSecret}}
 Content-Type: application/json
 
 {
-  "hasInjury": true
+  "profileImageUrl": "https://images.example.com/rider.webp"
 }
 
 ###

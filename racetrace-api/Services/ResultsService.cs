@@ -13,7 +13,7 @@ public sealed class ResultsService
     private const string TimingModeSectors = "sectors";
     private const string TimingModeSplits = "splits";
     private const string PublicResultSelect =
-        "*,riders(*,rider_team_history(rider_id,valid_from,valid_to,teams(id,code,name))),teams(*)," +
+        "*,riders(" + DomainQueryService.RiderSelect + ",rider_team_history(rider_id,valid_from,valid_to,teams(id,code,name))),teams(*)," +
         "result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id)," +
         "time_splits(id,result_id,split_index,race_time,speed)," +
         "sessions!inner(*,conditions(*),round_categories!inner(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories!inner(*)))";

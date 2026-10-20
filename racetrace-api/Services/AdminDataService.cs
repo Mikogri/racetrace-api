@@ -32,7 +32,7 @@ public sealed class AdminDataService
                 },
                 "context_name", "track_id", "competition_class_id", "is_season_final_round", "condition_id", "season_year", "round_number", "start_date", "end_date", "status"),
             ["sessions"] = Definition("sessions", "name", "status", "round_id", "category_id", "condition_id", "session_type", "points_session_type_override", "session_date"),
-            ["riders"] = Definition("riders", "uci_id", "uci_code", "last_name", "first_name", "nation", "birth_date", "is_protected", "has_injury", "profile_image_url", "profile_image_updated_at"),
+            ["riders"] = Definition("riders", "uci_id", "uci_code", "last_name", "first_name", "nation", "birth_date", "is_protected", "profile_image_url", "profile_image_updated_at"),
             ["teams"] = Definition("teams", "name", "code"),
             ["results"] = Definition("results", "race_nr", "completed_distance", "status", "top_speed", "session_id", "rider_id", "position", "race_time_ms", "is_classified", "team_id"),
             ["time-splits"] = Definition("time_splits", "result_id", "split_index", "race_time", "speed"),
@@ -90,10 +90,9 @@ public sealed class AdminDataService
             var field = property.Key switch
             {
                 "profileImageUrl" => "profile_image_url",
-                "hasInjury" => "has_injury",
                 _ => property.Key
             };
-            if (field is not ("profile_image_url" or "has_injury"))
+            if (field != "profile_image_url")
             {
                 throw Invalid(
                     "ADMIN_FIELDS_NOT_EDITABLE",
@@ -148,7 +147,7 @@ public sealed class AdminDataService
         }
 
         var existing = await _supabase.GetSingleAsync(
-            new SupabaseQuery(definition.Table).Select("*").Filter("id", "eq", id),
+            new SupabaseQuery(definition.Table).Select(definition.Table == "riders" ? DomainQueryService.RiderSelect : "*").Filter("id", "eq", id),
             SupabaseRole.Service,
             cancellationToken);
         if (existing is null)
@@ -573,7 +572,6 @@ public sealed class AdminDataService
                 ValidateCountryCode(candidate, "nation");
                 ValidateOptionalDate(candidate, "birth_date");
                 RequiredBoolean(candidate, "is_protected");
-                RequiredBoolean(candidate, "has_injury");
                 ValidateOptionalDateTime(candidate, "profile_image_updated_at");
                 if (OptionalText(candidate, "profile_image_url") is { } profileImageUrl &&
                     (!Uri.TryCreate(profileImageUrl, UriKind.Absolute, out var profileUri) || profileUri.Scheme != Uri.UriSchemeHttps || profileImageUrl.Length > 2048))

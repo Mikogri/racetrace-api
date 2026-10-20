@@ -637,7 +637,7 @@ rider_data as materialized (
     ri.nation,
     ri.birth_date,
     ri.profile_image_url,
-    ri.has_injury,
+    null::boolean as retired_slot,
     ri.gender,
     coalesce(selected_team.team_id, historical_team.team_id) as team_id,
     coalesce(selected_team.team_name, historical_team.team_name) as team_name,
@@ -688,7 +688,7 @@ select jsonb_build_object(
     select jsonb_agg(jsonb_build_array(
       rd.id, rd.uci_id, rd.first_name, rd.last_name, rd.nation,
       rd.profile_image_url, rd.team_id, rd.team_name, rd.uci_code,
-      rd.birth_date, rd.has_injury, rd.team_code, rd.gender
+      rd.birth_date, null::boolean, rd.team_code, rd.gender
     ))
     from rider_data rd
   ), '[]'::jsonb),

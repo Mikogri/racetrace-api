@@ -7,6 +7,20 @@ namespace RaceTrace.Api.Features.Imports.ChronoRace;
 /// <summary>Pure normalization and payload preparation. Persistence, batching and retries remain in the importer.</summary>
 internal static class ChronoRacePayloadMapper
 {
+    private static readonly HashSet<string> RiderFields = new(StringComparer.Ordinal)
+    {
+        "RaceNr", "UciRiderId", "UciCode", "GivenName", "FamilyName", "FirstName", "LastName", "Name",
+        "Nation", "BirthDate", "YearOfBirth", "Gender", "Protected", "UciTeamName", "UciTeamCode", "UciTeamId", "StartTime"
+    };
+
+    internal static void KeepSportingRiderFields(JsonObject payload)
+    {
+        if (payload.Object("Riders") is not { } riders) return;
+        foreach (var rider in riders.Select(pair => pair.Value).OfType<JsonObject>())
+            foreach (var key in rider.Select(pair => pair.Key).Where(key => !RiderFields.Contains(key)).ToArray())
+                rider.Remove(key);
+    }
+
     internal static JsonObject BuildSessionPayload(
         ImportSessionPayload payload,
         string roundId,
@@ -113,8 +127,7 @@ internal static class ChronoRacePayloadMapper
             ["nation"] = PreferNew(riderNode.String("Nation"), existing?.String("nation")),
             ["birth_date"] = ResolveBirthDate(riderNode, existing),
             ["gender"] = PreferNew(gender, existing?.String("gender")),
-            ["is_protected"] = riderNode.Bool("Protected") ?? existing?.Bool("is_protected") ?? false,
-            ["has_injury"] = riderNode.Bool("Injury") ?? existing?.Bool("has_injury") ?? false
+            ["is_protected"] = riderNode.Bool("Protected") ?? existing?.Bool("is_protected") ?? false
         };
     }
 

@@ -104,7 +104,7 @@ public sealed class CamelCaseDtoBoundaryTests
         const string stored = """
             {"id":"snapshot_1","season":2026,"upcomingRoundId":"12",
              "fetchedAtUtc":"2026-01-01T00:00:00+00:00","riders":[],
-             "sourceUrl":"https://example.test","acquisitionMethod":"http"}
+               "sourceUrl":"https://example.test","acquisitionMethod":"http","dataVersion":1}
             """;
         var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var snapshot = JsonSerializer.Deserialize<FantasyPriceSnapshot>(stored, web)!;

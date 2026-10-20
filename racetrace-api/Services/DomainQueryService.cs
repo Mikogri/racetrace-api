@@ -22,11 +22,12 @@ public sealed class DomainQueryService
     private readonly RiderTeamHistoryQueries _teamHistory;
     private readonly RankingInputPackageReader _rankingPackages;
 
-    public const string ResultSelect = "*,riders(*),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,conditions(*),round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
+    public const string RiderSelect = "id,uci_id,uci_code,first_name,last_name,nation,birth_date,is_protected,created_at,updated_at,profile_image_url,profile_image_updated_at,gender";
+    public const string ResultSelect = "*,riders(" + RiderSelect + "),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,conditions(*),round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
 
     public const string RankingResultSelect =
         "id,rider_id,session_id,race_time_ms,top_speed,position,is_classified,status," +
-        "riders(*),teams(*)," +
+        "riders(" + RiderSelect + "),teams(*)," +
         "sessions(id,round_id,category_id,name,session_type,session_date," +
         "round_categories(round_id,category_id," +
         "rounds(id,track_id,competition_level_id,is_season_final_round,season_year,start_date,competition_levels(id,code,name,priority)),categories(id,code)))";
@@ -74,7 +75,7 @@ public sealed class DomainQueryService
     {
         return await _supabase.GetSingleAsync(
             new SupabaseQuery(table)
-                .Select(select)
+                .Select(table == "riders" && select == "*" ? RiderSelect : select)
                 .Filter("id", "eq", id),
             role,
             cancellationToken);

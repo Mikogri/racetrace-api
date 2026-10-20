@@ -27,7 +27,11 @@ public sealed class FantasyPriceSnapshotStore
 
     public async Task<FantasyPriceSnapshot?> GetAtOrBeforeAsync(int season, DateTimeOffset cutoff, CancellationToken cancellationToken = default)
     {
-        if (_jobs?.Enabled == true) return await _jobs.ReadAsync<FantasyPriceSnapshot>("prices", season.ToString(System.Globalization.CultureInfo.InvariantCulture), cutoff, cancellationToken);
+        if (_jobs?.Enabled == true)
+        {
+            var shared = await _jobs.ReadAsync<FantasyPriceSnapshot>("prices", season.ToString(System.Globalization.CultureInfo.InvariantCulture), cutoff, cancellationToken);
+            return shared?.DataVersion == 1 ? shared : null;
+        }
         var directory = SeasonDirectory(season);
         if (!Directory.Exists(directory)) return null;
         foreach (var path in Directory.EnumerateFiles(directory, "snapshot-*.json").OrderDescending(StringComparer.Ordinal))
@@ -37,7 +41,7 @@ public sealed class FantasyPriceSnapshotStore
             {
                 await using var stream = File.OpenRead(path);
                 var snapshot = await JsonSerializer.DeserializeAsync<FantasyPriceSnapshot>(stream, JsonOptions, cancellationToken);
-                if (snapshot is not null && snapshot.Season == season && snapshot.Riders is { Count: > 0 } && snapshot.FetchedAtUtc <= cutoff)
+                if (snapshot is not null && snapshot.DataVersion == 1 && snapshot.Season == season && snapshot.Riders is { Count: > 0 } && snapshot.FetchedAtUtc <= cutoff)
                     return snapshot;
             }
             catch (JsonException exception) { _logger.LogWarning(exception, "Ignoring a corrupt Fantasy price snapshot {FileName}", Path.GetFileName(path)); }
@@ -76,7 +80,7 @@ public sealed class FantasyPriceSnapshotStore
         var directory = SeasonDirectory(snapshot.Season);
         Directory.CreateDirectory(directory);
         var name = $"snapshot-{snapshot.FetchedAtUtc.UtcDateTime:yyyyMMddTHHmmssfffffff}-{Guid.NewGuid():N}.json";
-        await WriteAtomicAsync(Path.Combine(directory, name), snapshot, overwrite: false, cancellationToken);
+        await WriteAtomicAsync(Path.Combine(directory, name), snapshot with { DataVersion = 1 }, overwrite: false, cancellationToken);
         await RecordAttemptAsync(snapshot.Season, null, cancellationToken);
     }
 

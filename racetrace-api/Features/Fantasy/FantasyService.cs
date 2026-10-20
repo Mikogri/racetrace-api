@@ -41,10 +41,11 @@ public sealed class FantasyService(
         var forecast = roundId is null ? null : await prepared.ReadAsync(roundId, token);
         var eventOptions = roundId is null ? null : options.Value.Events.GetValueOrDefault(roundId);
         var startList = eventOptions?.StartListRiderIds?.ToHashSet(StringComparer.Ordinal);
+        var now = time.GetUtcNow();
         var verifiedList = startList is { Count: > 0 } &&
             Uri.TryCreate(eventOptions?.StartListSourceUrl, UriKind.Absolute, out var source) && source.Scheme == Uri.UriSchemeHttps &&
-            eventOptions?.StartListFetchedAtUtc is not null && eventOptions.StartListFetchedAtUtc <= time.GetUtcNow();
-        if (round is not null && !verifiedList) warnings.Add("Team selection uses the Pinkbike catalogue and reported injuries; participation in the next round is not confirmed.");
+            eventOptions?.StartListFetchedAtUtc is { } observed && observed <= now && now - observed <= TimeSpan.FromHours(24);
+        if (round is not null && !verifiedList) warnings.Add("Team selection uses the Pinkbike catalogue; participation in the next round is not confirmed.");
         var validForecast = forecast is not null && forecast.Season == season && forecast.EngineVersion == FantasyRacePrediction.EngineVersion &&
             (forecast.CalculationFingerprint == AlgorithmCatalog.Current.Fingerprint("fantasy") ||
                 forecast.CalculationFingerprint is null && !race.CoherenceEnabled && !options.Value.DistributedCoordinationEnabled) &&
@@ -55,15 +56,13 @@ public sealed class FantasyService(
         if (validForecast && time.GetUtcNow() - forecast!.PreparedAtUtc > options.Value.SyncInterval)
             warnings.Add("Projection refresh is overdue. Showing the last successful forecast for the unchanged race data and model.");
         if (round is not null && !validForecast) warnings.Add("Fantasy projections need preparation or refresh using the current model, rules and event data.");
-        var trainingFields = validForecast ? forecast!.TrainingFields ?? [] : [];
+        var trainingFields = validForecast ? (forecast!.TrainingFields ?? []).Where(field =>
+            field.Context == (round?.String("context_name") ?? "") && field.FetchedAtUtc <= now &&
+            now - field.FetchedAtUtc <= TimeSpan.FromHours(24) &&
+            Uri.TryCreate(field.SourceUrl, UriKind.Absolute, out var url) && url.Scheme == Uri.UriSchemeHttps).ToArray() : [];
         foreach (var field in trainingFields)
-            warnings.Add($"{field.Gender}: candidate pool uses the published timed-training roster ({field.SourceUrl}). Training participation is not a guarantee of starting the race.");
-        bool OnEntryList(FantasyRiderDto rider) => rider.RiderId is not null &&
-            (verifiedList ? startList!.Contains(rider.RiderId) :
-             trainingFields.FirstOrDefault(field => field.Gender == rider.Gender) is not { } field || field.RiderIds.Contains(rider.RiderId));
-        // Older persisted snapshots contain the retired mandatory-entry-list policy.
-        if (forecast is not null) warnings.AddRange(forecast.Warnings.Where(warning => warning !=
-            "The current entry list has not been verified; projections are informational and cannot establish optimizer eligibility."));
+            warnings.Add($"{field.Gender}: published timed-training roster confirms entries ({field.SourceUrl}); absence does not establish non-entry.");
+        if (validForecast) warnings.AddRange(forecast!.Warnings);
         var projections = validForecast ? forecast!.Riders.ToDictionary(rider => rider.RiderId, StringComparer.Ordinal) : new Dictionary<string, FantasyPreparedRider>();
         var riders = snapshot?.Riders.Select(rider =>
         {
@@ -76,12 +75,13 @@ public sealed class FantasyService(
             }
             if (rider.RiderId is null) rowWarnings.Add("Internal rider mapping is missing or ambiguous.");
             if (projection is null) rowWarnings.Add("A verified projection is not available.");
-            if (rider.InjuryFlag) rowWarnings.Add("Pinkbike reports an injury; excluded from automatic selection.");
-            if (verifiedList && (rider.RiderId is null || !startList!.Contains(rider.RiderId))) rowWarnings.Add("Not on the confirmed start list.");
-            if (!verifiedList && trainingFields.FirstOrDefault(field => field.Gender == rider.Gender) is { } trainingField &&
-                (rider.RiderId is null || !trainingField.RiderIds.Contains(rider.RiderId))) rowWarnings.Add("Not matched to the published timed-training roster.");
+            var entryStatus = rider.RiderId is null ? "unknown" :
+                verifiedList && startList!.Contains(rider.RiderId) || trainingFields.Any(field =>
+                    field.Gender == rider.Gender && field.RiderIds.Contains(rider.RiderId)) ? "entered" :
+                verifiedList && eventOptions!.StartListIsComplete ? "not_entered" : "unknown";
+            if (entryStatus == "not_entered") rowWarnings.Add("Not entered on the confirmed complete round entry list.");
             return new FantasyRiderDto(rider.ExternalId, rider.RiderId, rider.Name, projection?.CountryCode,
-                rider.Gender, rider.Price, rider.SeasonPoints, rider.InjuryFlag, projection?.ExpectedFinalPoints,
+                rider.Gender, rider.Price, rider.SeasonPoints, entryStatus, projection?.ExpectedFinalPoints,
                 projection?.ExpectedQ1Bonus, projection?.ExpectedFantasyPoints, projection?.PredictedPosition,
                 projection?.Confidence, false, rowWarnings);
         }).ToArray() ?? [];
@@ -90,10 +90,11 @@ public sealed class FantasyService(
         if (snapshot is not null && !pricesMatchRound) warnings.Add("The price catalogue belongs to another round; a matching price import is required for Best Team.");
         if (season == rules.Season && validForecast && pricesMatchRound)
         {
-            var candidates = riders.Where(rider => OnEntryList(rider) &&
-                !rider.InjuryFlag && rider.Price is > 0 && rider.ExpectedFantasyPoints.HasValue)
+            var candidates = riders.Where(rider => rider.RiderId is not null && rider.EntryStatus != "not_entered" &&
+                rider.Price is > 0 && rider.ExpectedFantasyPoints.HasValue)
                 .Select(rider => new FantasyCandidate(rider.PinkbikeExternalId, rider.RiderId, rider.Gender, rider.Price!.Value, rider.ExpectedFantasyPoints!.Value)).ToArray();
-            var lineupKey = $"fantasy-lineup:{snapshot?.Id}:{forecast!.PreparedAtUtc:O}:{forecast.EventFingerprint}:{rules.Version}";
+            var lineupKey = $"fantasy-lineup:entry-v1:{snapshot?.Id}:{forecast!.PreparedAtUtc:O}:{forecast.EventFingerprint}:{rules.Version}:" +
+                string.Join(',', candidates.Select(candidate => candidate.PinkbikeExternalId));
             if (!cache.TryGetValue<FantasyLineup?>(lineupKey, out lineup))
             {
                 lineup = FantasyOptimizer.Optimize(candidates, rules, token);

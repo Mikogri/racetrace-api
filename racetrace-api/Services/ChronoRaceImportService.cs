@@ -155,6 +155,7 @@ public sealed class ChronoRaceImportService
             request.ChronoraceJson,
             competitionClass.Code,
             request.CategoryCode);
+        KeepSportingRiderFields(normalizedResultJson.Json);
         if (normalizedResultJson.Format == ImportResultJsonNormalizer.UciWorldChampionshipFormat)
         {
             warnings.Add("UCI World Championship result JSON was normalized before import.");
@@ -719,7 +720,7 @@ public sealed class ChronoRaceImportService
 
         var existingRows = await _batches.GetRowsByValuesAsync(
             "riders",
-            "*",
+            DomainQueryService.RiderSelect,
             "uci_id",
             sourceByUciId.Keys,
             cancellationToken);

@@ -14,7 +14,7 @@ public sealed class PodiumPredictorService
 
     private const string PredictionResultSelect =
         "id,rider_id,session_id,race_time_ms,top_speed,position,is_classified,status," +
-        "riders(*),teams(*),result_points(points_awarded)," +
+        "riders(" + DomainQueryService.RiderSelect + "),teams(*),result_points(points_awarded)," +
         "sessions(id,round_id,category_id,name,session_type,session_date,conditions(name,is_dry)," +
         "round_categories(round_id,category_id," +
         "rounds(id,track_id,competition_level_id,is_season_final_round,season_year,start_date," +

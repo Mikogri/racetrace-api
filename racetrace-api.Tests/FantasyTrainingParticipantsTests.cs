@@ -74,7 +74,7 @@ public sealed class FantasyTrainingParticipantsTests
         Assert.Equal(expected, FantasyTrainingParticipants.IsLive(new JsonObject { ["status"] = status }));
 
     private static PinkbikeFantasyRider Rider(string? id, string name, string gender) =>
-        new(id ?? "external", id, name, gender, 100_000, 0, false, DateTimeOffset.UtcNow, "test", null, []);
+        new(id ?? "external", id, name, gender, 100_000, 0, DateTimeOffset.UtcNow, "test", null, []);
 
     private static JsonObject LiveRound(string competition) => new()
     {

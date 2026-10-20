@@ -112,7 +112,6 @@ internal static class CompactMetricsPackageParser
                 ["profile_image_url"] = CompactClone(row, 5),
                 ["uci_code"] = CompactClone(row, 8),
                 ["birth_date"] = CompactClone(row, 9),
-                ["has_injury"] = CompactClone(row, 10),
                 ["gender"] = CompactClone(row, 12)
             };
             var teamId = CompactString(row, 6);

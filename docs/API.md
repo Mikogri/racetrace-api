@@ -44,6 +44,10 @@ Administracja obejmuje import sesji i rund z ChronoRace/Tissot, import PDF, edyc
 
 ## JSON i modele
 
+Fantasy rider responses expose round-scoped `entryStatus` (`unknown`, `entered`, `not_entered`) instead of the retired health flag. This is an intentional coordinated breaking change: regenerate OpenAPI/TypeScript and deploy API and frontend together. Athlete profiles and admin edits no longer include the retired field; rider selections use explicit identity columns rather than wildcard reads. Entry status is not a replacement for official DNS/DNF/DSQ result status. See [PREDICTIONS.md](PREDICTIONS.md) for evidence and eligibility rules.
+
+ChronoRace result proxy and import boundaries retain only known sporting rider fields. Provider field names, official result statuses and timing records are preserved; unrecognized rider attributes are not forwarded or persisted. External mixed payloads may still contain ignored attributes in transit, so raw response logging/archiving must remain disabled.
+
 HTTP oraz schematy OpenAPI używają `camelCase`: `RiderId` staje się `riderId`, a `GapToLeader` — `gapToLeader`. Preferowany model C# to krótki `sealed record`, o ile zachowuje wymagane wartości domyślne i logikę. Atrybut nazwy jest potrzebny tylko dla rzeczywistego wyjątku kontraktu, nie dla zwykłego `camelCase`.
 
 Dynamiczne `JsonObject` i `JsonNode` przechodzą przez `ApiJsonNodeConverterFactory`: writer normalizuje nazwy właściwości tylko na granicy HTTP i nie mutuje źródłowego dokumentu. Klucze słowników identyfikujące dane pozostają niezmienione (`DictionaryKeyPolicy=null`). Odczyt dynamicznego JSON nie dokonuje analogicznego przepisywania. `AdminJsonFields` mapuje obsługiwane pola PATCH na kolumny bazy.

@@ -40,7 +40,10 @@ public sealed partial class ChronoRaceLiveProxyService
         }
 
         var content = await ExternalJsonResponse.ReadAsync(response, cancellationToken);
-        return string.IsNullOrWhiteSpace(content) ? null : JsonNode.Parse(content);
+        var payload = string.IsNullOrWhiteSpace(content) ? null : JsonNode.Parse(content);
+        if (key is not null && payload is JsonObject result)
+            Features.Imports.ChronoRace.ChronoRacePayloadMapper.KeepSportingRiderFields(result);
+        return payload;
     }
 
     [GeneratedRegex("^[A-Za-z0-9_-]{1,128}$", RegexOptions.CultureInvariant)]

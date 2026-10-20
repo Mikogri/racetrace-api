@@ -56,6 +56,16 @@ Triggery rewizji są atomowe w granicach transakcji PostgreSQL. Import składaj�
 
 ## Utrzymanie i wdrożenie
 
+### Sport-only data rollout — approval pending
+
+The local implementation removes health indicators from importer mappings, DTOs, admin edits and Fantasy selection. Production erasure is **not performed automatically**. Migration `20261019234716_remove_health_data.sql` requires explicit owner approval. It replaces the five installed read RPC bodies while retaining signatures/grants, clears compact identity slot 10 to JSON null without shifting later fields, scrubs nested legacy keys from stored input packages, invalidates legacy prepared outputs, sanitizes shared price snapshots, removes shared forecasts and drops `riders.has_injury` without `CASCADE`. Source results, timing inputs and calculator formulas are unchanged. An unknown dependency must abort the transaction.
+
+Rollout: stop all API/import/background writers; confirm the actual Supabase target, volumes and restricted recovery procedure; apply the approved migration; clean local/persistent Fantasy files; deploy the matching API/frontend; restart processes to discard in-memory and HTTP output caches; synchronize prices and regenerate forecasts; verify public JSON and numerical parity. Do not roll back to code that reimports retired fields. Price snapshots and forecasts use separate configured directories (`Fantasy:Import:SnapshotDirectory` and `Fantasy:DataDirectory/predictions`); confirm the deployed paths before running cleanup.
+
+`tools/Remove-LegacyFantasyData.ps1 -PriceDirectory <absolute-prices-path> -ForecastDirectory <absolute-predictions-path>` previews file scope. Only add `-Apply` after approval. It preserves whitelisted catalogue identities/prices/history, marks sanitized snapshots `dataVersion: 1`, and removes only hashed forecast JSON files for regeneration. It never copies original data into a new backup. `tools/Remove-LegacyFantasyData.Tests.ps1` checks preview, erasure, retained sporting values, deletion scope and repeated execution using synthetic files.
+
+Database/file backups, operator exports, previously saved source HTML, logs and Git history require a separate inventory and retention/access decision; the migration does not erase those copies. Do not claim completed production erasure or publish a definitive privacy notice until deployment and retained-copy handling are verified. The incident-audit fixture retains only sporting matching columns, not source narratives or medical links.
+
 Migracje stosuje się jawnie po sprawdzeniu środowiska i zależności. [Archiwalne potwierdzenie wdrożenia](archive/deployment-2026-10-11.md) dokumentuje konkretny przebieg, nie obecne ustawienia produkcji. Obecność pliku SQL w repozytorium ani wartość domyślna flagi nie dowodzi aktywacji na serwerze.
 
 Trwałość prognoz Fantasy i koordynację zadań opisuje [PREDICTIONS.md](PREDICTIONS.md). Sposób mierzenia osobno komunikacji z bazą i obliczeń API opisuje [PERFORMANCE.md](PERFORMANCE.md).

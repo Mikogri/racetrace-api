@@ -21,7 +21,10 @@ public sealed record FantasyPreparedRound(int Season, string RoundId, DateTimeOf
     DateTimeOffset? TrainingDataCutoff = null,
     DateTimeOffset? PredictionAsOf = null,
     int? SimulationSeed = null,
-    int? SimulationIterations = null);
+    int? SimulationIterations = null)
+{
+    public int DataVersion { get; init; }
+}
 
 /// <summary>Prepared forecasts survive restarts; a failed refresh never replaces the last successful file.</summary>
 public sealed class FantasyPreparedStore(IOptions<FantasyOptions> options, IHostEnvironment environment, FantasyJobCoordinator? jobs = null)
@@ -31,7 +34,11 @@ public sealed class FantasyPreparedStore(IOptions<FantasyOptions> options, IHost
 
     public async Task<FantasyPreparedRound?> ReadAsync(string roundId, CancellationToken token = default)
     {
-        if (jobs?.Enabled == true) return await jobs.ReadAsync<FantasyPreparedRound>("forecast", roundId, DateTimeOffset.MaxValue, token);
+        if (jobs?.Enabled == true)
+        {
+            var shared = await jobs.ReadAsync<FantasyPreparedRound>("forecast", roundId, DateTimeOffset.MaxValue, token);
+            return shared?.DataVersion == 1 ? shared : null;
+        }
         var path = FilePath(roundId);
         if (!File.Exists(path)) return null;
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 4096, true);
@@ -39,7 +46,7 @@ public sealed class FantasyPreparedStore(IOptions<FantasyOptions> options, IHost
             ?? throw new InvalidDataException("The stored Fantasy forecast is empty.");
         if (prepared.RoundId != roundId)
             throw new InvalidDataException("The stored Fantasy forecast does not match the requested round.");
-        return prepared;
+        return prepared.DataVersion == 1 ? prepared : null;
     }
 
     public async Task WriteAsync(FantasyPreparedRound prepared, CancellationToken token = default)
@@ -53,7 +60,7 @@ public sealed class FantasyPreparedStore(IOptions<FantasyOptions> options, IHost
             await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096,
                 FileOptions.Asynchronous | FileOptions.WriteThrough))
             {
-                await JsonSerializer.SerializeAsync(stream, prepared, Json, token);
+                await JsonSerializer.SerializeAsync(stream, prepared with { DataVersion = 1 }, Json, token);
                 await stream.FlushAsync(token);
             }
             token.ThrowIfCancellationRequested();

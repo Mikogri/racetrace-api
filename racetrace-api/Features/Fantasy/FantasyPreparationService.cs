@@ -49,7 +49,8 @@ public sealed class FantasyPreparationService(
             eventOptions?.Q1BonusApplies,
             StartListRiderIds = eventOptions?.StartListRiderIds?.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(),
             eventOptions?.StartListSourceUrl,
-            eventOptions?.StartListFetchedAtUtc
+            eventOptions?.StartListFetchedAtUtc,
+            eventOptions?.StartListIsComplete
         };
         return Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(canonical)));
     }
@@ -189,7 +190,7 @@ public sealed class FantasyPreparationService(
             AlgorithmCatalog.Current.Fingerprint("fantasy"),
             AlgorithmCatalog.Hash(new { Configuration = AlgorithmCatalog.Current.ConfigurationHash("fantasy"), Event = EventFingerprint(eventOptions), Calibrations = calibrations }),
             calibrations.Count == 0 ? null : calibrations.Values.Max(value => value.TrainedThroughUtc), timeProvider.GetUtcNow(),
-            AlgorithmConfiguration.Podium.RandomSeed, FantasyModelConfiguration.Current.ForecastIterations);
+            AlgorithmConfiguration.Podium.RandomSeed, FantasyModelConfiguration.Current.ForecastIterations) { DataVersion = 1 };
         logger.LogInformation("Prepared Fantasy round {RoundId}: {RiderCount} projections and {BacktestCount} walk-forward category tests.",
             roundId, prepared.Riders.Count, backtests.Count);
         return prepared;
@@ -215,7 +216,7 @@ public sealed class FantasyPreparationService(
         rules ??= FantasyRuleCatalog.Default;
         if (!IsHistoricalSalaryContext(round, snapshot, eventOptions)) return null;
         var startList = eventOptions!.StartListRiderIds!.ToHashSet(StringComparer.Ordinal);
-        var eligible = snapshot.Riders.Where(rider => rider.RiderId is not null && startList.Contains(rider.RiderId) && !rider.InjuryFlag).ToArray();
+        var eligible = snapshot.Riders.Where(rider => rider.RiderId is not null && startList.Contains(rider.RiderId)).ToArray();
         var byRider = observations.Where(row => row.RiderId is not null).GroupBy(row => row.RiderId!, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
         if (eligible.Length == 0 || eligible.Select(rider => rider.RiderId).Distinct(StringComparer.Ordinal).Count() != eligible.Length ||

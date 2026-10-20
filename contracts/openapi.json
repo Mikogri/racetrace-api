@@ -2022,6 +2022,10 @@
               "string"
             ]
           },
+          "dataVersion": {
+            "format": "int32",
+            "type": "integer"
+          },
           "engineVersion": {
             "type": "string"
           },
@@ -2119,7 +2123,8 @@
           "trainingDataCutoff",
           "predictionAsOf",
           "simulationSeed",
-          "simulationIterations"
+          "simulationIterations",
+          "dataVersion"
         ],
         "type": "object"
       },
@@ -2167,6 +2172,14 @@
               "string"
             ]
           },
+          "entryStatus": {
+            "enum": [
+              "unknown",
+              "entered",
+              "not_entered"
+            ],
+            "type": "string"
+          },
           "expectedFantasyPoints": {
             "format": "double",
             "type": [
@@ -2194,9 +2207,6 @@
               "female"
             ],
             "type": "string"
-          },
-          "injuryFlag": {
-            "type": "boolean"
           },
           "isRecommended": {
             "type": "boolean"
@@ -2249,7 +2259,7 @@
           "gender",
           "price",
           "pinkbikeSeasonPoints",
-          "injuryFlag",
+          "entryStatus",
           "expectedFinalPoints",
           "expectedQ1Bonus",
           "expectedFantasyPoints",

@@ -19,7 +19,6 @@ public sealed record PinkbikeFantasyRider(
     string Gender,
     decimal Price,
     int SeasonPoints,
-    bool InjuryFlag,
     DateTimeOffset FetchedAtUtc,
     string MappingStatus,
     string? CountryName,
@@ -32,7 +31,10 @@ public sealed record FantasyPriceSnapshot(
     DateTimeOffset FetchedAtUtc,
     IReadOnlyList<PinkbikeFantasyRider> Riders,
     string SourceUrl,
-    string AcquisitionMethod);
+    string AcquisitionMethod)
+{
+    public int DataVersion { get; init; }
+}
 
 public sealed record FantasyPriceStatus(FantasyPriceSnapshot? Snapshot, bool IsStale, string? LastSyncError, DateTimeOffset? LastSyncAttemptUtc);
 

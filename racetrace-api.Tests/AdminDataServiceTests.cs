@@ -163,25 +163,23 @@ public sealed class AdminDataServiceTests
         Assert.Equal(
             "https://images.example.com/rider.png",
             updated.String("profile_image_url"));
-        Assert.False(updated.Bool("has_injury"));
         Assert.Equal(1, supabase.PatchCount);
     }
 
     [Fact]
-    public async Task RiderPatchCanUpdateOnlyInjuryFlag()
+    public async Task RiderPatchRejectsRetiredField()
     {
         var supabase = new AdminSupabaseClient();
         supabase.Rows["riders"] = Rider();
         var service = new AdminDataService(supabase);
 
-        var updated = await service.UpdateRiderAsync(
+        var error = await Assert.ThrowsAsync<ApiException>(() => service.UpdateRiderAsync(
             "7",
             new JsonObject { ["hasInjury"] = true },
-            CancellationToken.None);
+            CancellationToken.None));
 
-        Assert.True(updated.Bool("has_injury"));
-        Assert.Null(updated["profile_image_url"]);
-        Assert.Equal(1, supabase.PatchCount);
+        Assert.Equal("ADMIN_FIELDS_NOT_EDITABLE", error.Code);
+        Assert.Equal(0, supabase.PatchCount);
     }
 
     [Fact]
@@ -194,8 +192,8 @@ public sealed class AdminDataServiceTests
                 "7",
                 new JsonObject
                 {
-                    ["hasInjury"] = true,
-                    ["has_injury"] = false
+                    ["profileImageUrl"] = "https://example.org/a.png",
+                    ["profile_image_url"] = "https://example.org/b.png"
                 },
                 CancellationToken.None));
 
@@ -203,7 +201,7 @@ public sealed class AdminDataServiceTests
     }
 
     [Fact]
-    public async Task RiderPatchRejectsFieldsOutsideProfileImageAndInjury()
+    public async Task RiderPatchRejectsFieldsOutsideProfileImage()
     {
         var service = new AdminDataService(new AdminSupabaseClient());
 
@@ -331,7 +329,6 @@ public sealed class AdminDataServiceTests
         ["nation"] = "FRA",
         ["birth_date"] = "2000-01-01",
         ["is_protected"] = false,
-        ["has_injury"] = false,
         ["profile_image_url"] = null,
         ["profile_image_updated_at"] = null
     };

@@ -372,7 +372,7 @@ public sealed class FantasyMathTests
         var round = new FantasyRoundData(new JsonObject { ["id"] = "round", ["season_year"] = 2026, ["start_date"] = start.ToString("O") },
             new RankingDataBundle([], [], [], [], new Dictionary<string, decimal>()));
         var catalogue = LegalPool().Select(rider => new PinkbikeFantasyRider(rider.PinkbikeExternalId, rider.RiderId,
-            rider.PinkbikeExternalId, rider.Gender, rider.Price, 0, false, start.AddDays(-1), "matched", null, [])).ToArray();
+            rider.PinkbikeExternalId, rider.Gender, rider.Price, 0, start.AddDays(-1), "matched", null, [])).ToArray();
         var snapshot = new FantasyPriceSnapshot("snapshot", 2026, round.Id, start.AddDays(-1), catalogue, "https://example.com/athletes", "test");
         var entryList = new FantasyEventOptions { StartListRiderIds = catalogue.Select(rider => rider.RiderId!).ToList(),
             StartListFetchedAtUtc = start.AddDays(-2), StartListSourceUrl = "https://example.com/entries" };

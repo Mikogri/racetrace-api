@@ -105,6 +105,7 @@ public sealed class ChronoRaceJsonFetcher
         }
 
         var json = JsonNode.Parse(body) as JsonObject;
+        if (json is not null) Features.Imports.ChronoRace.ChronoRacePayloadMapper.KeepSportingRiderFields(json);
         return json is not null && IsChronoRaceResultJson(json) ? json : null;
     }
 

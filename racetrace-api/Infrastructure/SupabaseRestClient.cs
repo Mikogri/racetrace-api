@@ -51,6 +51,7 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         {
             parameters.Add(new("on_conflict", onConflict));
         }
+        if (table == "riders") parameters.Add(new("select", Services.DomainQueryService.RiderSelect));
 
         using var request = new HttpRequestMessage(HttpMethod.Post, BuildRestUri(table, parameters));
         AddAuthHeaders(request, role);
@@ -66,6 +67,8 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
 
     public async Task<IReadOnlyList<JsonObject>> PatchAsync(string table, JsonObject payload, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default)
     {
+        if (table == "riders" && !query.Parameters.Any(parameter => parameter.Key == "select"))
+            query.Select(Services.DomainQueryService.RiderSelect);
         using var request = new HttpRequestMessage(HttpMethod.Patch, BuildRestUri(table, query.Parameters));
         AddAuthHeaders(request, role);
         request.Headers.TryAddWithoutValidation("Prefer", "return=representation");

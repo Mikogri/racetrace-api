@@ -20,6 +20,7 @@ public sealed class FantasyEventOptions
     public List<string>? StartListRiderIds { get; set; }
     public string? StartListSourceUrl { get; set; }
     public DateTimeOffset? StartListFetchedAtUtc { get; set; }
+    public bool StartListIsComplete { get; set; }
 }
 
 public sealed class FantasyWorkCoordinator

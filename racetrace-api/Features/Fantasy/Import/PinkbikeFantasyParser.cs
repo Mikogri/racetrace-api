@@ -65,7 +65,7 @@ public static partial class PinkbikeFantasyParser
                 historyPrices.TryGetValue(round.Round, out var historicalPrice) && historicalPrice > 0 ? historicalPrice : null,
                 ReadInteger(data, $"round{round.Round}", 0, int.MaxValue))).ToArray();
             riders.Add(new PinkbikeFantasyRider(id, null, name, gender, price, points,
-                !string.IsNullOrWhiteSpace(ReadOptionalString(data, "injury")), fetchedAtUtc, "unmapped",
+                fetchedAtUtc, "unmapped",
                 ReadOptionalString(data, "countryname"), history));
             if (riders.Count > MaximumRiders)
                 throw new InvalidDataException("Pinkbike athlete count exceeds the supported limit.");

@@ -29,7 +29,7 @@ public sealed class SupabaseRestClientTransportTests
         Assert.Equal(prefer, request.Prefer);
         Assert.Equal(
             "https://example.supabase.co/rest/v1/riders?" + (method == "POST"
-                ? "on_conflict=id%2Cname"
+                ? "on_conflict=id%2Cname&select=" + Uri.EscapeDataString(RaceTrace.Api.Services.DomainQueryService.RiderSelect)
                 : "select=id%2Cname&id=eq.7&order=id.asc&limit=30&offset=30"),
             request.Uri);
         Assert.Equal(hasBody ? "{\"name\":\"Rider\",\"score\":null}" : null, request.Body);

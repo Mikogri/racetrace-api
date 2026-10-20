@@ -14,17 +14,45 @@ namespace RaceTrace.Api.Tests;
 public sealed class FantasyServiceTests
 {
     [Theory]
+    [InlineData("ready", "entered", true)]
+    [InlineData("unknown-start-list", "unknown", true)]
+    [InlineData("outside-start-list", "not_entered", false)]
+    [InlineData("partial-start-list", "unknown", true)]
+    [InlineData("stale-entry-list", "unknown", true)]
+    [InlineData("future-entry-list", "unknown", true)]
+    [InlineData("training-exclusion", "unknown", true)]
+    [InlineData("training-other-round", "unknown", true)]
+    [InlineData("training-stale", "unknown", true)]
+    public async Task ParticipationEvidenceNeverTurnsUnknownIntoExclusion(string scenario, string expected, bool eligible)
+    {
+        using var fixture = new Fixture(scenario);
+        await fixture.SeedAsync(scenario);
+        var response = await fixture.Service.CurrentAsync(default);
+        Assert.Equal(expected, response.Riders.Single(rider => rider.RiderId == "5").EntryStatus);
+        Assert.Equal(eligible, response.Recommendation is not null);
+        if (scenario == "training-exclusion") Assert.Equal("entered", response.Riders.Single(rider => rider.RiderId == "0").EntryStatus);
+        if (scenario is "training-other-round" or "training-stale") Assert.Equal("unknown", response.Riders.Single(rider => rider.RiderId == "0").EntryStatus);
+    }
+
+    [Fact]
+    public async Task PublicResponseDoesNotExposeHealthFields()
+    {
+        using var fixture = new Fixture("ready");
+        await fixture.SeedAsync("ready");
+        var json = JsonSerializer.Serialize(await fixture.Service.CurrentAsync(default), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.DoesNotContain("injury", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("ready", true)]
     [InlineData("unknown-start-list", true)]
-    [InlineData("unknown-start-list-injury", false)]
     [InlineData("stale-prices", true)]
     [InlineData("overdue-forecast", true)]
     [InlineData("other-round-prices", false)]
-    [InlineData("training-exclusion", false)]
+    [InlineData("training-exclusion", true)]
     [InlineData("training-empty", true)]
     [InlineData("missing-mapping", false)]
     [InlineData("wrong-category", false)]
-    [InlineData("injury", false)]
     [InlineData("outside-start-list", false)]
     [InlineData("stale-model", false)]
     [InlineData("stale-dependency", false)]
@@ -123,9 +151,10 @@ public sealed class FantasyServiceTests
             _event = scenario.StartsWith("unknown-start-list", StringComparison.Ordinal) || scenario.StartsWith("training-", StringComparison.Ordinal) ? null : new FantasyEventOptions
             {
                 Q1BonusApplies = true,
-                StartListRiderIds = Enumerable.Range(0, scenario == "outside-start-list" ? 5 : 6).Select(index => index.ToString()).ToList(),
+                StartListRiderIds = Enumerable.Range(0, scenario is "outside-start-list" or "partial-start-list" ? 5 : 6).Select(index => index.ToString()).ToList(),
                 StartListSourceUrl = "https://example.org/verified-test-start-list",
-                StartListFetchedAtUtc = Now.AddHours(-1)
+                StartListFetchedAtUtc = scenario == "stale-entry-list" ? Now.AddDays(-2) : scenario == "future-entry-list" ? Now.AddHours(1) : Now.AddHours(-1),
+                StartListIsComplete = scenario != "partial-start-list"
             };
             var services = new ServiceCollection().AddLogging();
             services.AddRaceTraceConfiguration(new ConfigurationBuilder().Build()).AddSupabaseInfrastructure().AddRaceTraceApplication();
@@ -142,7 +171,7 @@ public sealed class FantasyServiceTests
         {
             var riders = Enumerable.Range(0, 6).Select(index => new PinkbikeFantasyRider("p" + index,
                 scenario == "missing-mapping" && index == 0 ? null : index.ToString(), "Rider " + index,
-                index < 4 ? "male" : "female", 200_000, 40, scenario.Contains("injury", StringComparison.Ordinal) && index == 0, Now,
+                index < 4 ? "male" : "female", 200_000, 40, Now,
                 "mapped", null, [])).ToArray();
             await _provider.GetRequiredService<FantasyPriceSnapshotStore>().SaveAsync(new("prices", 2026, scenario == "other-round-prices" ? "36" : "37",
                 scenario == "stale-prices" ? Now.AddDays(-2) : Now, riders, FantasyRules2026.AthletesUrl, "test"));
@@ -152,7 +181,9 @@ public sealed class FantasyServiceTests
                 scenario == "stale-model" ? "old" : FantasyRacePrediction.EngineVersion, FantasyCalibration.Version,
                 FantasyRules2026.Rules.Version, FantasyPreparationService.EventFingerprint(_event), projections, [], [],
                 DataRevision: scenario == "changed-source" ? "old-data" : await _scope.ServiceProvider.GetRequiredService<FantasyRacePrediction>().DataRevisionAsync(default),
-                TrainingFields: scenario == "training-exclusion" ? [new("male", "test", "https://example.org/training", Now, ["0", "1", "2"])] : [],
+                TrainingFields: scenario.StartsWith("training-", StringComparison.Ordinal) && scenario != "training-empty"
+                    ? [new("male", scenario == "training-other-round" ? "other-round" : "test", "https://example.org/training",
+                        scenario == "training-stale" ? Now.AddDays(-2) : Now, ["0", "1", "2"])] : [],
                 CalculationFingerprint: scenario.StartsWith("legacy-fingerprint", StringComparison.Ordinal) ? null :
                     scenario == "stale-dependency" ? "previous-rating-config" : AlgorithmCatalog.Current.Fingerprint("fantasy"),
                 ConfigurationHash: "stored-effective-config", SimulationSeed: 123, SimulationIterations: 2_000));
@@ -189,7 +220,7 @@ public sealed class FantasyServiceTests
             Assert.Equal("rounds", query.Table);
             CalendarReads++;
             var round = JsonNode.Parse("""
-                {"id":"37","season_year":2026,"round_number":8,"start_date":"2026-09-26T00:00:00Z","end_date":"2026-09-27T00:00:00Z",
+                {"id":"37","context_name":"test","season_year":2026,"round_number":8,"start_date":"2026-09-26T00:00:00Z","end_date":"2026-09-27T00:00:00Z",
                 "competition_levels":{"code":"world_cup"},"tracks":{"venue":"Whistler","name":"1199"}}
                 """)!.AsObject();
             if (RoundAlreadyStarted) round["start_date"] = "2026-09-15T00:00:00Z";
