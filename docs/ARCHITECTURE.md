@@ -40,6 +40,8 @@ Filtry są zapisywane w URL. Nawigacja z rankingu do profilu przekazuje jego kon
 
 Pierwszy odczyt, odświeżenie istniejących danych, błąd i brak danych są osobnymi stanami. Wspólne komponenty utrzymują spójne skeletony, spinner, progress bar i komunikaty; odświeżanie zachowuje zawartość i płynnie zmienia przyciemnienie. Wykresy korzystają z Recharts i wspólnych tooltipów. Nie należy kopiować tego zachowania do kolejnych lokalnych implementacji.
 
+Ordinary and chart tooltips share `TooltipSurface`. Its standard `backdrop-filter` declaration follows the WebKit-prefixed fallback so production CSS optimization retains the standard browser property. `node --test scripts/tooltip-css.check.mjs` exercises the minified CSS output in CI, not just the source stylesheet; blur remains 5 px with a 25% background.
+
 ## Live Timing
 
 Moduły w `features/live/api/` rozdzielają hooki, transport, adapter ChronoRace, adapter Tissot i normalizację wyników. API dostarcza rundę, kontekst i mapowanie UCI ID na zawodnika; źródłem bieżących czasów jest dostawca. Katalog i snapshot sesji są odświeżane co 3 sekundy. Zapytania o kontekst rundy i mapowanie identyfikatorów mają inną politykę świeżości, więc nie oznacza to odpytywania własnego rankingu co 3 sekundy.
