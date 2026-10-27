@@ -38,15 +38,21 @@ Najwyższy osiągnięty etap osłabia część ponad 50 współczynnikiem 1 dla 
 
 ## Detekcja incydentów
 
-`SectorIncidentDetector` analizuje czasy odcinków, nie same skumulowane gapy. Oczekiwany czas to mediana pola sektora pomnożona przez medianę relacji rider/pole na trzech najbliższych innych użytecznych sektorach. Potrzebne są przynajmniej dwa sektory odniesienia. Skala uwzględnia rozrzut pola i lokalny rozrzut ridera z podłogą 2%. Pogorszenie pozycji wspiera dowód czasowy; nie zastępuje go.
+`SectorIncidentDetector` analizuje czasy odcinków, nie skumulowane gapy. Rozdziela wykrycie anomalii, jej silną klasyfikację i możliwość rekonstrukcji czasu. `LossSeconds` jest oszacowaniem straty w sekundach; `RobustDeviation` jest bezwymiarowym odchyleniem, nie sekundami ani prawdopodobieństwem wypadku. Wszystkie odniesienia pola muszą dotyczyć tej samej sesji i kategorii.
 
-Duża anomalia wymaga jednocześnie nadwyżki co najmniej 4 s, odchylenia co najmniej 1,5, sumy odchylenia i dodatniego pogorszenia percentyla co najmniej 4 oraz dwóch czystych sektorów odniesienia. Wyjątek dla izolowanej straty czołowego ridera wymaga co najmniej 2 s, odchylenia 2, spadku percentyla o 0,5, trzech czystych odniesień i powrotu do tempa. Sąsiednie sektory muszą należeć do najlepszych 20%, a mediana innych rang do najlepszych 15%, przy polu co najmniej sześciu zawodników. Wyjątek nie działa na pierwszym ani ostatnim sektorze.
+Podstawowa ścieżka wymaga lokalnej nadwyżki co najmniej 4 s z dowodem czasowym i pozycyjnym albo izolowanej straty co najmniej 2 s przy potwierdzonym tempie czołówki po obu stronach sektora. Używa mediany najbliższych sektorów i rzeczywistego rozrzutu pola oraz profilu ridera. Sama różnica miejsc nie wystarcza.
+
+Uzupełniająca ścieżka obejmuje tylko ekstremalne straty: jednocześnie co najmniej 10 s, 25% oczekiwanego czasu i odchylenie co najmniej 1,5. Odniesieniem jest mediana relacji czas/mediana pola na pozostałych wiarygodnych sektorach, nie najlepszy sektor. Rozrzut nie jest sztucznie ograniczany: normalne różnice mocnych stron i szerokie pole pozostają częścią niepewności. Co najmniej połowa dostępnych odniesień musi być zgodna z profilem w tolerancji logarytmicznej 0,05. Badany sektor nie wyznacza własnego odniesienia; zamrożona lista odniesień pomija wcześniej silnie oznaczone sektory.
+
+Detekcja ekstremalnej straty nie wymaga dwóch innych pomiarów. Przy zerze lub jednym odniesieniu osobistym wymaga co najmniej 15 s i 50% straty, bez możliwości rekonstrukcji mety. Przy braku odniesień używa mediany pola. Pole nadal musi mieć minimum trzy poprawne pomiary. Rangi nie zastępują brakujących dowodów czasowych i nie są przeliczane na wymyślony oczekiwany czas.
+
+Ekstremalna strata może być wykryta bez późniejszego powrotu do tempa, ale wtedy nie uprawnia do korekty mety. Słaba sekwencja miejsc, pojedynczy wyjątkowo szybki sektor oraz stopniowe różnice tempa nie są automatycznie incydentem ani ostrzeżeniem obniżającym Confidence. Niezależna ścieżka `PossibleIncident` pozostaje dla utrzymującego się spowolnienia po stabilnym początku; nie usuwa sektorów z punktacji.
 
 Silne incydenty i podejrzane błędy pomiaru nie otrzymują sektorowego Pace. Możliwe incydenty nie są automatycznie czyszczone. Poprawne sektory po odzyskaniu tempa mogą ponownie zasilać Pace. Nienaturalnie krótki sektor i kompensujący długi są sprawdzane jako problem jakości pomiaru, nie automatyczny dowód wypadku.
 
-Korekta mety ma dwa przebiegi: najpierw diagnozuje się całe pole z oryginalnych danych, potem od sklasyfikowanych, kompletnych przejazdów odejmuje wyłącznie dodatnią oszacowaną stratę silnego incydentu z powrotem do tempa albo incydentu końcowego. Muszą pozostać co najmniej dwa czyste sektory i połowa trasy; braki, błędy pomiaru lub niezgodność sumy sektorów z metą blokują rekonstrukcję. Dopiero wtedy powstaje wspólne skorygowane pole odniesienia. Nie zmienia się oficjalnych czasów, miejsc ani punktów i nie dopisuje mety DNF/DNS/DSQ.
+Korekta mety ma dwa przebiegi: najpierw diagnozuje się całe pole z oryginalnych danych, potem od sklasyfikowanych, kompletnych przejazdów odejmuje wyłącznie dodatnią oszacowaną stratę silnego incydentu z powrotem do tempa albo incydentu końcowego. Muszą pozostać co najmniej dwa czyste sektory i połowa trasy; braki, błędy pomiaru, niejednoznaczne sygnały lub niezgodność sumy sektorów z metą blokują rekonstrukcję. Dopiero wtedy powstaje wspólne skorygowane pole odniesienia. Nie zmienia się oficjalnych czasów, miejsc ani punktów i nie dopisuje mety DNF/DNS/DSQ. Usunięcie wymogu dwóch odniesień dla detekcji nie usuwa zabezpieczeń rekonstrukcji.
 
-Detektor nie zna nazwisk ani etykiet z audytowego CSV. Nie potwierdza przyczyny straty. Uszkodzenie od samego startu i przejazd z małą liczbą czystych odcinków mogą pozostać niewykryte. Potwierdzone dodatnie przypadki bez pełnej listy czystych przejazdów nie pozwalają obliczyć precision ani odsetka fałszywych alarmów. Dawne eksperymenty są w [archiwum](archive/incident-experiments-2026.md), a nie w regułach produkcyjnych.
+Detektor nie zna nazwisk ani etykiet z audytowego CSV. Nie potwierdza przyczyny straty. Brak pomiaru po zdarzeniu, mała fizyczna kraksa bez wyraźnej straty lub uszkodzenie od samego startu mogą nie dać zlokalizowanego sygnału. Priorytetem jest wystarczający dowód anomalii, nie maksymalne pokrycie niepełnej listy incydentów. Potwierdzone dodatnie przypadki bez pełnej listy czystych przejazdów nie pozwalają obliczyć precision ani odsetka fałszywych alarmów. DNF jest niezależnym dowodem nieukończenia przejazdu, nie pomiarem miejsca incydentu. Wersja detektora `1.2.0` zmienia fingerprint zależnych kalkulacji; pakiety wejściowe w bazie nie wymagają przebudowy. Dawne eksperymenty są w [archiwum](archive/incident-experiments-2026.md), a nie w regułach produkcyjnych.
 
 Audyt tylko do odczytu można uruchomić z repozytorium API:
 
@@ -54,7 +60,28 @@ Audyt tylko do odczytu można uruchomić z repozytorium API:
 dotnet run --project tools/racetrace-api.PodiumBacktest -c Release -- --incident-audit --api racetrace-api --year 2026 --output artifacts/incident-audit
 ```
 
-`--offline` odtwarza zapisane wejścia, `--confirmed tools/racetrace-api.PodiumBacktest/Fixtures/incidents-2026.csv` porównuje z dostarczonymi etykietami, a `--verify-details` wykonuje dodatkowe odczyty detali. Audyt odróżnia zgodność ścieżek obliczeń od zgodności z rzeczywistymi zdarzeniami. Brakujący pakiet zatrzymuje ten konkretny probe; nie należy utożsamiać tego z brakiem produkcyjnego fallbacku API. Artefakty pozostają poza Git.
+`--offline` odtwarza zapisane pomiary i statystyki, odrzucając zapisane wcześniej `PaceFinish` i przygotowane anomalie. Referencje zależne od starej wersji detektora muszą zostać obliczone ponownie; nie jest to przebudowa pakietów wejściowych w bazie. `--confirmed tools/racetrace-api.PodiumBacktest/Fixtures/incidents-2026.csv` porównuje z dostarczonymi etykietami, a `--verify-details` wykonuje dodatkowe odczyty detali. Audyt odróżnia zgodność ścieżek obliczeń od zgodności z rzeczywistymi zdarzeniami. Brakujący pakiet zatrzymuje ten konkretny probe; nie należy utożsamiać tego z brakiem produkcyjnego fallbacku API. Artefakty pozostają poza Git.
+
+### Offline multi-season validation
+
+The canonical study now runs the actual C# detector, using the five external Markdown source lists and the existing sporting-only 2026 CSV:
+
+```powershell
+dotnet run --project tools/racetrace-api.PodiumBacktest -c Release -- --incident-study --input artifacts/incident-multiseason --documents C:/path/to/source-documents --output artifacts/incident-csharp --sweep
+```
+
+The main report evaluates the fixed production defaults, not a recall-maximizing candidate. Optional threshold experiments and whole-year selection are exploratory only; selection on training years limits alarm counts to 115% of the older detector. This budget is not a runtime quota or a precision estimate. Synthetic controls protect uniform slow profiles, one exceptional sector, gradual variation, wide fields, small terminal losses and displaced checkpoints; calculator regression tests separately protect scoring/evidence. `summary.json` records input hashes, options, yearly transfer checks and the distinct localized-vs-official-DNF counts. `labels.csv` exposes every match/exclusion and `sectors.csv` includes separate seconds and dimensionless-deviation columns. The 2026 list is included; no untouched validation claim is made. No source narratives, links or health data are copied. The study reads local snapshots only and does not update the database or publish changes.
+
+`tools/incident-multiseason.py` is the earlier, offline-only comparison tool, not the implementation used by the API. Both studies consume `inputs-YEAR.json` and `baseline.json`, generated with the audit above using `--name baseline --output artifacts/incident-multiseason/YEAR` for each year 2021–2026. The earlier experiment remains reproducible with:
+
+```powershell
+python tools/incident-multiseason.test.py
+python tools/incident-multiseason.py --input artifacts/incident-multiseason --documents C:/path/to/source-documents --output artifacts/incident-multiseason/experiment
+```
+
+The document directory contains `RaceTrace_Incidents_2021.md` through `RaceTrace_Incidents_2025.md`. Matching uses season, event/class, category, session and an explicit name-alias map; Snowshoe's two 2021 events stay separate. Training, ambiguous sessions and DNS/DSQ are not counted as scored positives; repeated observations of one run count once. The parser does not retain source narratives or URLs. `matching.csv` makes exclusions inspectable; `label-results.csv` compares every observation. These files, input data and generated reports remain outside Git.
+
+Selection compares labelled run coverage subject to an alarm-count budget, with whole-year and chronological transfer checks. Unlabelled runs remain unknown: no precision or false-positive rate is inferred. Hits do not establish the correct sector or physical cause. The 2026 inputs are development-only, not part of the 2021–2025 coverage score. Optional `--guarded-local` restricts local-profile candidates using three fixed prior-feedback checks: both Pierron cases remain detected and Pontvianne's small terminal loss remains unflagged. These checks constrain model eligibility, not the detector's runtime behavior; they are not independent validation. A candidate is not promoted automatically: production parity, finish-correction/ranking impact and review of extra alarms remain separate checks.
 
 ## Consistency
 
@@ -114,6 +141,6 @@ DNS nie daje tempa przejazdu. DNF może dostarczyć rzeczywiste sektory, ale nig
 
 ## Wersje i interpretacja
 
-Katalog ma obecnie etykiety `1.0.0` dla wag, incydentów, Pace, ResultScore i Ratingu, `1.0.1` dla Consistency, `ridge-monte-carlo-v1` dla podium i `fantasy-empirical-blend-v3` dla Fantasy. Fingerprint obejmuje konfigurację i domknięcie zależności, więc sama etykieta wersji nie identyfikuje kompletnie obliczenia. Skala Round Analytics w odpowiedzi ma niezależne `round-analytics-v2`; jej wpis katalogowy nadal ma `1.0.0`.
+Katalog ma obecnie etykiety `1.0.0` dla wag, Pace, ResultScore i Ratingu, `1.1.0` dla incydentów, `1.0.1` dla Consistency, `ridge-monte-carlo-v1` dla podium i `fantasy-empirical-blend-v3` dla Fantasy. Fingerprint obejmuje konfigurację i domknięcie zależności, więc sama etykieta wersji nie identyfikuje kompletnie obliczenia. Zmiana detektora unieważnia tożsamości zależnych obliczeń, ale nie wymaga przebudowy niezależnych pakietów wejściowych. Skala Round Analytics w odpowiedzi ma niezależne `round-analytics-v2`; jej wpis katalogowy nadal ma `1.0.0`.
 
 Stałe i krzywe są decyzjami modelu, nie dowodem naukowej kalibracji. Dawne porównania rankingów i eksperymenty opisują zamrożone dane oraz ówczesny kod; nie potwierdzają obecnej jakości dla każdego zawodnika. Zmiana kalkulatora wymaga testów zgodności albo świadomego zaakceptowania różnic, ale nie przebudowy niezależnych pakietów źródłowych. [PERFORMANCE.md](PERFORMANCE.md) opisuje narzędzia kontroli.

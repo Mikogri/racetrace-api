@@ -22,7 +22,13 @@ internal static class IncidentAudit
         var inputPath = Path.Combine(output, $"inputs-{year}.json");
         RiderDetailDataBundle bundle;
         if (args.Contains("--offline"))
+        {
             bundle = JsonSerializer.Deserialize<RiderDetailDataBundle>(await File.ReadAllTextAsync(inputPath))!;
+            // A frozen export may include finish references from the old detector.
+            // Retain measurements/statistics, not calculator-dependent results.
+            bundle = bundle with { PaceSessions = bundle.PaceSessions.Select(s => s with
+                { PaceFinish = null, PreparedAnomalies = null }).ToArray() };
+        }
         else
         {
             var config = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(api, "appsettings.Development.json")))!;
@@ -57,6 +63,7 @@ internal static class IncidentAudit
         var compared = 0;
         var diagnosticDifferences = 0;
         var paceDifferences = 0;
+        var parityRows = new StringBuilder("session_id,rider_id,raw_pace,precomputed_pace\n");
         foreach (var group in bundle.PaceSessions.GroupBy(s => s.SessionId))
         {
             var first = group.First();
@@ -72,11 +79,15 @@ internal static class IncidentAudit
                     Math.Abs((raw[s.Run.RiderId].Pace ?? 0) - (precomputed.Pace ?? 0)) > 1e-7)
                 {
                     paceDifferences++;
-                    Console.WriteLine($"Parity difference session={s.SessionId} rider={s.Run.RiderId}: raw={JsonSerializer.Serialize(raw[s.Run.RiderId])}; precomputed={JsonSerializer.Serialize(precomputed)}");
+                    parityRows.AppendLine(string.Join(",", s.SessionId, s.Run.RiderId,
+                        raw[s.Run.RiderId].Pace?.ToString("R", CultureInfo.InvariantCulture), precomputed.Pace?.ToString("R", CultureInfo.InvariantCulture)));
+                    if (paceDifferences <= 5)
+                        Console.WriteLine($"Parity difference session={s.SessionId} rider={s.Run.RiderId}: raw={raw[s.Run.RiderId].Pace:R}, precomputed={precomputed.Pace:R}");
                 }
             }
         }
         Console.WriteLine($"Raw field vs preaggregation parity: {compared} runs, {diagnosticDifferences} differing classifications, {paceDifferences} differing Pace values.");
+        await File.WriteAllTextAsync(Path.Combine(output, $"parity-differences-{year}.csv"), parityRows.ToString());
         if (diagnosticDifferences != 0 || paceDifferences != 0) throw new InvalidOperationException("Raw/precomputed results differ; inspect before using the report.");
         Console.WriteLine($"{bundle.Data.Sessions.Count} sessions; {results.Length} official runs; {results.Count(r => r.Result.IncidentSectorIndex.HasValue)} runs with incidents. Saved {output}/{name}.json");
     }
@@ -140,7 +151,7 @@ internal static class IncidentAudit
             var subset = flags.Where(f => f.Sector.Anomaly!.Kind == kind).ToArray();
             report.AppendLine($"- {kind}: **{subset.Length} sektorów**, **{subset.Select(f => (f.Run.SessionId, f.Run.RiderId)).Distinct().Count()} przejazdów**.");
         }
-        report.AppendLine("\nKategorie są rozdzielone w statystykach sesji. Detektor konserwatywny: strata ≥4 s, robust ≥1.5, robust + dodatni spadek pozycji względnej ≥4, minimum 2 czyste sektory. Wyjątek ≥2 s wymaga robust ≥2, spadku pozycji ≥50% pola, minimum 3 czystych sektorów oraz powrotu tempa i top 20% na obu sąsiednich sektorach; mediana co najmniej 3 innych pozycji musi należeć do top 15%. Baseline pochodzi z 3 najbliższych pozostałych sektorów. Brak powrotu tempa przy nieterminalnej stracie blokuje korektę mety. Progi nie są prawdopodobieństwem wypadku. Pełna specyfikacja: docs/sector-incident-detection.md.\n");
+        report.AppendLine("\nKategorie są rozdzielone w statystykach sesji. Detektor zachowuje dotychczasowe silne wskazania i dodaje odporny profil czasowy oraz kontrolowane odniesienie do rang. Wykrycie nie wymaga dwóch innych zmierzonych sektorów; bez osobistego odniesienia wymagany jest ekstremalny odstający czas. Korekta mety nadal wymaga niezależnych czystych sektorów, kompletnego sklasyfikowanego przejazdu i zgodności sumy z metą. RobustDeviation jest bezwymiarowe, LossSeconds jest w sekundach. Żadna z tych wartości nie jest prawdopodobieństwem fizycznego upadku. Bieżące progi i ograniczenia: docs/ALGORITHMS.md.\n");
         report.AppendLine("## Przejazdy z silnym wskazaniem według rundy\n\n| ID rundy w bazie | Venue | Przejazdy |\n|---|---|---:|");
         foreach (var group in flags.Where(f => f.Sector.Anomaly!.Kind == SectorAnomalyKind.LikelyIncident)
                      .GroupBy(f => f.Session.String("round_id")))

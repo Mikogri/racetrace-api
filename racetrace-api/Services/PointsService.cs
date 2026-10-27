@@ -117,21 +117,24 @@ public sealed class PointsService
         CancellationToken cancellationToken)
     {
         var mode = request.Mode?.Trim().ToLowerInvariant() ?? "missing";
-        if (mode is not ("missing" or "all"))
+        if (mode is not ("missing" or "all" or "incidents"))
         {
             throw new ApiException(
                 StatusCodes.Status400BadRequest,
                 "INVALID_PREAGGREGATION_MODE",
-                "mode must be missing or all.");
+                "mode must be missing, all or incidents.");
         }
 
         var context = new RiderMetricsContext(null, null, null, null, null, null, null, null, null, null, null);
         var allSessionIds = await _domainQueries.ResolveSessionIdsAsync(context, SupabaseRole.Service, cancellationToken);
         var sessionsWithResults = await SessionIdsWithResultsAsync(allSessionIds, cancellationToken);
         var existing = await ExistingPreaggregationIdsAsync(sessionsWithResults, cancellationToken);
-        var targets = mode == "missing"
-            ? sessionsWithResults.Where(id => !existing.Contains(id)).ToArray()
-            : sessionsWithResults.ToArray();
+        var targets = mode switch
+        {
+            "missing" => sessionsWithResults.Where(id => !existing.Contains(id)).ToArray(),
+            "incidents" => sessionsWithResults.Where(existing.Contains).ToArray(),
+            _ => sessionsWithResults.ToArray()
+        };
 
         var refreshed = new JsonArray();
         var failed = new JsonArray();
@@ -139,7 +142,10 @@ public sealed class PointsService
         {
             try
             {
-                if (await new RankingPreaggregationService(_supabase).RefreshAsync(sessionId, cancellationToken))
+                var preparation = new RankingPreaggregationService(_supabase);
+                if (mode == "incidents"
+                    ? await preparation.PrepareIncidentsAsync(sessionId, cancellationToken)
+                    : await preparation.RefreshAsync(sessionId, cancellationToken))
                     refreshed.Add(sessionId);
                 else
                     failed.Add(sessionId);

@@ -15,9 +15,10 @@ internal sealed record SectorAnomaly(
 internal static class SectorIncidentDetector
 {
     internal static IReadOnlyList<SectorAnomaly> Analyze(
-        IReadOnlyList<PacePrecomputedSector> sectors, PaceOptions options)
+        IReadOnlyList<PacePrecomputedSector> sectors, PaceOptions options,
+        IncidentDetectionOptions? thresholds = null)
     {
-        var thresholds = AlgorithmConfiguration.Incidents;
+        thresholds ??= AlgorithmConfiguration.Incidents;
         var result = sectors.Select(s => new SectorAnomaly(
             SectorAnomalyKind.Normal, null, null, null,
             s.TimeSeconds is null ? "Missing timing" : "Insufficient evidence")).ToArray();
@@ -62,15 +63,8 @@ internal static class SectorIncidentDetector
                 .Where(j => j != i && !invalid[j] && Usable(sectors[j])).ToArray();
             var references = others.OrderBy(j => Math.Abs(j - i)).ThenBy(j => j)
                 .Take(thresholds.ReferenceSectors).Select(LogRatio).ToArray();
-            if (references.Length < 2) continue;
-            var baseline = Median(references);
-            var expected = sectors[i].Statistics.Median * Math.Exp(baseline);
-            var loss = sectors[i].TimeSeconds!.Value - expected;
-            // Floors protect near-identical fields. Cross-sector MAD allows normal
-            // strengths/weaknesses instead of assuming a rider has identical ranks.
-            var scale = Math.Max(thresholds.ScaleFloor, Math.Max(sectors[i].Statistics.LogMadScale,
-                1.4826 * Median(references.Select(v => Math.Abs(v - baseline)))));
-            var deviation = Math.Log(sectors[i].TimeSeconds!.Value / expected) / scale;
+            if (references.Length == 0) continue;
+            var (baseline, expected, loss, scale, deviation) = Profile(sectors[i], references, thresholds);
             var clean = others.Where(j => Math.Abs(LogRatio(j) - baseline) <= thresholds.CleanDeviation * scale).ToHashSet();
             var later = others.Where(j => j > i).ToArray();
             var recovers = later.Any(clean.Contains);
@@ -97,6 +91,8 @@ internal static class SectorIncidentDetector
                     : largeLoss ? "Large local time anomaly" : "Within rider sector profile",
                 detected && (recovers || later.Length == 0));
         }
+        AddExtremeTimeEvidence(sectors, result, invalid, options, thresholds);
+
         // A damaged majority can hide its own anomaly in a leave-one-out median.
         // Detect a persistent change from a stable prefix, but never "clean" it.
         for (var start = 2; start + 1 < sectors.Count; start++)
@@ -135,6 +131,78 @@ internal static class SectorIncidentDetector
         double LogRatio(int j) => Math.Log(sectors[j].TimeSeconds!.Value / sectors[j].Statistics.Median);
         double RelativeRank(int j) => (sectors[j].Rank!.Value - 1.0) / Math.Max(1, sectors[j].Statistics.Count - 1);
     }
+
+    internal static SectorAnomaly? DescribeCachedNormal(IReadOnlyList<PacePrecomputedSector> sectors,
+        int index, IReadOnlyList<SectorAnomaly> annotations, PaceOptions options)
+    {
+        var thresholds = AlgorithmConfiguration.Incidents;
+        bool Usable(int j) => annotations[j].Kind != SectorAnomalyKind.InvalidTiming &&
+            sectors[j].TimeSeconds is > 0 && double.IsFinite(sectors[j].TimeSeconds!.Value) &&
+            ValidField(sectors[j]) && sectors[j].Statistics.Count >= options.MinimumFieldSize;
+        if (!Usable(index)) return null;
+        var references = Enumerable.Range(0, sectors.Count).Where(j => j != index && Usable(j))
+            .OrderBy(j => Math.Abs(j - index)).ThenBy(j => j).Take(thresholds.ReferenceSectors)
+            .Select(j => LogRatio(sectors[j])).ToArray();
+        if (references.Length == 0) return null;
+        var (_, expected, loss, _, deviation) = Profile(sectors[index], references, thresholds);
+        return new(SectorAnomalyKind.Normal, expected, loss, deviation, "Within rider sector profile");
+    }
+
+    private static (double Baseline, double Expected, double Loss, double Scale, double Deviation) Profile(
+        PacePrecomputedSector sector, double[] references, IncidentDetectionOptions thresholds)
+    {
+        var baseline = Median(references);
+        var expected = sector.Statistics.Median * Math.Exp(baseline);
+        var loss = sector.TimeSeconds!.Value - expected;
+        var scale = Math.Max(thresholds.ScaleFloor, Math.Max(sector.Statistics.LogMadScale,
+            1.4826 * Median(references.Select(v => Math.Abs(v - baseline)))));
+        return (baseline, expected, loss, scale, Math.Log(sector.TimeSeconds.Value / expected) / scale);
+    }
+
+    private static void AddExtremeTimeEvidence(IReadOnlyList<PacePrecomputedSector> sectors,
+        SectorAnomaly[] result, bool[] invalid, PaceOptions options, IncidentDetectionOptions thresholds)
+    {
+        var usable = Enumerable.Range(0, sectors.Count).Where(i => !invalid[i] &&
+            sectors[i].TimeSeconds is > 0 && double.IsFinite(sectors[i].TimeSeconds!.Value) &&
+            ValidField(sectors[i]) && sectors[i].Statistics.Count >= options.MinimumFieldSize).ToArray();
+        // The ordinary path above uses local robust deviation. This fallback is
+        // only for extreme losses hidden by a wide field or incomplete timing.
+        var references = usable.Where(i => result[i].Kind != SectorAnomalyKind.LikelyIncident).ToArray();
+        foreach (var i in usable)
+        {
+            if (result[i].Kind == SectorAnomalyKind.LikelyIncident) continue;
+            var sector = sectors[i];
+            var others = references.Where(j => j != i).ToArray();
+            var ratios = others.Select(j => LogRatio(sectors[j])).ToArray();
+            var baseline = ratios.Length == 0 ? 0 : Median(ratios);
+            var expected = sector.Statistics.Median * Math.Exp(baseline);
+            var spread = ratios.Length == 0 ? 0 : 1.4826 * Median(ratios.Select(r => Math.Abs(r - baseline)));
+            var scale = Math.Max(thresholds.ScaleFloor, Math.Max(spread, sector.Statistics.LogMadScale));
+            var lossSeconds = sector.TimeSeconds!.Value - expected;
+            var deviation = Math.Log(sector.TimeSeconds.Value / expected) / scale;
+            var fieldOnly = others.Length == 0;
+            var sparse = others.Length < 2;
+            if (lossSeconds < (sparse ? thresholds.FieldOnlyLossSeconds : thresholds.ExtremeLossSeconds) ||
+                lossSeconds / expected < (sparse ? thresholds.FieldOnlyLossRatio : thresholds.ExtremeLossRatio)) continue;
+
+            // A personal baseline needs a majority of consistent references; a
+            // single unusually quick sector cannot condemn the rest of the run.
+            var clean = others.Where(j => Math.Abs(LogRatio(sectors[j]) - baseline) <=
+                thresholds.RecoveryLogTolerance).ToArray();
+            if (!fieldOnly && (2 * clean.Length < others.Length ||
+                clean.Length == 0 || deviation < thresholds.TimeEvidenceDeviation)) continue;
+            var recovers = clean.Any(j => j > i);
+            var terminal = !usable.Any(j => j > i);
+            // Detection is possible with zero/one other measurement. Reconstruction
+            // still needs independent pace evidence; it never repairs a DNF finish.
+            var correctable = clean.Length >= 2 && 2 * clean.Length >= others.Length && (recovers || terminal);
+            result[i] = new(SectorAnomalyKind.LikelyIncident, expected, lossSeconds, deviation,
+                fieldOnly ? "Extreme field-relative time loss; personal baseline unavailable" :
+                    "Extreme time loss relative to median rider profile", correctable);
+        }
+    }
+
+    private static double LogRatio(PacePrecomputedSector sector) => Math.Log(sector.TimeSeconds!.Value / sector.Statistics.Median);
 
     private static bool ValidField(PacePrecomputedSector s) =>
         double.IsFinite(s.Statistics.Median) && s.Statistics.Median > 0;

@@ -85,6 +85,8 @@ public sealed class PreparedReadRequestTests
                 "get_rider_detail_data" => "{\"r\":[]}",
                 "ranking_session_preaggregates" => "[{\"source_revision\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{}}]",
                 "save_prepared_ranking_session" => "false",
+                "get_ranking_input_packages" => "[{\"payload\":{\"v\":3,\"s\":[],\"r\":[],\"f\":[],\"ix\":[],\"x\":[]}}]",
+                "save_ranking_incident_annotations" => "true",
                 "refresh_ranking_session_preaggregate" => "null",
                 _ => throw new InvalidOperationException(name)
             };

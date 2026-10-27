@@ -1537,9 +1537,10 @@ public sealed class DownhillPaceCalculatorTests
     {
         var result = CalculateWeakCompleteSession();
 
+        // A weak rank sequence and normal time variation are not incident evidence.
         Assert.Null(result.IncidentSectorIndex);
-        Assert.Equal(5, result.Sectors.Count(sector =>
-            sector.Status == PaceSectorStatus.Valid && sector.Score.HasValue));
+        Assert.Equal(5, result.Sectors.Count(s => s.Score.HasValue));
+        Assert.All(result.Sectors, s => Assert.Equal(PaceSectorStatus.Valid, s.Status));
         Assert.True(result.Pace < 65);
     }
 

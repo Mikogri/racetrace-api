@@ -186,7 +186,8 @@ internal sealed partial class DownhillPaceCalculator
     public IReadOnlyList<RiderSessionPaceResult> CalculateSession(PaceSessionData session)
         => PrepareSession(session).Select(CalculatePrecomputedSession).ToArray();
 
-    internal IReadOnlyList<PacePrecomputedSessionData> PrepareSession(PaceSessionData session)
+    internal IReadOnlyList<PacePrecomputedSessionData> PrepareSession(PaceSessionData session,
+        IReadOnlyDictionary<string, SectorAnomaly[]>? savedAnomalies = null)
     {
         using var measurement = ApiTelemetry.Measure("pace");
         var validRuns = session.Runs
@@ -251,6 +252,14 @@ internal sealed partial class DownhillPaceCalculator
                 PreparedCumulativeTimes = (run, cumulativeTimes[runIndex])
             })
             .ToArray();
+        if (savedAnomalies is not null && ReferenceEquals(_options, AlgorithmConfiguration.Pace))
+            for (var i = 0; i < precomputed.Length; i++)
+            {
+                var row = precomputed[i];
+                if (savedAnomalies.TryGetValue(row.Run.RiderId, out var annotations) && annotations.Length == row.Sectors.Count &&
+                    IncidentAnnotationCache.Materialize(annotations, row.Sectors, _options) is { } materialized)
+                    precomputed[i] = row with { PreparedAnomalies = (row.Sectors, _options, materialized) };
+            }
         return PrepareField(precomputed);
     }
 
@@ -295,7 +304,7 @@ internal sealed partial class DownhillPaceCalculator
                     PaceFinish = new(hasLoss ? session.Run.FinishTimeSeconds - entry.Loss : null,
                         hasLoss ? entry.Loss : 0, statistics),
                     PreparedAnomalies = hasLoss && entry.Anomalies is not null
-                        ? (session.Sectors, _options, entry.Anomalies) : null
+                        ? (session.Sectors, _options, entry.Anomalies) : session.PreparedAnomalies
                 });
             }
         }
@@ -312,7 +321,9 @@ internal sealed partial class DownhillPaceCalculator
         if (sectors.Length < 3 || sectors.Any(s => !IsValidTime(s.TimeSeconds)) ||
             Math.Abs(sectors.Sum(s => s.TimeSeconds!.Value) - session.Run.FinishTimeSeconds!.Value) > .01)
             return 0;
-        anomalies = SectorIncidentDetector.Analyze(sectors, _options);
+        anomalies = session.PreparedAnomalies is { } saved &&
+            ReferenceEquals(saved.Sectors, session.Sectors) && ReferenceEquals(saved.Options, _options)
+                ? saved.Values : SectorIncidentDetector.Analyze(sectors, _options);
         if (anomalies.Any(a => a.Kind is SectorAnomalyKind.InvalidTiming or SectorAnomalyKind.PossibleIncident ||
                 (a.Kind == SectorAnomalyKind.LikelyIncident && !a.AllowsFinishCorrection)) ||
             anomalies.Count(a => a.Kind == SectorAnomalyKind.Normal) < Math.Max(2, (sectors.Length + 1) / 2))

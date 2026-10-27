@@ -18,6 +18,16 @@ internal static class Program
 
     public static async Task Main(string[] args)
     {
+        if (args.Contains("--incident-cache-audit"))
+        {
+            await IncidentCacheAudit.RunAsync(args);
+            return;
+        }
+        if (args.Contains("--incident-study"))
+        {
+            await IncidentDetectorStudy.RunAsync(args);
+            return;
+        }
         if (args.Contains("--ranking-incident-comparison"))
         {
             await RankingIncidentComparison.RunAsync(args);

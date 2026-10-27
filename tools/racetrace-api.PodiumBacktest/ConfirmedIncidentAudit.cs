@@ -89,11 +89,11 @@ internal static class ConfirmedIncidentAudit
         Console.WriteLine($"Confirmed CSV: {matched.Count} unique runs; {detected.Count} strong, {possible.Count} possible. Full mapping in confirmed-incidents-2026.md.");
     }
 
-    private static string Normalize(string value) => new(value.Normalize(NormalizationForm.FormD)
+    internal static string Normalize(string value) => new(value.Normalize(NormalizationForm.FormD)
         .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark && char.IsLetterOrDigit(c))
-        .Select(char.ToUpperInvariant).ToArray());
+        .Select(c => c is 'ł' or 'Ł' ? 'L' : char.ToUpperInvariant(c)).ToArray());
 
-    private static string ClassKey(string? value) => Normalize(value ?? "") switch
+    internal static string ClassKey(string? value) => Normalize(value ?? "") switch
     {
         "WC" or "WORLDCUP" => "WC",
         "WCH" or "WORLDCHAMPIONSHIP" or "WORLDCHAMPIONSHIPS" or "WORLDCHAMPS" => "WCH",
@@ -101,13 +101,18 @@ internal static class ConfirmedIncidentAudit
     };
 
     // CSV aliases only. These affect label matching, never production detection.
-    private static string RiderKey(string name) => Normalize(name) switch
+    internal static string RiderKey(string name) => Normalize(name) switch
     {
         "VALIHOLL" => "VALENTINAHOLL",
         "ANGELSUAREZ" => "ANGELSUAREZALONSO",
         "RICHIERUDE" => "RICHARDRUDEJR",
         "HATTIEHARNDEN" => "HARRIETHARNDEN",
         "ROSAMARIEJENSEN" => "ROSAJENSEN",
+        "EDMASTERS" => "EDWARDMASTERS",
+        "JESSICABLEWITT" => "JESSBLEWITT",
+        "MIKEHUTER" => "MIKELEONHUTER",
+        "LOUISEFERGUSON" => "LOUISEANNAFERGUSON",
+        "JUANFERNANDOMUNOZ" => "JUANMUNOZ",
         var other => other
     };
 }

@@ -378,6 +378,8 @@ public sealed class ChronoRaceBatchImportTests
                 {
                     "refresh_rider_team_history",
                     "refresh_ranking_session_preaggregate",
+                    "get_ranking_input_packages",
+                    "save_ranking_incident_annotations",
                       "save_prepared_ranking_session",
                     "recalculate_session_points"
                 });

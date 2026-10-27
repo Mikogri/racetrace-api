@@ -21,6 +21,12 @@ internal sealed class IncidentDetectionOptions
     public int TopReferenceCount { get; init; } = 3;
     public double TopMedianRank { get; init; } = .15;
     public double TopAdjacentRank { get; init; } = .2;
+    public double TimeEvidenceDeviation { get; init; } = 1.5;
+    public double FieldOnlyLossSeconds { get; init; } = 15;
+    public double FieldOnlyLossRatio { get; init; } = .5;
+    public double RecoveryLogTolerance { get; init; } = .05;
+    public double ExtremeLossSeconds { get; init; } = 10;
+    public double ExtremeLossRatio { get; init; } = .25;
 }
 
 // Existing defaults relocated verbatim. Override objects remain supported by calculators.

@@ -380,7 +380,8 @@ public sealed class PaceService
     }
 
     internal static IReadOnlyList<PacePrecomputedSessionData> PrepareInputSessions(
-        RankingReadData data, IReadOnlyList<JsonObject> measurements)
+        RankingReadData data, IReadOnlyList<JsonObject> measurements,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, SectorAnomaly[]>>? savedAnnotations = null)
     {
         var splits = measurements.GroupBy(row => row.String("result_id")!)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<JsonObject>)group.ToArray());
@@ -400,7 +401,7 @@ public sealed class PaceService
                 .Select(row => BuildRun(row, splits, new SessionSplitLayout(maximumSplitIndex))).ToArray();
             var prepared = calculator.PrepareSession(new PaceSessionData(
                 ParseSessionType(session?.String("session_type"), session?.String("name")),
-                runs, CompetitionClassPriority(session)));
+                runs, CompetitionClassPriority(session)), savedAnnotations?.GetValueOrDefault(field.Key));
             output.AddRange(prepared
                 .Where(row => selected.Contains(ConsistencyPaceKey(field.Key, row.Run.RiderId)))
                 .Select(row => row with

@@ -245,7 +245,8 @@ public sealed class UciMtbWorldSeriesSupplementTests
             Roles.Add(role);
             Assert.Contains(
                 functionName,
-                new[] { "recalculate_session_points", "refresh_ranking_session_preaggregate", "save_prepared_ranking_session" });
+                new[] { "recalculate_session_points", "refresh_ranking_session_preaggregate", "save_prepared_ranking_session",
+                    "get_ranking_input_packages", "save_ranking_incident_annotations" });
             if (functionName == "recalculate_session_points")
             {
                 PointsRecalculated = true;

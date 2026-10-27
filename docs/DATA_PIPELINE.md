@@ -24,7 +24,11 @@ Najpierw wybierane są sesje pasujące do filtrów. Dlatego w logach Supabase mo
 
 `get_ranking_input_packages` zwraca zwarte dane sesji; `get_rider_input_data` zwraca zawodnika i pole potrzebne do porównań. Format `v:3` zawiera sesje `s`, wyniki `r`, metadane riderów `d`, teamy `t`, referencje pola `f` w detalach, źródłowe pomiary narastające `ix` i opcjonalne dane prezentacji splitów `x`. `p_include_splits=false` pozwala rankingowi nie przesyłać niepotrzebnych danych wyświetlania.
 
-Pakiety **nie zawierają decyzji o incydencie ani końcowych Pace, Consistency i Ratingu**. Parser i kalkulatory odtwarzają sektory, rozkłady pola i korekty w API. Istotne jest pełne pole odniesienia przed filtrowaniem pojedynczego ridera; wyszukiwanie nie może zmieniać sportowego znaczenia jego tempa.
+Pakiety nie zawierają końcowych Pace, Consistency i Ratingu. API odtwarza sektory, rozkłady pola, oznaczenia incydentów, korekty i metryki dynamicznie. Opcjonalne `ia` w bazie zawiera eksperymentalne oznaczenia istniejącego detektora dla całej sesji, nie wynik modelu ML. Bieżący parser ignoruje `ia`: benchmark nie uzasadnił aktywowania tego cache. Istotne jest pełne pole odniesienia przed filtrowaniem pojedynczego ridera; wyszukiwanie nie może zmieniać sportowego znaczenia jego tempa.
+
+`IncidentAnnotationCache` zapisuje identyfikatory i krótkie znaczniki normalnych sektorów; anomalie zachowują pełne diagnostyki. Kontener binarny jest kompresowany Brotli i przesyłany jako Base64. Diagnostyki normalnych sektorów są odtwarzane tym samym kodem matematycznym co detektor. Niepoprawny zapis, inna wersja lub niestandardowa konfiguracja Pace powodują powrót do liczenia dynamicznego. Nie zmienia to oficjalnych czasów ani potwierdzonych etykiet badawczych.
+
+Migracja `20261027132839_stored_sector_incidents.sql` dodaje trzy kolumny techniczne i RPC `save_ranking_incident_annotations`, dostępne wyłącznie dla `service_role`. Zapis porównuje `source_revision`, więc wynik przygotowany przed zmianą źródła nie nadpisuje nowszych danych. Zmiana `payload` lub `input_splits` unieważnia oznaczenia. Zwykły import nie odbudowuje oznaczeń; administracyjny tryb `incidents` i narzędzie `--prepare-incidents` pozostają jawnymi operacjami eksperymentalnymi. Nie włączają ich odczytu w aplikacji.
 
 `RankingInputPackageReader` sprawdza kompletność zestawu sesji. Brak pakietów nie może skutkować częściowym rankingiem udającym kompletny. Ścieżki surowe i starsze kontrakty RPC pozostają fallbackiem; błąd autoryzacji lub sieci nie powinien być ukrywany jako zwykły brak pakietu. Detale potrafią użyć surowego źródła także dla nieobsługiwanego przez reuse filtra statusu.
 
@@ -32,7 +36,15 @@ Pakiety **nie zawierają decyzji o incydencie ani końcowych Pace, Consistency i
 
 ## Co wymaga przebudowy
 
-Zmiana wzoru, progu incydentu lub wagi kalkulatora wymaga wdrożenia nowego API oraz odświeżenia obliczonych odpowiedzi, nie przebudowy źródłowych pakietów. Zmiana wyników, pomiarów, przyznanych punktów albo schematu wejścia wymaga odświeżenia źródła i pakietów. `input_splits` zachowuje także brakujące i nieprawidłowe obserwacje potrzebne interpretacji danych.
+Zmiana wzoru lub wagi kalkulatora wymaga wdrożenia nowego API oraz odświeżenia obliczonych odpowiedzi, nie przebudowy źródłowych pakietów. Zmiana detektora lub jego progów zmienia wersję oznaczeń incydentów: niezgodne oznaczenia są ignorowane do ich odbudowania. Samo strojenie wag niezależnych od detektora nie zmienia tej wersji. Zmiana wyników, pomiarów, przyznanych punktów albo schematu wejścia wymaga odświeżenia źródła i pakietów. `input_splits` zachowuje także brakujące i nieprawidłowe obserwacje potrzebne interpretacji danych.
+
+### Verification: stored annotations (2026-10-27)
+
+The production database migration and backfill covered 492 sessions (369,824 encoded characters). Source revisions remained unchanged. Local Release tests: 906 passed; complete serialized Pace outputs matched for 21,371 runs. Stale-revision writes were rejected and source-update invalidation was verified in a rolled-back transaction. No research ML model was activated.
+
+Five fresh-service samples per case used the real Supabase read path, including decoding and calculation, but not browser/proxy delivery. Median milliseconds without/with annotations: ranking 2026 **1063.7 / 1058.7**, all-season ranking **2055.0 / 2207.3**, rider 2026 **785.3 / 806.4**, all-season rider **1638.5 / 1599.9**. All response bytes matched. This is not evidence of a general latency improvement: transfer grew by about 5–9%, and all-season ranking regressed 7.4%. Network timings merge concurrent waits and do not isolate database execution. An earlier full-JSON annotation format regressed further and was replaced with sparse encoding.
+
+The measured experiment temporarily connected `IncidentAnnotationCache.ReadPackages` to the compact parser; that connection was removed before publication. `tools/ReadPathParity --incident-cache-benchmark --phase before|after --output <directory>` measures the current read path, not an automatic cache-mode switch. `--prepare-incidents` performs an authenticated derived-data backfill and must target the intended database. Local historical artifacts are under `artifacts/stored-incidents-compact/`. The migration and backfill were applied to the database; the released runtime remains dynamic and does not rebuild or consume stored annotations.
 
 Normalne odświeżanie używa `refresh_ranking_session_preaggregate`; tryb `missing` sprawdza dostępność wejść. Dawne kolumny `prepared_payload` i `prepared_version`, RPC przygotowanych metryk oraz `RankingPreaggregationService.PrepareAsync` zachowano dla kompatybilności i jawnych narzędzi powrotu. Bieżąca ścieżka ich nie konsumuje, a zwykły import nie przygotowuje kalkulatorozależnych wyników. Samo istnienie tych nazw nie oznacza, że należy je odbudowywać po każdej zmianie wzoru.
 

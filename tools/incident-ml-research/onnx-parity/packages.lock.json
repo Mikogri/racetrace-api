@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Direct",
+        "requested": "[1.23.1, 1.23.1]",
+        "resolved": "1.23.1",
+        "contentHash": "K4tCbI9VP3Z6ecWnqsGNkkUcVL8GHdhImcwSTDIXkfLqRTPc4xXoBIykIgYqTK+iYKXtn7WJMchx48ImJe/M8g==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.23.1"
+        }
+      },
+      "Microsoft.ML.OnnxRuntime.Managed": {
+        "type": "Transitive",
+        "resolved": "1.23.1",
+        "contentHash": "7lcdyCY6pkynuFMnO+iJtCBOvATA2kWAPWVB6DwrVpZJGacdW2mE5ragLChX5s5sFalyqJ2geo1UjRaV2w/gNg==",
+        "dependencies": {
+          "System.Numerics.Tensors": "9.0.0"
+        }
+      },
+      "System.Numerics.Tensors": {
+        "type": "Transitive",
+        "resolved": "9.0.0",
+        "contentHash": "hyJB4UlpAi19Xr9AXzu2NuagKC4lPfHObNMEAA0HmqFz2rX7wKgzeYzO/jM/eBHDhnUGFFEjk5cOoJaxqg5J4A=="
+      }
+    }
+  }
+}

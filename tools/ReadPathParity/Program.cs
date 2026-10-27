@@ -16,6 +16,11 @@ var api = args.Contains("--api-path") ? args[Array.IndexOf(args,"--api-path")+1]
 var config = new ConfigurationBuilder().SetBasePath(api).AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", true)
     .AddJsonFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Microsoft","UserSecrets","racetrace-api-2026","secrets.json"), true).Build();
 var options = config.GetSection("Supabase").Get<SupabaseOptions>()!;
+if (args.Contains("--incident-cache-benchmark") || args.Contains("--prepare-incidents"))
+{
+    await IncidentCacheComparison.Run(options, args);
+    return;
+}
 #if !BASELINE
 if(args.Contains("--prepare")) {
  using var preparationHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(110) };
