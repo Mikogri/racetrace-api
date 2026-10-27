@@ -131,4 +131,7 @@ public sealed record RiderOverviewDto(
 public sealed record RiderChartStatisticsDto(
     decimal? ResultsAveragePosition,
     IReadOnlyDictionary<string, decimal> CumulativePointsByRound,
-    IReadOnlyDictionary<string, decimal?> PreFinalAverageByTrack);
+    IReadOnlyDictionary<string, decimal?> PreFinalAverageByTrack)
+{
+    public IReadOnlyDictionary<string, decimal?> CumulativeRatingByRound { get; init; } = new Dictionary<string, decimal?>();
+}

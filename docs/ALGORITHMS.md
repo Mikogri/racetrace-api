@@ -10,6 +10,20 @@ Pace, Consistency, ResultScore i Rating są liczone w API z wybranego zakresu da
 
 `CompetitionClassWeighting` wyznacza wagę jako `maksymalny aktywny priorytet / priorytet klasy`; brak poprawnego priorytetu daje 1. Publiczne Pace i Consistency powstają bez ważenia klasami. API osobno przygotowuje składowe dla Ratingu; klasa wpływa na jego Pace i ResultScore. Obecny `DownhillConsistencyCalculator` przyjmuje parametr ważenia klas, ale go nie używa — nie należy dokumentować nieistniejącego wpływu.
 
+## Rider rating history
+
+The rider overview exposes `chartStatistics.cumulativeRatingByRound`. Each point recalculates Rating from the chronological prefix ending at that round, within the active filters/category; it is not an average of round ratings and does not include later rounds. Existing `roundResults[].rating` remains the standalone round metric. Prepared session inputs and the complete session field are reused; history introduces no additional database reads. Across selected seasons the prefix continues rather than resetting in January. Missing metric evidence produces null. Only the rider-details Rating chart consumes this series; Compare is unchanged.
+
+The read-path benchmark supports `--allow-cumulative-rating`, which allows only this additional response field to differ and verifies that the last point equals the current rider Rating. Operation telemetry includes `rider_rating_history`; benchmark JSON records this alongside other calculator durations and serialization. Operation times can nest and must not be added as independent wall-clock stages.
+
+Local Release measurement (five samples, real Supabase, fresh service caches, rider 18 / Elite Men): 2026 overview median 821.9 ms before and 787.3 ms after; all selected seasons 1996.9 ms before and 1893.8 ms after. Median history calculation costs were 0.49 ms and 63.99 ms respectively (an earlier repetition measured 0.44 / 53.52 ms). These sequential measurements are noisy and do not establish a speedup: the new calculation adds CPU work. Request counts (8 / 7) and database response bytes were unchanged; all existing response fields matched, and the last history point matched the current Rating. Measurements cover service execution and Supabase transport, not isolated SQL execution or browser rendering. Artifacts: `artifacts/cumulative-rating/`.
+
+```powershell
+dotnet run --project tools/ReadPathParity -c Release -- --incident-cache-benchmark --phase before --output artifacts/read-path
+# Apply the change, then compare; omit the allowance for behavior-preserving changes.
+dotnet run --project tools/ReadPathParity -c Release -- --incident-cache-benchmark --phase after --allow-cumulative-rating --output artifacts/read-path
+```
+
 ## Pace
 
 Pace ocenia względne tempo na tle zawodników tej samej sesji. `PrepareSession()` przygotowuje populacje sektorów, sumy narastające, rangi i statystyki wspólne dla wszystkich przejazdów. Brakujący checkpoint nie jest zastępowany zerem ani dzielony na wymyślone sektory. Nieważne, niedodatnie i niefinitywne czasy odpadają.

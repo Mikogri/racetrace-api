@@ -281,6 +281,28 @@ internal sealed class RiderResultQueries(
         return numbers.Length == 0 ? null : numbers.Average();
     }
 
+    internal async Task<IReadOnlyDictionary<string, decimal?>> CumulativeRatingsAsync(
+        string riderId, RiderMetricsContext context, RankingSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        using var measurement = RaceTrace.Api.Infrastructure.Telemetry.ApiTelemetry.Measure("rider_rating_history");
+        var groups = snapshot.Results.Where(result => string.Equals(result.String("rider_id"), riderId, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(ResultRoundId, StringComparer.OrdinalIgnoreCase)
+            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
+            .OrderBy(group => group.Min(result => result.Object("sessions")?.Object("rounds")?.String("start_date")), StringComparer.Ordinal)
+            .ThenBy(group => group.Min(ResultDate))
+            .ThenBy(group => group.Key, StringComparer.Ordinal);
+        var prefix = new List<JsonObject>();
+        var ratings = new Dictionary<string, decimal?>();
+        foreach (var group in groups)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            prefix.AddRange(group);
+            var performance = await CalculatePerformanceFromSnapshotAsync(riderId, prefix, context, snapshot, cancellationToken);
+            ratings[group.Key] = performance.GetValueOrDefault(riderId)?.Rating;
+        }
+        return ratings;
+    }
+
     private async Task<IReadOnlyDictionary<string, RiderPerformanceMetricValues>> CalculatePerformanceFromSnapshotAsync(
         string riderId,
         IReadOnlyList<JsonObject> riderResults,

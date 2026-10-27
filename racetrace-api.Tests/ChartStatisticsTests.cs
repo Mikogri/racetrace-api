@@ -11,6 +11,54 @@ namespace RaceTrace.Api.Tests;
 
 public sealed class ChartStatisticsTests
 {
+    [Fact]
+    public async Task RatingHistoryUsesChronologicalPrefixesWithoutFutureRoundsOrExtraReads()
+    {
+        var calculator = new DownhillPaceCalculator();
+        var rows = new List<JsonObject>();
+        var prepared = new List<PacePrecomputedSessionData>();
+        foreach (var round in new[] { 2, 1 })
+        {
+            var field = new PaceSessionData(PaceSessionType.Final, Enumerable.Range(1, 10).Select(i =>
+                new PaceRiderRun(i.ToString(), new double?[] { 40 + i, 45 + i, 50 + i, 55 + i },
+                    FinishRank: i, FinishTimeSeconds: 190 + 4 * i, Status: "OK")).ToArray());
+            prepared.AddRange(calculator.PrepareSession(field).Select(run => run with
+            {
+                SessionId = round.ToString(), CourseKey = "track:1:category:1", CategoryId = "1"
+            }));
+            rows.Add(new JsonObject
+            {
+                ["id"] = round, ["rider_id"] = "1", ["session_id"] = round.ToString(),
+                ["position"] = 1, ["status"] = "OK", ["is_classified"] = true, ["race_time_ms"] = 194000,
+                ["sessions"] = new JsonObject
+                {
+                    ["id"] = round.ToString(), ["round_id"] = round.ToString(), ["session_type"] = "FINAL",
+                    ["session_date"] = $"2026-06-0{round}",
+                    ["categories"] = new JsonObject { ["id"] = "1", ["code"] = "EM" },
+                    ["rounds"] = new JsonObject { ["id"] = round.ToString(), ["start_date"] = $"2026-06-0{round}" }
+                }
+            });
+        }
+        // Null clients guarantee that calculation cannot accidentally issue a database request.
+        var metrics = new MetricsService(null!, new PaceService(null!));
+        var query = new RaceTrace.Api.Features.Riders.RiderResultQueries(null!, null!, metrics, null!);
+        var context = new RiderMetricsContext(2026, "EM", null, null, null, null, null, null, null, null, null);
+        var snapshot = new RankingSnapshot([], rows, rows, [], [], prepared);
+        var history = await query.CumulativeRatingsAsync("1", context, snapshot, default);
+        Assert.Equal(new[] { "1", "2" }, history.Keys);
+        foreach (var cutoff in new[] { 1, 2 })
+        {
+            var prefix = rows.Where(row => row.Int("id") <= cutoff).ToArray();
+            var expected = metrics.CalculatePrecomputedPerformanceByRider(prefix,
+                prepared.Where(run => int.Parse(run.SessionId) <= cutoff).ToArray(),
+                prefix.Select(row => row.Object("sessions")!).ToArray());
+            if (cutoff == 1) Assert.Null(history["1"]); // One run has no consistency evidence yet.
+            else Assert.NotNull(history["2"]);
+            Assert.Equal(expected["1"].Rating, history[cutoff.ToString()]);
+        }
+        Assert.Empty(await query.CumulativeRatingsAsync("99", context, snapshot, default));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("elite_men,elite_women")]

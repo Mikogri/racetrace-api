@@ -234,7 +234,10 @@ internal sealed class RiderOverviewQueries(
             RiderTeamHistoryMapper.ToPublicTeamHistoryJson(await teamHistoryTask))
         {
             ChartStatistics = RiderChartStatistics.Build(sessionResults.OfType<JsonObject>(),
-                (await roundResultsTask).Items, (await trackStatisticsTask).Items)
+                (await roundResultsTask).Items, (await trackStatisticsTask).Items) with
+            {
+                CumulativeRatingByRound = await _results.CumulativeRatingsAsync(riderId, context, snapshot, cancellationToken)
+            }
         };
     }
 

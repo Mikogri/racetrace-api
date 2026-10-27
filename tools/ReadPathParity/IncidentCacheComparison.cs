@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -61,6 +62,19 @@ static class IncidentCacheComparison
         foreach (var (name, riderId, query) in cases)
         for (var repeat = 0; repeat < 5; repeat++)
         {
+            var operationMs = new Dictionary<string, double>();
+            using var listener = new MeterListener();
+            listener.InstrumentPublished = (instrument, meter) =>
+            {
+                if (instrument.Name == "racetrace.operation.duration") meter.EnableMeasurementEvents(instrument);
+            };
+            listener.SetMeasurementEventCallback<double>((instrument, value, tags, state) =>
+            {
+                foreach (var tag in tags)
+                    if (tag.Key == "operation" && tag.Value is string name)
+                        lock (operationMs) operationMs[name] = operationMs.GetValueOrDefault(name) + value * 1000;
+            });
+            listener.Start();
             using var handler = new MeasuredHandler();
             using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(110) };
             var client = new SupabaseRestClient(http, Options.Create(options));
@@ -78,16 +92,35 @@ static class IncidentCacheComparison
             object response = riderId is null ? await ranking.ListRankingAsync(filter, default)
                 : await riders.GetOverviewAsync(riderId, filter, default);
             var elapsed = timer.Elapsed.TotalMilliseconds;
+            var serialization = Stopwatch.StartNew();
             var bytes = JsonSerializer.SerializeToUtf8Bytes(response, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            serialization.Stop();
             var hash = Convert.ToHexString(SHA256.HashData(bytes));
+            if (riderId is not null && args.Contains("--allow-cumulative-rating"))
+            {
+                var overview = JsonNode.Parse(bytes)!;
+                var history = overview["chartStatistics"]?["cumulativeRatingByRound"] as JsonObject;
+                if (history is { Count: > 0 } && !JsonNode.DeepEquals(history.Last().Value, overview["statistics"]?["rating"]))
+                    throw new InvalidOperationException("Latest cumulative rating differs from the current rider rating.");
+            }
             var responseFile = Path.Combine(output, $"{name}-{phase}.json");
             if (repeat == 0) await File.WriteAllBytesAsync(responseFile, bytes);
             else if (!(await File.ReadAllBytesAsync(responseFile)).AsSpan().SequenceEqual(bytes))
                 throw new InvalidOperationException($"Unstable response during {phase}/{name}");
-            if (phase == "after" && !(await File.ReadAllBytesAsync(Path.Combine(output, $"{name}-before.json"))).AsSpan().SequenceEqual(bytes))
-                throw new InvalidOperationException($"Metric/contract mismatch for {name}");
+            if (phase == "after")
+            {
+                var previous = JsonNode.Parse(await File.ReadAllBytesAsync(Path.Combine(output, $"{name}-before.json")))!;
+                var current = JsonNode.Parse(bytes)!;
+                if (args.Contains("--allow-cumulative-rating"))
+                {
+                    (previous["chartStatistics"] as JsonObject)?.Remove("cumulativeRatingByRound");
+                    (current["chartStatistics"] as JsonObject)?.Remove("cumulativeRatingByRound");
+                }
+                if (!JsonNode.DeepEquals(previous, current)) throw new InvalidOperationException($"Metric/contract mismatch for {name}");
+            }
             results.Add(new { name, phase, repeat, totalMs = elapsed, networkMs = handler.NetworkMs,
-                apiOtherMs = elapsed - handler.NetworkMs, calls = handler.Calls, inputBytes = handler.Bytes, responseBytes = bytes.Length, hash });
+                apiOtherMs = elapsed - handler.NetworkMs, serializationMs = serialization.Elapsed.TotalMilliseconds,
+                operationMs, calls = handler.Calls, inputBytes = handler.Bytes, responseBytes = bytes.Length, hash });
             await File.WriteAllTextAsync(Path.Combine(output, phase + ".json"), JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine($"{phase}/{name}/{repeat}: total={elapsed:F1} ms network={handler.NetworkMs:F1} ms calls={handler.Calls} input={handler.Bytes}");
         }

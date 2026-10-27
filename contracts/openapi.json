@@ -3967,6 +3967,16 @@
             },
             "type": "object"
           },
+          "cumulativeRatingByRound": {
+            "additionalProperties": {
+              "format": "double",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "type": "object"
+          },
           "preFinalAverageByTrack": {
             "additionalProperties": {
               "format": "double",
@@ -3988,7 +3998,8 @@
         "required": [
           "resultsAveragePosition",
           "cumulativePointsByRound",
-          "preFinalAverageByTrack"
+          "preFinalAverageByTrack",
+          "cumulativeRatingByRound"
         ],
         "type": "object"
       },
