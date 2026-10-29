@@ -25,6 +25,7 @@ internal static class CompactMetricsPackageParser
 
     internal static RankingReadData ParseRankingReadData(IReadOnlyList<JsonObject> packages)
     {
+        using var measurement = RaceTrace.Api.Infrastructure.Telemetry.ApiTelemetry.Measure("input_decode");
         // Imports can assign newer IDs to older seasons. Resolve identity snapshots
         // by race date, not insertion order, when combining session packages.
         packages = packages.OrderBy(package => CompactRows([package], "s")
@@ -279,9 +280,9 @@ internal static class CompactMetricsPackageParser
         return new RiderDetailDataBundle(read.Data.ToLegacy(), read.PaceSessions);
     }
 
-    internal static (RankingReadData Data, IReadOnlyList<PacePrecomputedSessionData> PaceSessions) ParsePreparedRankingRead(IReadOnlyList<JsonObject> packages)
+    internal static (RankingReadData Data, IReadOnlyList<PacePrecomputedSessionData> PaceSessions) ParsePreparedRankingRead(IReadOnlyList<JsonObject> packages, RankingReadData? suppliedData = null)
     {
-        var data = ParseRankingReadData(packages);
+        var data = suppliedData ?? ParseRankingReadData(packages);
         if (packages.All(package => package.Int("v") == 3))
         {
             var measurements = CompactRows(packages, "ix").Select(row => new JsonObject

@@ -16,17 +16,20 @@ public sealed class CompareService
     private readonly DomainQueryService _domainQueries;
     private readonly MetricsService _metrics;
     private readonly RankingService _ranking;
+    private readonly CompareInputPackageReader? _inputPackages;
 
     public CompareService(
         QueryValidationService validator,
         DomainQueryService domainQueries,
         MetricsService metrics,
-        RankingService ranking)
+        RankingService ranking,
+        CompareInputPackageReader? inputPackages = null)
     {
         _validator = validator;
         _domainQueries = domainQueries;
         _metrics = metrics;
         _ranking = ranking;
+        _inputPackages = inputPackages;
     }
 
     public async Task<CompareResponseDto> CompareAsync(
@@ -39,11 +42,25 @@ public sealed class CompareService
         {
             throw _validator.BadQuery("Select exactly one category for comparison.");
         }
+        Task<RiderDetailDataBundle?>? sharedInput = null;
+        var inputLock = new object();
+        async Task<RiderDetailDataBundle> RiderInputAsync(string riderId, CancellationToken token)
+        {
+            lock (inputLock)
+            {
+                sharedInput ??= _inputPackages!.ReadAsync(context, riderIds, token);
+            }
+            var shared = await sharedInput.WaitAsync(token);
+            return shared is null
+                ? await _domainQueries.GetRiderDetailDataAsync(context, riderId, cancellationToken: token)
+                : CompareInputPackageReader.ForRider(shared, riderId);
+        }
         var snapshotTasks = riderIds
             .Select(riderId => _ranking.BuildSnapshotAsync(
                 context,
                 cancellationToken,
-                riderId: riderId))
+                riderId: riderId,
+                suppliedRiderBundleFactory: _inputPackages is null ? null : token => RiderInputAsync(riderId, token)))
             .ToArray();
         var snapshots = await Task.WhenAll(snapshotTasks);
         var sources = new List<CompareRiderSource>(riderIds.Length);

@@ -118,7 +118,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SessionsService>();
         services.AddScoped<RidersService>();
         services.AddScoped<RankingService>();
+        services.AddScoped<HomeRankingService>();
+        services.AddScoped<FilterOptionsService>();
         services.AddScoped<CompareService>();
+        services.AddScoped<CompareInputPackageReader>();
         services.AddScoped<AnalyticsService>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<SeasonSummaryService>();

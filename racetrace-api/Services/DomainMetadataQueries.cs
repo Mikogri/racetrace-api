@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using RaceTrace.Api.Features.Metadata;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Infrastructure.Supabase;
@@ -10,6 +11,7 @@ internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, Displa
     private readonly ISupabaseRestClient _supabase = supabase;
     private readonly DisplayMetadataService _metadata = metadata;
     private Task<DisplayMetadataDto>? _metadataTask;
+    private readonly Dictionary<string, Task<JsonObject?>> _categoryReads = new(StringComparer.Ordinal);
 
     public async Task<string> ResolveCategoryCodeAsync(string value, CancellationToken cancellationToken)
     {
@@ -68,12 +70,22 @@ internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, Displa
             // Admin-managed categories outside the public DHI set keep their database code.
         }
 
-        var category = await _supabase.GetSingleAsync(
+        Task<JsonObject?> ReadCategory() => _supabase.GetSingleAsync(
             new SupabaseQuery("categories")
                 .Select("id,code")
                 .Filter("code", "eq", normalizedCode),
             role,
             cancellationToken);
+
+        // Share identical public reads within this request; privileged imports stay fresh.
+        Task<JsonObject?> pending;
+        if (role != SupabaseRole.Anon) pending = ReadCategory();
+        else lock (_categoryReads)
+        {
+            if (!_categoryReads.TryGetValue(normalizedCode, out pending!))
+                _categoryReads[normalizedCode] = pending = ReadCategory();
+        }
+        var category = await pending.WaitAsync(cancellationToken);
 
         return category?.String("id");
     }

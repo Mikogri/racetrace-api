@@ -6,7 +6,6 @@ namespace RaceTrace.Api.Services;
 
 public sealed class RoundsService
 {
-    private const int RoundImageBatchSize = 100;
 
     private static readonly Dictionary<string, string> RoundSorts = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -70,7 +69,7 @@ public sealed class RoundsService
         }
 
         var query = new SupabaseQuery("rounds")
-            .Select("*,tracks(*),competition_levels(*),conditions(*),round_categories(*,categories(*))")
+            .Select("*,tracks(*,venue_images(storage_path)),competition_levels(*),conditions(*),round_categories(*,categories(*),sessions(status)),round_images(round_id,storage_path)")
             .Limit(page.Limit)
             .Offset(page.Offset)
             .Filter("season_year", "eq", seasons[0]);
@@ -89,9 +88,11 @@ public sealed class RoundsService
         foreach (var round in response.Data)
         {
             DomainQueryService.NormalizeRoundEmbed(round);
+            round["sessions"] = new JsonArray((round.Array("round_categories") ?? [])
+                .OfType<JsonObject>().SelectMany(category => category.Array("sessions")?.OfType<JsonObject>() ?? [])
+                .Select(session => session.DeepClone()).ToArray());
+            _images.AttachEmbeddedImageMetadata(round);
         }
-        await AttachRoundStatusesAsync(response.Data, cancellationToken);
-        await _images.AttachRoundImageMetadataAsync(response.Data, cancellationToken);
 
         var items = response.Data.Select(ToPublicRound).ToArray();
         return PublicPagedResponse<RoundListItemDto>.Create(
@@ -458,7 +459,7 @@ public sealed class RoundsService
             round.Int("round_number"),
             round.Int("season_year") ?? 0,
             round.String("context_name"),
-            round.Bool("has_round_image") == true ? $"/api/v1/rounds/{roundId}/image" : null,
+            round.String("round_image_url"),
             trackId,
             track?.String("name"),
             trackId == 0 ? null : trackId,
@@ -532,55 +533,6 @@ public sealed class RoundsService
             : parsed;
     }
 
-    private async Task AttachRoundStatusesAsync(
-        IReadOnlyList<JsonObject> rounds,
-        CancellationToken cancellationToken)
-    {
-        var roundIds = rounds
-            .Select(round => round.String("id"))
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (roundIds.Length == 0)
-        {
-            return;
-        }
-
-        var statusesByRoundId = new Dictionary<string, List<JsonNode?>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var batch in roundIds.Chunk(RoundImageBatchSize))
-        {
-            var response = await _supabase.GetAsync(
-                new SupabaseQuery("sessions")
-                    .Select("round_id,status")
-                    .In("round_id", batch),
-                cancellationToken: cancellationToken);
-            foreach (var session in response.Data)
-            {
-                var roundId = session.String("round_id");
-                if (string.IsNullOrWhiteSpace(roundId))
-                {
-                    continue;
-                }
-
-                if (!statusesByRoundId.TryGetValue(roundId, out var statuses))
-                {
-                    statuses = [];
-                    statusesByRoundId[roundId] = statuses;
-                }
-
-                statuses.Add(new JsonObject { ["status"] = session.String("status") });
-            }
-        }
-
-        foreach (var round in rounds)
-        {
-            var roundId = round.String("id");
-            round["sessions"] = !string.IsNullOrWhiteSpace(roundId) && statusesByRoundId.TryGetValue(roundId, out var statuses)
-                ? new JsonArray(statuses.ToArray())
-                : new JsonArray();
-        }
-    }
 
 
 }

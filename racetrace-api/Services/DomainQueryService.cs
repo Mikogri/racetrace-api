@@ -541,7 +541,7 @@ public sealed class DomainQueryService
         }
     }
 
-    private static JsonObject BuildMetricsRpcPayload(
+    internal static JsonObject BuildMetricsRpcPayload(
         RiderMetricsContext filters,
         IEnumerable<string>? resolvedSessionIds)
     {

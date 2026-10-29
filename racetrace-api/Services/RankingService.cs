@@ -77,6 +77,7 @@ public sealed class RankingService
 
     public async Task<RankingResponseDto> ListRankingAsync(IQueryCollection queryString, CancellationToken cancellationToken)
     {
+        using var measurement = ApiTelemetry.Measure("ranking_total");
         var forceRefresh = queryString["refresh"] == "1";
         var page = _validator.Page(queryString);
         var requestedSort = _validator.Sort(queryString, Sorts, "points", "desc");
@@ -189,6 +190,7 @@ public sealed class RankingService
         sorted = sorted.Where(row => DomainQueryService.MatchesRankingRider(
             row.Object("rider"), riderQuery, null)).ToArray();
         var data = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
+        using var projectionMeasurement = ApiTelemetry.Measure("ranking_projection");
         var items = data.Select(row => ToPublicDto(
             row,
             previousRowsByRider?.GetValueOrDefault(row.String("rider_id") ?? string.Empty))).ToArray();
@@ -212,7 +214,8 @@ public sealed class RankingService
         string? riderQuery = null,
         string? nation = null,
         string? riderId = null,
-        bool forceRefresh = false)
+        bool forceRefresh = false,
+        Func<CancellationToken, Task<RiderDetailDataBundle>>? suppliedRiderBundleFactory = null)
     {
         var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken, forceRefresh) : null;
         var key = BuildSingleFlightKey(context, resolvedSessions, riderQuery, nation, riderId) +
@@ -243,7 +246,8 @@ public sealed class RankingService
                     resolvedSessions,
                     riderQuery,
                     nation,
-                    riderId);
+                    riderId,
+                    suppliedRiderBundleFactory);
                 if (revision is not null && revision.ForContext(context) !=
                     (await _revisions!.GetAsync(computationTimeout.Token, forceRefresh: true)).ForContext(context))
                     throw new ApiException(503, "DATA_REVISION_CHANGED", "Data changed during calculation. Please retry.");

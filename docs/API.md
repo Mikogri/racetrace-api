@@ -27,6 +27,7 @@ Adres klienta pochodzi z `Connection.RemoteIpAddress`, nie z bezkrytycznie odczy
 | Ścieżka pod `/api/v1` | Zastosowanie |
 | --- | --- |
 | `/ranking` | Ranking, sortowanie, paginacja i porównanie pozycji. |
+| `/home/ranking` | Top Rated and Standings for the same season/category in one response. |
 | `/riders`, `/riders/resolve`, `/riders/{riderId}` | Katalog, mapowanie UCI ID i profil. |
 | `/riders/{riderId}/overview`, `/metrics`, `/results`, `/venues`, `/team-history` | Zbiorczy profil, metryki oraz wyspecjalizowane odczyty ridera. Przyrostki odnoszą się do tej samej ścieżki ridera. |
 | `/rounds`, `/rounds/seasons`, `/rounds/{roundId}` | Kalendarz, dostępne sezony i kontekst rundy. |
@@ -58,11 +59,17 @@ Nie wszystkie odpowiedzi są zamkniętymi DTO. Dynamiczne zasoby i niektóre adm
 
 ## Filtry, walidacja i paginacja
 
+Context filter dictionaries use `GET /api/v1/filter-options`: one anonymous Supabase RPC (`get_filter_options`) returns only seasons, track labels/venue/country, conditions and competition-class labels. Existing endpoints remain available. Ordering and limits match the previous context requests: descending distinct seasons from the newest 1,000 round rows, up to 150 tracks and 100 conditions by name, and all competition levels by priority (including inactive ones). Ties use IDs for stable ordering. Categories remain independent client metadata. Context dictionaries retain the five-minute React Query freshness policy; Results still requests only `/rounds/seasons`, not the full bundle.
+
+Deploy `supabase/migrations/20261029195017_filter_options.sql` before the API/frontend rollout, with explicit production approval. It adds a read-only `SECURITY INVOKER` function with an empty search path and explicit execution grants, retaining existing table grants/RLS. Applied to RaceTrace Analytics on 2026-10-29 after operator approval; live RPC dictionary equality and one upstream call were verified. Old clients continue to use unchanged endpoints; application rollback does not require dropping the function. Shared Compare inputs use the separately applied `20261029195018_compare_shared_rider_input.sql`; neither migration deploys API/frontend code.
+
 Wspólny parser metryk obsługuje m.in. kategorie, sezony, daty, trasy, warunki i klasy. Poszczególne endpointy mają własny podzbiór filtrów. Listy są przekazywane jako CSV; pusty lub nieobecny filtr nie oznacza automatycznie „zero wyników”. Starsze aliasy query nadal są obsługiwane tam, gdzie definiuje je parser — zmiana nazw odpowiedzi na `camelCase` ich nie usunęła.
 
 `QueryValidationService` odrzuca niepoprawne liczby, daty, kierunki i nieobsługiwane sortowanie. Wspólna paginacja zaczyna się od strony 1, domyślnie ma 30 elementów i dopuszcza 1–150 elementów. `PublicPagedResponse<T>` zwraca `items`, `page`, `pageSize`, `totalItems`, `totalPages`, `hasPreviousPage`, `hasNextPage`; dla pustego zbioru `totalPages=0`. Nie każdy endpoint jest paginowany.
 
 Domyślne sortowanie UI rankingu to Rating; sam `RankingService` bez parametru sortowania domyślnie używa punktów malejąco. Nie należy utożsamiać ustawienia strony z domyślnym zachowaniem endpointu.
+
+Home uses `/home/ranking?season=2026&category=elite_men` for both ranking cards. The response contains the existing ranking payloads sorted by Rating and total points descending, each limited to the first five riders without position comparison. Both projections reuse the normal ranking snapshot and calculators; no season-summary, round or winner queries are added. Matching card filters share one frontend request, while different categories keep independent query/loading/error state and controls. Other ranking filters, sorting, search, comparison and pagination parameters are not inputs to this Home endpoint.
 
 Open Men i Open Women są syntetycznymi wyborami wyników/analityki rundy, nie osobnymi kategoriami rankingu. Widok All wybiera najlepszy ukończony przejazd zawodnika i zachowuje informację o sesji. Szczegóły zakresu Analytics opisuje [ROUND_ANALYTICS.md](ROUND_ANALYTICS.md).
 

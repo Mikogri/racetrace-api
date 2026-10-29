@@ -383,6 +383,7 @@ public sealed class PaceService
         RankingReadData data, IReadOnlyList<JsonObject> measurements,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, SectorAnomaly[]>>? savedAnnotations = null)
     {
+        using var measurement = ApiTelemetry.Measure("field_prepare");
         var splits = measurements.GroupBy(row => row.String("result_id")!)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<JsonObject>)group.ToArray());
         var selected = data.Results.Select(row => ConsistencyPaceKey(row.String("session_id")!, row.String("rider_id")!)).ToHashSet();

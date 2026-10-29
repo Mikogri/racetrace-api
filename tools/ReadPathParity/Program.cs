@@ -16,6 +16,72 @@ var api = args.Contains("--api-path") ? args[Array.IndexOf(args,"--api-path")+1]
 var config = new ConfigurationBuilder().SetBasePath(api).AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", true)
     .AddJsonFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Microsoft","UserSecrets","racetrace-api-2026","secrets.json"), true).Build();
 var options = config.GetSection("Supabase").Get<SupabaseOptions>()!;
+if (args.Contains("--filter-benchmark"))
+{
+    await FilterReadBenchmark.Run(options);
+    return;
+}
+if (args.Contains("--production-http"))
+{
+    await ProductionReadBenchmark.Run(config, args);
+    return;
+}
+if (args.Contains("--parser-benchmark"))
+{
+    using var http = new HttpClient();
+    var client = new SupabaseRestClient(http, Options.Create(options));
+    var domain = new DomainQueryService(client);
+    var context = new RaceTrace.Api.Models.RiderMetricsContext(null, "EM", null, null, null, null, null, null, null, null, null);
+    var sessions = await domain.GetMatchingSessionsAsync(context);
+    var response = await client.RpcAsync("get_ranking_input_packages", new JsonObject
+    {
+        ["p_session_ids"] = new JsonArray(sessions.Select(s => (JsonNode?)JsonValue.Create(long.Parse(s.String("id")!))).ToArray()),
+        ["p_include_splits"] = false
+    }, SupabaseRole.Anon, default);
+    var packages = ((JsonArray)response!).OfType<JsonObject>().Select(row => (JsonObject)row["payload"]!).ToArray();
+    var metrics = new MetricsService(domain, new PaceService(client));
+    string? expected = null;
+    foreach (var batched in new[] { false, true })
+    for (var sample = 0; sample < 6; sample++)
+    {
+        var startBytes = GC.GetAllocatedBytesForCurrentThread();
+        var watch = Stopwatch.StartNew();
+        var read = RaceTrace.Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParseRankingReadData(packages);
+        var pace = batched
+            ? RaceTrace.Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParsePreparedRankingRead(packages, read).PaceSessions
+            : packages.SelectMany(p => RaceTrace.Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParsePreparedRankingRead([p]).PaceSessions).ToArray();
+        watch.Stop();
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - startBytes;
+        var result = JsonSerializer.Serialize(metrics.CalculatePrecomputedPerformanceByRider(read, pace, sessions));
+        expected ??= result;
+        if (result != expected) throw new InvalidOperationException("Batched input preparation changed metrics.");
+        Console.WriteLine(JsonSerializer.Serialize(new { batched, sample, milliseconds = watch.Elapsed.TotalMilliseconds, allocated }));
+    }
+    return;
+}
+if (args.Contains("--round-list-benchmark"))
+{
+    using var http = new HttpClient();
+    var client = new SupabaseRestClient(http, Options.Create(options));
+    var validator = new QueryValidationService();
+    var rounds = new RoundsService(client, validator, new DomainQueryService(client), new RoundImageStorageService(http, Options.Create(options)));
+    for (var i = 0; i < 5; i++)
+    {
+        var timer = Stopwatch.StartNew();
+        var old = await client.GetAsync(new SupabaseQuery("rounds")
+            .Select("*,tracks(*),competition_levels(*),conditions(*),round_categories(*,categories(*))")
+            .Filter("season_year", "eq", 2026).Limit(100), count: true);
+        var ids = old.Data.Select(row => row.String("id")!).ToArray();
+        await client.GetAsync(new SupabaseQuery("sessions").Select("round_id,status").In("round_id", ids));
+        await client.GetAsync(new SupabaseQuery("round_images").Select("round_id").In("round_id", ids));
+        var oldMs = timer.Elapsed.TotalMilliseconds;
+        timer.Restart();
+        var result = await rounds.ListRoundsAsync(new QueryCollection(QueryHelpers.ParseQuery("?season=2026&pageSize=100")), default);
+        if (result.TotalItems != old.Total) throw new InvalidOperationException("Round count changed.");
+        Console.WriteLine(JsonSerializer.Serialize(new { oldMs, milliseconds = timer.Elapsed.TotalMilliseconds, result.Items.Count, images = result.Items.Count(r => r.ImageUrl?.StartsWith("https://") == true) }));
+    }
+    return;
+}
 if (args.Contains("--incident-cache-benchmark") || args.Contains("--prepare-incidents"))
 {
     await IncidentCacheComparison.Run(options, args);

@@ -18,6 +18,7 @@ internal static class SectorIncidentDetector
         IReadOnlyList<PacePrecomputedSector> sectors, PaceOptions options,
         IncidentDetectionOptions? thresholds = null)
     {
+        using var measurement = RaceTrace.Api.Infrastructure.Telemetry.ApiTelemetry.Measure("incident_detection");
         thresholds ??= AlgorithmConfiguration.Incidents;
         var result = sectors.Select(s => new SectorAnomaly(
             SectorAnomalyKind.Normal, null, null, null,

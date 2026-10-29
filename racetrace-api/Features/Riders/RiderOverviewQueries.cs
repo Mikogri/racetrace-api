@@ -44,12 +44,13 @@ internal sealed class RiderOverviewQueries(
         IQueryCollection queryString,
         CancellationToken cancellationToken,
         RankingSnapshot? suppliedSnapshot = null,
-        int? suppliedRankingPosition = null)
+        int? suppliedRankingPosition = null,
+        Task<IReadOnlyList<JsonObject>>? suppliedTeamHistoryTask = null)
     {
         var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
         var currentPresentationTask = GetCurrentPresentationAsync(
             riderId,
-            cancellationToken);
+            cancellationToken, suppliedTeamHistoryTask);
         var snapshot = suppliedSnapshot ?? await _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
@@ -184,20 +185,24 @@ internal sealed class RiderOverviewQueries(
     {
         var overviewQuery = OverviewQuery(queryString);
         var context = await _domainQueries.ParseMetricsContextAsync(overviewQuery, _validator, cancellationToken);
-        var snapshot = await _ranking.BuildSnapshotAsync(
+        var teamHistoryTask = _domainQueries.GetRiderTeamHistoryAsync([riderId], cancellationToken: cancellationToken);
+        var snapshotTask = _ranking.BuildSnapshotAsync(
             context,
             cancellationToken,
             riderId: riderId);
-        var rankingPosition = await _ranking.GetPointsPositionAsync(
+        var rankingPositionTask = _ranking.GetPointsPositionAsync(
             context,
             riderId,
             cancellationToken);
+        await Task.WhenAll(snapshotTask, rankingPositionTask, teamHistoryTask);
+        var snapshot = await snapshotTask;
+        var rankingPosition = await rankingPositionTask;
         var statisticsTask = GetPublicStatisticsCoreAsync(
             riderId,
             overviewQuery,
             cancellationToken,
             snapshot,
-            rankingPosition);
+            rankingPosition, teamHistoryTask);
         var roundResultsTask = _results.ListPublicRiderRoundResultsCoreAsync(
             riderId,
             overviewQuery,
@@ -210,9 +215,6 @@ internal sealed class RiderOverviewQueries(
             snapshot);
         var pressurePerformance = _analytics.BuildPressurePerformance(
             riderId, context, snapshot);
-        var teamHistoryTask = _domainQueries.GetRiderTeamHistoryAsync(
-            [riderId],
-            cancellationToken: cancellationToken);
         await Task.WhenAll(
             statisticsTask,
             roundResultsTask,
@@ -259,13 +261,14 @@ internal sealed class RiderOverviewQueries(
 
     private async Task<CurrentRiderPresentation> GetCurrentPresentationAsync(
         string riderId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Task<IReadOnlyList<JsonObject>>? suppliedTeamHistoryTask = null)
     {
         var riderTask = _domainQueries.FindByIdAsync(
             "riders",
             riderId,
             cancellationToken: cancellationToken);
-        var teamHistoryTask = _domainQueries.GetRiderTeamHistoryAsync(
+        var teamHistoryTask = suppliedTeamHistoryTask ?? _domainQueries.GetRiderTeamHistoryAsync(
             [riderId],
             cancellationToken: cancellationToken);
         await Task.WhenAll(riderTask, teamHistoryTask);

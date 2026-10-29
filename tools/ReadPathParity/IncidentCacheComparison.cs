@@ -51,7 +51,13 @@ static class IncidentCacheComparison
         }
         var phase = Argument("--phase", "before");
         if (phase is not ("before" or "after")) throw new ArgumentException("phase must be before/after");
-        var cases = new[]
+        var cases = args.Contains("--features") ? new[]
+        {
+            ("compare-2026", (string?)"compare", "?season=2026&category=elite_men&riderIds=18,183"),
+            ("compare-all", (string?)"compare", "?category=elite_men&riderIds=18,183"),
+            ("compare-asymmetric", (string?)"compare", "?season=2026&category=elite_men&riderIds=18,8"),
+            ("home-2026", (string?)"home", "?season=2026&category=elite_men")
+        } : new[]
         {
             ("ranking-2026", (string?)null, "?season=2026&category=elite_men&sort=rating&order=desc&pageSize=30&comparison=previousRound"),
             ("ranking-all", (string?)null, "?category=elite_men&sort=rating&order=desc&pageSize=30&comparison=previousRound"),
@@ -59,7 +65,10 @@ static class IncidentCacheComparison
             ("rider-all", "18", "?category=elite_men")
         };
         var results = new List<object>();
-        foreach (var (name, riderId, query) in cases)
+        using var warmMemory = args.Contains("--warm") ? new MemoryCache(new MemoryCacheOptions()) : null;
+        foreach (var (name, riderId, query) in cases.Where(item =>
+            (!args.Contains("--home-only") || item.Item2 == "home") &&
+            (!args.Contains("--asymmetric-only") || item.Item1 == "compare-asymmetric")))
         for (var repeat = 0; repeat < 5; repeat++)
         {
             var operationMs = new Dictionary<string, double>();
@@ -78,7 +87,8 @@ static class IncidentCacheComparison
             using var handler = new MeasuredHandler();
             using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(110) };
             var client = new SupabaseRestClient(http, Options.Create(options));
-            using var memory = new MemoryCache(new MemoryCacheOptions());
+            using var sampleMemory = new MemoryCache(new MemoryCacheOptions());
+            var memory = warmMemory ?? sampleMemory;
             var domain = new DomainQueryService(client, packageCache: memory,
                 readOptions: Options.Create(new ReadOptimizationOptions { TypedRanking = true, PreparedRiderDetails = true }));
             var validator = new QueryValidationService();
@@ -89,7 +99,20 @@ static class IncidentCacheComparison
                 new AnalyticsService(validator, domain, pace, TimeProvider.System));
             var filter = new QueryCollection(QueryHelpers.ParseQuery(query));
             var timer = Stopwatch.StartNew();
-            object response = riderId is null ? await ranking.ListRankingAsync(filter, default)
+            object response;
+            if (riderId == "compare") response = await new CompareService(validator, domain, metrics, ranking,
+                phase == "after" ? new CompareInputPackageReader(client, Options.Create(new ReadOptimizationOptions { PreparedRiderDetails = true })) : null).CompareAsync(filter, default);
+            else if (riderId == "home")
+            {
+                async Task<object> HomeList(string sort)
+                {
+                    var homeQuery = new QueryCollection(QueryHelpers.ParseQuery(query + "&page=1&pageSize=5&sortDirection=desc&sortBy=" + sort));
+                    return await ranking.ListRankingAsync(homeQuery, default);
+                }
+                response = phase == "after" ? await new HomeRankingService(ranking).GetAsync(filter, default)
+                    : new { TopRated = await HomeList("rating"), Standings = await HomeList("totalPoints") };
+            }
+            else response = riderId is null ? await ranking.ListRankingAsync(filter, default)
                 : await riders.GetOverviewAsync(riderId, filter, default);
             var elapsed = timer.Elapsed.TotalMilliseconds;
             var serialization = Stopwatch.StartNew();

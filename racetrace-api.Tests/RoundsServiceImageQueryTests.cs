@@ -10,6 +10,21 @@ namespace RaceTrace.Api.Tests;
 
 public sealed class RoundsServiceImageQueryTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EmbeddedStorageImagesAvoidAnApiRedirect(bool roundImage)
+    {
+        using var http = new HttpClient();
+        var storage = new RoundImageStorageService(http, Microsoft.Extensions.Options.Options.Create(
+            new RaceTrace.Api.Configuration.SupabaseOptions { Url = "https://test.supabase.co" }));
+        var round = new JsonObject { ["id"] = "1" };
+        if (roundImage) round["round_images"] = new JsonObject { ["round_id"] = "1", ["storage_path"] = "images/a.webp" };
+        else round["tracks"] = new JsonObject { ["venue_images"] = new JsonObject { ["storage_path"] = "images/a.webp" } };
+        new RoundImageQueries(null!, storage).AttachEmbeddedImageMetadata(round);
+        Assert.Equal("https://test.supabase.co/storage/v1/object/public/round-images/images/a.webp", round.String("round_image_url"));
+    }
+
     [Fact]
     public async Task RoundListAlwaysOrdersByDateAcrossCompetitionClasses()
     {
@@ -76,16 +91,10 @@ public sealed class RoundsServiceImageQueryTests
             CancellationToken.None);
 
         Assert.Equal(3, response.Items.Count);
-        Assert.DoesNotContain("round_images", SelectParameter(supabase.RoundsQuery!));
-        Assert.Single(supabase.ImageQueries);
-        Assert.All(supabase.ImageQueries, query =>
-        {
-            Assert.Equal("round_id", SelectParameter(query));
-            Assert.DoesNotContain("image_data", SelectParameter(query));
-            Assert.Contains(query.Parameters, parameter =>
-                parameter.Key == "round_id" &&
-                parameter.Value.Split(',').Length <= 100);
-        });
+        Assert.Contains("round_images(round_id,storage_path)", SelectParameter(supabase.RoundsQuery!));
+        Assert.DoesNotContain("image_data", SelectParameter(supabase.RoundsQuery!));
+        Assert.Empty(supabase.ImageQueries);
+        Assert.Equal(1, supabase.Reads);
 
         Assert.Equal("/api/v1/rounds/1/image", response.Items[0].ImageUrl);
     }
@@ -108,7 +117,7 @@ public sealed class RoundsServiceImageQueryTests
             }),
             CancellationToken.None);
 
-        Assert.NotEmpty(supabase.ImageQueries);
+        Assert.Empty(supabase.ImageQueries);
         Assert.All(supabase.ImageQueries, query =>
             Assert.DoesNotContain("image_data", SelectParameter(query)));
         Assert.All(response.Items, round => Assert.NotNull(round.ImageUrl));
@@ -166,6 +175,7 @@ public sealed class RoundsServiceImageQueryTests
 
     private sealed class RoundImageSupabaseClient : ISupabaseRestClient
     {
+        public int Reads { get; private set; }
         public SupabaseQuery? RoundsQuery { get; private set; }
 
         public List<SupabaseQuery> ImageQueries { get; } = [];
@@ -176,6 +186,7 @@ public sealed class RoundsServiceImageQueryTests
             SupabaseRole role = SupabaseRole.Anon,
             CancellationToken cancellationToken = default)
         {
+            Reads++;
             if (query.Table == "rounds")
             {
                 RoundsQuery = query;
@@ -212,7 +223,12 @@ public sealed class RoundsServiceImageQueryTests
             ["id"] = id,
             ["context_name"] = $"round-{id}",
             ["season_year"] = 2026,
-            ["track_id"] = id
+            ["track_id"] = id,
+            ["round_images"] = new JsonObject { ["round_id"] = id },
+            ["round_categories"] = new JsonArray(new JsonObject
+            {
+                ["sessions"] = new JsonArray(new JsonObject { ["status"] = "completed" })
+            })
         };
 
         private static JsonObject Image(string roundId) => new()

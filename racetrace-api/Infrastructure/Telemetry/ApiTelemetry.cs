@@ -60,7 +60,7 @@ public static class ApiTelemetry
         if (Enabled) JobRetries.Add(1, new KeyValuePair<string, object?>("job", JobName(job)));
     }
     private static string JobName(string name) => name is "fantasy_sync" or "fantasy_prepare" or "point_system_seed" or "import" ? name : "other";
-    private static string Operation(string name) => name is "pace" or "consistency" or "rating" or "podium" or "fantasy" or "round_analytics" or "preaggregation" or "preaggregation_rebuild" or "rider_rating_history" ? name : "other";
+    private static string Operation(string name) => name is "pace" or "consistency" or "rating" or "podium" or "fantasy" or "round_analytics" or "preaggregation" or "preaggregation_rebuild" or "rider_rating_history" or "input_decode" or "field_prepare" or "incident_detection" or "ranking_total" or "ranking_projection" ? name : "other";
 
     public readonly struct OperationMeasurement : IDisposable
     {

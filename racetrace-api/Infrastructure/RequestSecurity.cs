@@ -61,6 +61,7 @@ internal static class RequestSecurity
         if (IsAdministrative(request)) return true;
         var path = request.Path.Value?.TrimEnd('/') ?? "";
         return request.Path.StartsWithSegments("/api/v1/ranking", StringComparison.OrdinalIgnoreCase) ||
+            request.Path.StartsWithSegments("/api/v1/home/ranking", StringComparison.OrdinalIgnoreCase) ||
             request.Path.StartsWithSegments("/api/v1/compare", StringComparison.OrdinalIgnoreCase) ||
             request.Path.StartsWithSegments("/api/v1/analytics", StringComparison.OrdinalIgnoreCase) ||
             request.Path.StartsWithSegments("/api/v1/podium-predictor", StringComparison.OrdinalIgnoreCase) ||

@@ -17,11 +17,14 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
         IReadOnlyList<JsonObject>? resolvedSessions,
         string? riderQuery,
         string? nation,
-        string? riderId)
+        string? riderId,
+        Func<CancellationToken, Task<RiderDetailDataBundle>>? suppliedRiderBundleFactory = null)
     {
         if (!string.IsNullOrWhiteSpace(riderId))
         {
-            var riderBundle = await _domainQueries.GetRiderDetailDataAsync(
+            var riderBundle = suppliedRiderBundleFactory is not null
+                ? await suppliedRiderBundleFactory(cancellationToken)
+                : await _domainQueries.GetRiderDetailDataAsync(
                 context,
                 riderId,
                 resolvedSessionIds: resolvedSessions?

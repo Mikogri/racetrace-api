@@ -98,6 +98,24 @@ internal sealed class RankingInputPackageReader(
             var payloads = cacheRows.Select(row => row["payload"]).OfType<JsonObject>().ToArray();
             var read = CompactMetricsPackageParser.ParseRankingReadData(payloads);
             var pace = new List<PacePrecomputedSessionData>();
+            lock (_preparedPackages)
+            {
+                var unprepared = payloads.Where(payload => !_preparedPackages.ContainsKey(payload)).ToArray();
+                if (unprepared.Length > 0 && unprepared.All(payload => payload.Int("v") == 3))
+                {
+                    // Decode the full field once, then retain session-scoped inputs for subset comparisons.
+                    var prepared = CompactMetricsPackageParser.ParsePreparedRankingRead(unprepared,
+                        unprepared.Length == payloads.Length ? read : null).PaceSessions;
+                    var bySession = prepared.GroupBy(session => session.SessionId)
+                        .ToDictionary(group => group.Key, group => (IReadOnlyList<PacePrecomputedSessionData>)group.ToArray());
+                    foreach (var payload in unprepared)
+                    {
+                        var ids = (payload["s"] as JsonArray)?.OfType<JsonArray>()
+                            .Select(row => row[0]!.ToString()).ToHashSet() ?? [];
+                        _preparedPackages[payload] = ids.SelectMany(id => bySession.GetValueOrDefault(id, [])).ToArray();
+                    }
+                }
+            }
             foreach (var payload in payloads)
             {
                 cancellationToken.ThrowIfCancellationRequested();

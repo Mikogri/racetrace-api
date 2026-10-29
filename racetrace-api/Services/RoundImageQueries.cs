@@ -6,7 +6,17 @@ namespace RaceTrace.Api.Services;
 
 internal sealed class RoundImageQueries(ISupabaseRestClient supabase, RoundImageStorageService? imageStorage)
 {
-    private const int RoundImageBatchSize = 100;
+    internal void AttachEmbeddedImageMetadata(JsonObject round)
+    {
+        var image = round.Object("round_images") ?? round.Array("round_images")?.OfType<JsonObject>().FirstOrDefault();
+        var track = round.Object("tracks");
+        var path = image?.String("storage_path") ?? track?.Object("venue_images")?.String("storage_path");
+        var exists = image is not null || !string.IsNullOrWhiteSpace(track?.String("venue_image_id"));
+        round["round_image_url"] = !string.IsNullOrWhiteSpace(path) && _imageStorage is not null
+            ? StoragePublicUrl(path)
+            : exists ? $"/api/v1/rounds/{round.String("id")}/image" : null;
+    }
+
     private readonly ISupabaseRestClient _supabase = supabase;
     private readonly RoundImageStorageService? _imageStorage = imageStorage;
 
@@ -57,57 +67,6 @@ internal sealed class RoundImageQueries(ISupabaseRestClient supabase, RoundImage
                 StoragePublicUrl(venueStoragePath));
     }
 
-    public async Task AttachRoundImageMetadataAsync(
-        IReadOnlyList<JsonObject> rounds,
-        CancellationToken cancellationToken)
-    {
-        var roundIds = rounds
-            .Select(round => round.String("id"))
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var imagesByRoundId = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var batch in roundIds.Chunk(RoundImageBatchSize))
-        {
-            var response = await _supabase.GetAsync(
-                new SupabaseQuery("round_images")
-                    .Select("round_id")
-                    .In("round_id", batch),
-                cancellationToken: cancellationToken);
-
-            foreach (var image in response.Data)
-            {
-                var roundId = image.String("round_id");
-                if (!string.IsNullOrWhiteSpace(roundId))
-                {
-                    imagesByRoundId[roundId] = image;
-                }
-            }
-        }
-
-        foreach (var round in rounds)
-        {
-            var roundId = round.String("id");
-            var image = !string.IsNullOrWhiteSpace(roundId) && imagesByRoundId.TryGetValue(roundId, out var value)
-                ? value
-                : null;
-
-            var venueImageId = round.Object("tracks")?.String("venue_image_id");
-            if (image is null && string.IsNullOrWhiteSpace(venueImageId))
-            {
-                round["has_round_image"] = false;
-                round["round_image_id"] = null;
-                round["round_image_url"] = null;
-                continue;
-            }
-
-            round["has_round_image"] = true;
-            round["round_image_id"] = image?["round_id"]?.DeepClone();
-            round["round_image_url"] = $"/api/v1/rounds/{roundId}/image";
-        }
-    }
 
     private string StoragePublicUrl(string storagePath) =>
         _imageStorage?.PublicUrl(storagePath) ??

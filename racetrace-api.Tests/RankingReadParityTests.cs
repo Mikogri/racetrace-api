@@ -6,6 +6,23 @@ namespace RaceTrace.Api.Tests;
 public sealed class RankingReadParityTests
 {
     [Fact]
+    public void BatchedSourcePreparationPreservesIndependentSessionFields()
+    {
+        static JsonObject Package(int session, int offset) => JsonNode.Parse($$"""
+        {"v":3,"s":[[{{session}},{{session}},1,"Final","FINAL","2026-06-01",1,2026,"2026-06-01",1,"EM"]],
+         "d":[[1,1001,"A","Rider","FRA",null,null,null],[2,1002,"B","Rider","FRA",null,null,null],[3,1003,"C","Rider","FRA",null,null,null]],
+         "r":[[{{offset+1}},1,{{session}},100000,null,1,true,"OK",10,null],[{{offset+2}},2,{{session}},110000,null,2,true,"OK",5,null],[{{offset+3}},3,{{session}},120000,null,3,true,"OK",1,null]],
+         "ix":[[{{offset+1}},1,40000],[{{offset+2}},1,45000],[{{offset+3}},1,50000]]}
+        """)!.AsObject();
+        var packages = new[] { Package(10, 0), Package(11, 100) };
+        var independent = packages.SelectMany(package => CompactMetricsPackageParser.ParsePreparedRankingRead([package]).PaceSessions).ToArray();
+        var read = CompactMetricsPackageParser.ParseRankingReadData(packages);
+        var batched = CompactMetricsPackageParser.ParsePreparedRankingRead(packages, read);
+        Assert.Same(read, batched.Data);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(independent), System.Text.Json.JsonSerializer.Serialize(batched.PaceSessions));
+    }
+
+    [Fact]
     public void FieldRowsKeepTheirLegacyShapeWithoutRiderOrTeamMetadata()
     {
         var package = JsonNode.Parse("""
