@@ -118,7 +118,8 @@ public sealed record PlannedRoundCreateRequest(
     IReadOnlyList<string> CategoryCodes,
     bool IsSeasonFinalRound = false,
     ImportRoundImagePayload? Image = null,
-    string? ContextName = null);
+    string? ContextName = null,
+    long? ImageSourceRoundId = null);
 
 public sealed record PlannedRoundCreateResponse(
     string RoundId,

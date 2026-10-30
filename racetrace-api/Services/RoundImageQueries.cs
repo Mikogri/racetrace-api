@@ -20,6 +20,26 @@ internal sealed class RoundImageQueries(ISupabaseRestClient supabase, RoundImage
     private readonly ISupabaseRestClient _supabase = supabase;
     private readonly RoundImageStorageService? _imageStorage = imageStorage;
 
+    internal async Task<JsonObject> GetReusableImageAsync(long sourceRoundId, CancellationToken cancellationToken)
+    {
+        const string columns = "storage_path,content_type,file_name,alt_text";
+        var image = await _supabase.GetSingleAsync(new SupabaseQuery("round_images")
+            .Select($"{columns},image_data,width_px,height_px")
+            .Filter("round_id", "eq", sourceRoundId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            SupabaseRole.Service, cancellationToken);
+        if (image is null || string.IsNullOrWhiteSpace(image.String("storage_path")) && string.IsNullOrWhiteSpace(image.String("image_data")))
+        {
+            var round = await _supabase.GetSingleAsync(new SupabaseQuery("rounds")
+                .Select($"tracks(venue_images({columns}))")
+                .Filter("id", "eq", sourceRoundId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                SupabaseRole.Service, cancellationToken);
+            image = round?.Object("tracks")?.Object("venue_images");
+        }
+        if (image is null || string.IsNullOrWhiteSpace(image.String("storage_path")) && string.IsNullOrWhiteSpace(image.String("image_data")))
+            throw new ApiException(StatusCodes.Status400BadRequest, "ROUND_IMAGE_SOURCE_NOT_FOUND", "The selected round has no reusable image.");
+        return (JsonObject)image.DeepClone();
+    }
+
     public async Task<RoundImageFile?> GetRoundImageAsync(
         long roundId,
         CancellationToken cancellationToken)

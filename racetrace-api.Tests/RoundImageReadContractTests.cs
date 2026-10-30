@@ -7,6 +7,28 @@ namespace RaceTrace.Api.Tests;
 public sealed class RoundImageReadContractTests
 {
     [Fact]
+    public async Task ReusableImageCopiesStorageMetadataWithoutMutatingSource()
+    {
+        var original = new JsonObject { ["storage_path"] = "images/existing.webp", ["content_type"] = "image/webp" };
+        var client = new ImageClient(original, null, true);
+        var image = await new RoundImageQueries(client, null).GetReusableImageAsync(42, default);
+        image["round_id"] = "99";
+        Assert.Equal("images/existing.webp", image.String("storage_path"));
+        Assert.False(original.ContainsKey("round_id"));
+        Assert.Single(client.Queries);
+    }
+
+    [Fact]
+    public async Task ReusableImageSupportsVenueFallbackAndRejectsMissingImages()
+    {
+        var round = new JsonObject { ["tracks"] = new JsonObject { ["venue_images"] = new JsonObject { ["storage_path"] = "venues/existing.webp" } } };
+        var client = new ImageClient(null, round, true);
+        Assert.Equal("venues/existing.webp", (await new RoundImageQueries(client, null).GetReusableImageAsync(42, default)).String("storage_path"));
+        var error = await Assert.ThrowsAsync<ApiException>(() => new RoundImageQueries(new ImageClient(null, null, true), null).GetReusableImageAsync(42, default));
+        Assert.Equal("ROUND_IMAGE_SOURCE_NOT_FOUND", error.Code);
+    }
+
+    [Fact]
     public async Task MissingImageUsesExactlyOneVenueFallbackRead()
     {
         var client = new ImageClient(null, null);
@@ -55,14 +77,14 @@ public sealed class RoundImageReadContractTests
     private static RoundsService Service(ImageClient client) =>
         new(client, new QueryValidationService(), new DomainQueryService(client));
 
-    private sealed class ImageClient(JsonObject? image, JsonObject? round) : ISupabaseRestClient
+    private sealed class ImageClient(JsonObject? image, JsonObject? round, bool service = false) : ISupabaseRestClient
     {
         public List<SupabaseQuery> Queries { get; } = [];
         public List<CancellationToken> Tokens { get; } = [];
 
         public Task<JsonObject?> GetSingleAsync(SupabaseQuery query, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
         {
-            Assert.Equal(SupabaseRole.Anon, role);
+            Assert.Equal(service ? SupabaseRole.Service : SupabaseRole.Anon, role);
             Queries.Add(query);
             Tokens.Add(cancellationToken);
             return Task.FromResult(query.Table == "round_images" ? image : round);

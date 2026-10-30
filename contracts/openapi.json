@@ -3066,6 +3066,13 @@
               }
             ]
           },
+          "imageSourceRoundId": {
+            "format": "int64",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
           "isSeasonFinalRound": {
             "default": false,
             "type": "boolean"

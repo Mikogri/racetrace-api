@@ -39,6 +39,11 @@ public sealed class ChronoRaceImportService
         CancellationToken cancellationToken)
     {
         ValidatePlannedRound(request);
+        if (request.ImageSourceRoundId is <= 0 || request.ImageSourceRoundId is not null && request.Image is not null)
+            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_IMAGE_SOURCE", "Choose either a new image or a positive source round id.");
+        var sourceImage = request.ImageSourceRoundId is { } sourceId
+            ? await new RoundImageQueries(_supabase, _imageStorage).GetReusableImageAsync(sourceId, cancellationToken)
+            : null;
 
         var track = request.TrackId is > 0
             ? await _domainQueries.FindByIdAsync(
@@ -125,13 +130,19 @@ public sealed class ChronoRaceImportService
         {
             await UpsertRoundImageAsync(round.String("id")!, image, cancellationToken);
         }
+        else if (sourceImage is not null)
+        {
+            sourceImage["round_id"] = round.String("id");
+            await _supabase.PostAsync("round_images", sourceImage, SupabaseRole.Service,
+                onConflict: "round_id", cancellationToken: cancellationToken);
+        }
 
         return new PlannedRoundCreateResponse(
             round.String("id")!,
             status,
             track.String("id")!,
             categoryCodes,
-            image is not null);
+            image is not null || sourceImage is not null);
     }
 
     public async Task<ChronoRaceImportResponse> ImportSessionAsync(ChronoRaceImportRequest request, CancellationToken cancellationToken)
