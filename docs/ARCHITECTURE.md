@@ -30,7 +30,7 @@ Migracje znajdują się w `supabase/migrations/`, a starsze skrypty również po
 
 ## Frontend
 
-The public interface is branded **Race Trace MTB** (repository names and technical identifiers stay unchanged). Home uses a 52 px main heading, scaled down on narrow screens. Next Round shows “See you next season” after a successful overview with no next round; loading and request errors remain separate states.
+The public interface is branded **Race Trace MTB** (repository names and technical identifiers stay unchanged). Home uses a 46 px main heading, scaled down on narrow screens. Next Round shows “// Season over, see you {nextSeason} //” in primary colour after a successful overview with no next round, with season metadata between slashes. The year follows the latest completed season; if the selected year has no rounds, the existing seasons dictionary supplies the latest known season rather than incrementing the calendar year. Loading and request errors remain separate states.
 
 `src/app/` zawiera router, providery i stany tras. `src/features/` grupuje Home, Ranking, Riders, Rounds, Compare, Live i Fantasy. Wspólne kontrolki, tabele, komunikaty, tooltipy i wykresy są w `src/components/`; współdzielona analityka jest w `components/analytics`, nie w komponentach Home. Kolory, odstępy, typografia i promienie pochodzą z `src/styles/tokens/`.
 
