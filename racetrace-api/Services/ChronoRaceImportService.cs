@@ -86,9 +86,8 @@ public sealed class ChronoRaceImportService
         var legacyCompetitionClass = await FindOrCreateLegacyCompetitionClassAsync(
             competitionClassPayload,
             cancellationToken);
-        var condition = await FindOrCreateConditionAsync(
-            new ImportConditionPayload(request.ConditionId, null, null),
-            cancellationToken);
+        var condition = request.ConditionId is null ? null : await FindOrCreateConditionAsync(
+            new ImportConditionPayload(request.ConditionId, null, null), cancellationToken);
 
         await EnsurePlannedRoundDoesNotExistAsync(
             request,
@@ -100,7 +99,7 @@ public sealed class ChronoRaceImportService
             roundPayload,
             track.String("id")!,
             legacyCompetitionClass.String("id")!,
-            condition.String("id")!,
+            condition?.String("id"),
             competitionClass.Id,
             cancellationToken);
 
@@ -461,7 +460,7 @@ public sealed class ChronoRaceImportService
         ImportRoundPayload payload,
         string trackId,
         string legacyCompetitionClassId,
-        string conditionId,
+        string? conditionId,
         string competitionClassId,
         CancellationToken cancellationToken)
     {
@@ -584,16 +583,16 @@ public sealed class ChronoRaceImportService
             cancellationToken: cancellationToken);
     }
 
-    private static void ValidatePlannedRound(PlannedRoundCreateRequest request)
+    internal static void ValidatePlannedRound(PlannedRoundCreateRequest request)
     {
         if (request.SeasonYear is < 1990 or > 2100)
         {
             throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_SEASON", "season_year must be between 1990 and 2100.");
         }
 
-        if (request.RoundNumber is <= 0)
+        if (request.RoundNumber is < 0)
         {
-            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_ROUND_NUMBER", "round_number must be greater than zero.");
+            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_ROUND_NUMBER", "round_number must be zero or greater.");
         }
 
         if (request.EndDate < request.StartDate)
@@ -621,7 +620,7 @@ public sealed class ChronoRaceImportService
             throw new ApiException(StatusCodes.Status400BadRequest, "COMPETITION_CLASS_REQUIRED", "A competition class is required.");
         }
 
-        if (request.ConditionId <= 0)
+        if (request.ConditionId is <= 0 || request.ConditionId is null && !string.Equals(request.Status?.Trim(), "scheduled", StringComparison.OrdinalIgnoreCase))
         {
             throw new ApiException(StatusCodes.Status400BadRequest, "CONDITION_REQUIRED", "A condition is required.");
         }

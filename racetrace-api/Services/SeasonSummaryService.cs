@@ -62,6 +62,8 @@ public sealed class SeasonSummaryService
             .OrderBy(round => PublicDtoMapping.Date(round.String("start_date")))
             .ThenBy(round => PublicDtoMapping.Long(round.String("id")))
             .FirstOrDefault();
+        if (nextRound is null)
+            nextRound = (await LoadRoundsAsync(season, cancellationToken, future: true)).FirstOrDefault();
         var completedRounds = rounds
             .Where(round => string.Equals(
                 RoundsService.RoundStatus(round, now),
@@ -259,18 +261,22 @@ public sealed class SeasonSummaryService
 
     private async Task<IReadOnlyList<JsonObject>> LoadRoundsAsync(
         int season,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool future = false)
     {
-        var response = await _supabase.GetAsync(
-            new SupabaseQuery("rounds")
+        var query = new SupabaseQuery("rounds")
                 .Select(
-                    "id,context_name,season_year,round_number,track_id,start_date,end_date,competition_level_id," +
+                    "id,context_name,season_year,round_number,track_id,start_date,end_date,status,competition_level_id," +
                     "tracks(id,name,venue,country_code,length_m,avg_slope)," +
                     "competition_levels(id,code,name,priority)," +
                     "round_categories(category_id,categories(id,code,name))")
-                .Filter("season_year", "eq", season)
-                .Add("order", "start_date.asc.nullslast,id.asc"),
-            cancellationToken: cancellationToken);
+                .Filter("season_year", future ? "gt" : "eq", season)
+                .Add("order", "start_date.asc.nullslast,id.asc");
+        if (future)
+            query.In("status", ["scheduled", "confirmed", "live"])
+                .Filter("start_date", "gte", _timeProvider.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture))
+                .Add("limit", "1");
+        var response = await _supabase.GetAsync(query, cancellationToken: cancellationToken);
         foreach (var round in response.Data)
         {
             DomainQueryService.NormalizeRoundEmbed(round);

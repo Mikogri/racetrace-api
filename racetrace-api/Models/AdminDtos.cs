@@ -114,7 +114,7 @@ public sealed record PlannedRoundCreateRequest(
     int? CompetitionClassPriority,
     long? TrackId,
     ImportTrackPayload? Track,
-    int ConditionId,
+    int? ConditionId,
     IReadOnlyList<string> CategoryCodes,
     bool IsSeasonFinalRound = false,
     ImportRoundImagePayload? Image = null,

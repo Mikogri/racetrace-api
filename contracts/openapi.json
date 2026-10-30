@@ -3044,7 +3044,10 @@
           },
           "conditionId": {
             "format": "int32",
-            "type": "integer"
+            "type": [
+              "null",
+              "integer"
+            ]
           },
           "contextName": {
             "type": [

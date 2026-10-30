@@ -4,6 +4,8 @@ PostgreSQL przechowuje fakty zawodów: rundy, sesje, zawodników, wyniki, pomiar
 
 ## Import i dane źródłowe
 
+`20261030171154_cache_invalidation_safeupdate.sql` fixes global package invalidation in `racetrace_private.calculation_source_changed`: the intended full deletion uses `WHERE session_id IS NOT NULL` (a non-null key), keeping pg_safeupdate enabled. The previous unqualified DELETE caused HTTP 400 during competition-rank updates and blocked planned-round imports. Applied to RaceTrace and verified with an update inside a rolled-back transaction: invalidation ran, then all 492 packages and the revision digest were restored. No source results, calculator formulas or import records were changed by that test.
+
 Kontrolery administracyjne przyjmują import sesji, formularz rundy i PDF. Fetchery ChronoRace/Tissot pobierają format dostawcy, mappery sprowadzają go do wewnętrznego modelu, a warstwa zapisu wykonuje upserty partiami. Uzupełnianie wyników i ponowny import pozostają osobnymi operacjami. Danych z bieżącego Live nie należy utożsamiać z zapisanymi wynikami historycznymi.
 
 Importer ChronoRace przyjmuje wyłącznie HTTPS na `prod.chronorace.be`, `www.chronorace.be` lub `chronorace.be`, bez danych logowania i portu innego niż 443. Tissot zachowuje własną listę oficjalnych hostów i również odrzuca takie porty oraz dane logowania. Klienci HTTP tych importerów i proxy ChronoRace nie podążają automatycznie za przekierowaniami. Nowy adres dostawcy wymaga świadomego dopuszczenia w kodzie, a nie wyłączenia kontroli dla dowolnego URL.
