@@ -47,6 +47,8 @@ Run Efficiency opisuje zwycięzcę: liczbę zmierzonych sektorów, wygrane i Top
 
 ## Performance Distribution i braki
 
+The UI displays the histogram and median only; individual outlier rider names and scores are not rendered. Outliers remain in the API contract and the information tooltip reports their count.
+
 Rozkład korzysta z Pace finałowych przejazdów sklasyfikowanych, nie z sezonowego Ratingu. Ma dziesięć przedziałów `[0,10)` do `[90,100]`, medianę i obserwacje poza granicami Tukeya 1,5 IQR przy co najmniej czterech ocenach. Osobno raportuje liczebność ocen i finisherów, ponieważ pokrycie może być niepełne.
 
 Brakujące dane pozostają `null` lub pustą kolekcją. Niepowodzenie pobrania nie jest wynikiem zero. Nie rekonstruujemy sektora z przedziału obejmującego brakujący checkpoint i nie dodajemy mocków. Upset Index nie jest częścią implementacji. Zasady Pace i incydentów są w [ALGORITHMS.md](ALGORITHMS.md).
