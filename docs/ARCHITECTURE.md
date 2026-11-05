@@ -40,6 +40,8 @@ The public interface is branded **Race Trace MTB** (repository names and technic
 
 Filtry są zapisywane w URL. Nawigacja z rankingu do profilu przekazuje jego kontekst; nie każda nawigacja do zawodnika dziedziczy wszystkie filtry. Prefiksy tras szczegółów zachowują pochodzenie w menu. Przekierowania starszych adresów są obsługiwane w routerze i sprawdzane testami. Zakładki profilu nie resetują wspólnych filtrów.
 
+Komponenty stron są importowane statycznie w routerze, bez `React.lazy` i granic `Suspense` dla tras. Kod stron jest pobierany przy uruchomieniu aplikacji, co usuwa dodatkowe oczekiwanie na moduł przy pierwszym przejściu do zakładki, kosztem większego początkowego pakietu. Nie oznacza to montowania nieaktywnych stron ani wcześniejszego pobierania ich danych z API. Stany ładowania danych i skeletony pozostają niezależne od sposobu importowania stron.
+
 Pierwszy odczyt, odświeżenie istniejących danych, błąd i brak danych są osobnymi stanami. Wspólne komponenty utrzymują spójne skeletony, spinner, progress bar i komunikaty; odświeżanie zachowuje zawartość i płynnie zmienia przyciemnienie. Wykresy korzystają z Recharts i wspólnych tooltipów. Nie należy kopiować tego zachowania do kolejnych lokalnych implementacji.
 
 Ordinary and chart tooltips share `TooltipSurface`. Its standard `backdrop-filter` declaration follows the WebKit-prefixed fallback so production CSS optimization retains the standard browser property. `node --test scripts/tooltip-css.check.mjs` exercises the minified CSS output in CI, not just the source stylesheet; blur remains 5 px with a 25% background.
