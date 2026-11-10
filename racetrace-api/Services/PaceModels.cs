@@ -9,7 +9,7 @@ internal enum PaceSessionType
     Qualifying,
     Seeding,
     TimedTraining,
-    Training
+    Training,
 }
 
 internal sealed record PaceRiderRun(
@@ -20,12 +20,14 @@ internal sealed record PaceRiderRun(
     double? FinishTimeSeconds = null,
     double? HistoricalExpectedPercentile = null,
     bool IsClassified = true,
-    string? Status = null);
+    string? Status = null
+);
 
 internal sealed record PaceSessionData(
     PaceSessionType SessionType,
     IReadOnlyList<PaceRiderRun> Runs,
-    int? CompetitionClassPriority = null);
+    int? CompetitionClassPriority = null
+);
 
 internal sealed record PaceFieldSummary(
     int Count,
@@ -34,13 +36,15 @@ internal sealed record PaceFieldSummary(
     double LogMadScale,
     double LinearMadScale,
     double? BestValue = null,
-    double? SecondBestValue = null);
+    double? SecondBestValue = null
+);
 
 internal sealed record PacePrecomputedSector(
     int SectorIndex,
     double? TimeSeconds,
     int? Rank,
-    PaceFieldSummary Statistics);
+    PaceFieldSummary Statistics
+);
 
 internal sealed record PacePrecomputedSessionData(
     string SessionId,
@@ -55,16 +59,27 @@ internal sealed record PacePrecomputedSessionData(
     PaceFieldSummary? FinishStatistics,
     IReadOnlyList<PaceFieldSummary?> CumulativeStatistics,
     int? CompetitionClassPriority = null,
-    DateTimeOffset? SessionDate = null)
+    DateTimeOffset? SessionDate = null
+)
 {
     // Prepared for the complete session/category, before selecting any rider.
     public PaceFinishReference? PaceFinish { get; init; }
-    internal (IReadOnlyList<PacePrecomputedSector> Sectors, PaceOptions Options,
-        IReadOnlyList<SectorAnomaly> Values)? PreparedAnomalies { get; init; }
-    internal (PaceRiderRun Run, IReadOnlyList<double?> Times)? PreparedCumulativeTimes { get; init; }
+    internal (
+        IReadOnlyList<PacePrecomputedSector> Sectors,
+        PaceOptions Options,
+        IReadOnlyList<SectorAnomaly> Values
+    )? PreparedAnomalies { get; init; }
+    internal (
+        PaceRiderRun Run,
+        IReadOnlyList<double?> Times
+    )? PreparedCumulativeTimes { get; init; }
 }
 
-internal sealed record PaceFinishReference(double? TimeSeconds, double RemovedLossSeconds, PaceFieldSummary Statistics);
+internal sealed record PaceFinishReference(
+    double? TimeSeconds,
+    double RemovedLossSeconds,
+    PaceFieldSummary Statistics
+);
 
 internal enum PaceSectorStatus
 {
@@ -74,7 +89,7 @@ internal enum PaceSectorStatus
     AfterIncident,
     Missing,
     InvalidTiming,
-    PossibleIncident
+    PossibleIncident,
 }
 
 internal sealed record PaceSectorResult(
@@ -84,7 +99,8 @@ internal sealed record PaceSectorResult(
     int? Rank,
     double? Percentile,
     double? PerformanceZ,
-    double? Score)
+    double? Score
+)
 {
     public SectorAnomaly? Anomaly { get; init; }
 }
@@ -106,12 +122,14 @@ internal sealed record RiderSessionPaceResult(
     double DominanceBonus = 0,
     string? NoResultReason = null,
     int? CompetitionClassPriority = null,
-    DateTimeOffset? SessionDate = null);
+    DateTimeOffset? SessionDate = null
+);
 
 internal sealed record RiderSessionPaceObservation(
     string SessionId,
     string RiderId,
-    RiderSessionPaceResult Result);
+    RiderSessionPaceResult Result
+);
 
 internal sealed record RiderPaceResult(
     string RiderId,
@@ -122,7 +140,8 @@ internal sealed record RiderPaceResult(
     int UsedFinals = 0,
     double TotalEvidence = 0,
     double FinalEvidence = 0,
-    string ConfidenceStatus = "Low");
+    string ConfidenceStatus = "Low"
+);
 
 internal sealed record WeightedScore(double Score, double Weight);
 
@@ -132,4 +151,5 @@ internal sealed record StagePaceResult(
     double Pace,
     double EvidenceWeight,
     double RoundWeight,
-    int UsedSessions);
+    int UsedSessions
+);

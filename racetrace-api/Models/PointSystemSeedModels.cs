@@ -53,4 +53,5 @@ public sealed record PointRuleSeedDefinition
 public sealed record PointSystemSeedResult(
     int SystemsProcessed,
     int StagesProcessed,
-    int RulesWritten);
+    int RulesWritten
+);

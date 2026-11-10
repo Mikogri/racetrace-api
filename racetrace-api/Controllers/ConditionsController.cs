@@ -15,7 +15,10 @@ public sealed class ConditionsController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.ListResponse<System.Text.Json.Nodes.JsonObject>), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.ListResponse<System.Text.Json.Nodes.JsonObject>),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
         return Ok(await _conditions.ListConditionsAsync(Request.Query, cancellationToken));

@@ -12,7 +12,8 @@ public sealed class UciWorldChampionshipJsonAdapterTests
         var normalized = ImportResultJsonNormalizer.Normalize(
             WorldChampionshipJson(),
             "world_championship",
-            "EM");
+            "EM"
+        );
 
         Assert.Equal(ImportResultJsonNormalizer.UciWorldChampionshipFormat, normalized.Format);
         var riders = normalized.Json.Object("Riders")!;
@@ -50,16 +51,18 @@ public sealed class UciWorldChampionshipJsonAdapterTests
     [InlineData("1:02:03.004", 3_723_004)]
     public void ParsesUciTimeFormats(string value, int expectedMilliseconds)
     {
-        Assert.Equal(expectedMilliseconds, UciWorldChampionshipJsonAdapter.ParseTimeMilliseconds(value));
+        Assert.Equal(
+            expectedMilliseconds,
+            UciWorldChampionshipJsonAdapter.ParseTimeMilliseconds(value)
+        );
     }
 
     [Fact]
     public void RejectsWorldChampionshipJsonForWorldCupRound()
     {
-        var exception = Assert.Throws<ApiException>(() => ImportResultJsonNormalizer.Normalize(
-            WorldChampionshipJson(),
-            "world_cup",
-            "EM"));
+        var exception = Assert.Throws<ApiException>(() =>
+            ImportResultJsonNormalizer.Normalize(WorldChampionshipJson(), "world_cup", "EM")
+        );
 
         Assert.Equal("RESULT_FORMAT_COMPETITION_CLASS_MISMATCH", exception.Code);
     }
@@ -67,10 +70,13 @@ public sealed class UciWorldChampionshipJsonAdapterTests
     [Fact]
     public void RejectsCategoryThatDoesNotMatchRecognizedEventName()
     {
-        var exception = Assert.Throws<ApiException>(() => ImportResultJsonNormalizer.Normalize(
-            WorldChampionshipJson(),
-            "world_championship",
-            "EW"));
+        var exception = Assert.Throws<ApiException>(() =>
+            ImportResultJsonNormalizer.Normalize(
+                WorldChampionshipJson(),
+                "world_championship",
+                "EW"
+            )
+        );
 
         Assert.Equal("RESULT_FORMAT_CATEGORY_MISMATCH", exception.Code);
     }
@@ -81,7 +87,7 @@ public sealed class UciWorldChampionshipJsonAdapterTests
         var source = new JsonObject
         {
             ["Riders"] = new JsonObject(),
-            ["Results"] = new JsonArray()
+            ["Results"] = new JsonArray(),
         };
 
         var normalized = ImportResultJsonNormalizer.Normalize(source, "world_cup", "EM");
@@ -99,23 +105,73 @@ public sealed class UciWorldChampionshipJsonAdapterTests
             {
                 ["number"] = 1,
                 ["name"] = "Men Elite Downhill",
-                ["discipline"] = "DOWNHILL"
+                ["discipline"] = "DOWNHILL",
             },
             ["results"] = new JsonArray
             {
-                Result("3", 3, "GOLDSTONE Jackson", "CAN", "10053812449", "Time", 1, "3:02.101", "51.256",
+                Result(
+                    "3",
+                    3,
+                    "GOLDSTONE Jackson",
+                    "CAN",
+                    "10053812449",
+                    "Time",
+                    1,
+                    "3:02.101",
+                    "51.256",
                     Split("UCI 1", "Time", "26.410", 4),
-                    Split("UCI 2", "Time", "1:17.121", 2)),
-                Result("7", 7, "PIERRON Amaury", "FRA", "10008827283", "Time", 2, "+0.870", "49.836",
-                    Split("UCI 1", "Time", "26.574", 6)),
-                Result("2", 2, "BRUNI Loic", "FRA", "10007544358", "Time", 3, "+1:07.441", "50.114",
-                    Split("UCI 1", "Time", "26.123", 1)),
-                Result("99", 99, "CALONACI Tommaso", "ITA", "10083242047", "IRM", 0, "DNF", null,
-                    Split("UCI 1", "Time", "28.653", 63)),
-                Result("100", 100, "ORELLANA Gonzalo", "CHI", "10127414029", "IRM", 0, "DNS", null,
-                    Split("UCI 1", "Points", "", 0))
+                    Split("UCI 2", "Time", "1:17.121", 2)
+                ),
+                Result(
+                    "7",
+                    7,
+                    "PIERRON Amaury",
+                    "FRA",
+                    "10008827283",
+                    "Time",
+                    2,
+                    "+0.870",
+                    "49.836",
+                    Split("UCI 1", "Time", "26.574", 6)
+                ),
+                Result(
+                    "2",
+                    2,
+                    "BRUNI Loic",
+                    "FRA",
+                    "10007544358",
+                    "Time",
+                    3,
+                    "+1:07.441",
+                    "50.114",
+                    Split("UCI 1", "Time", "26.123", 1)
+                ),
+                Result(
+                    "99",
+                    99,
+                    "CALONACI Tommaso",
+                    "ITA",
+                    "10083242047",
+                    "IRM",
+                    0,
+                    "DNF",
+                    null,
+                    Split("UCI 1", "Time", "28.653", 63)
+                ),
+                Result(
+                    "100",
+                    100,
+                    "ORELLANA Gonzalo",
+                    "CHI",
+                    "10127414029",
+                    "IRM",
+                    0,
+                    "DNS",
+                    null,
+                    Split("UCI 1", "Points", "", 0)
+                ),
             },
-            ["resultType"] = "Time"
+            ["resultType"] = "Time",
         };
     }
 
@@ -129,7 +185,8 @@ public sealed class UciWorldChampionshipJsonAdapterTests
         int rank,
         string value,
         string? speed,
-        params JsonObject[] splits)
+        params JsonObject[] splits
+    )
     {
         return new JsonObject
         {
@@ -141,14 +198,14 @@ public sealed class UciWorldChampionshipJsonAdapterTests
                 ["bib"] = bib,
                 ["name"] = name,
                 ["nation"] = nation,
-                ["uciRiderId"] = uciId
+                ["uciRiderId"] = uciId,
             },
             ["splits"] = new JsonArray(splits),
             ["rank"] = rank,
             ["value"] = value,
             ["time"] = value,
             ["gap"] = string.Empty,
-            ["speed"] = speed
+            ["speed"] = speed,
         };
     }
 
@@ -160,7 +217,7 @@ public sealed class UciWorldChampionshipJsonAdapterTests
             ["name"] = key,
             ["resultType"] = resultType,
             ["value"] = value,
-            ["rank"] = rank
+            ["rank"] = rank,
         };
     }
 }

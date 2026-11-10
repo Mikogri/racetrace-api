@@ -9,8 +9,16 @@ public sealed class DownhillResultScoreCalculatorTests
     {
         var calculator = new DownhillResultScoreCalculator();
 
-        Assert.Equal(100, calculator.CalculatePositionScore(rank: 1, fieldSize: 100), precision: 10);
-        Assert.Equal(0, calculator.CalculatePositionScore(rank: 100, fieldSize: 100), precision: 10);
+        Assert.Equal(
+            100,
+            calculator.CalculatePositionScore(rank: 1, fieldSize: 100),
+            precision: 10
+        );
+        Assert.Equal(
+            0,
+            calculator.CalculatePositionScore(rank: 100, fieldSize: 100),
+            precision: 10
+        );
     }
 
     [Fact]
@@ -18,7 +26,8 @@ public sealed class DownhillResultScoreCalculatorTests
     {
         var calculator = new DownhillResultScoreCalculator();
 
-        var scores = Enumerable.Range(1, 5)
+        var scores = Enumerable
+            .Range(1, 5)
             .Select(rank => calculator.CalculatePositionScore(rank, fieldSize: 60))
             .ToArray();
 
@@ -40,10 +49,7 @@ public sealed class DownhillResultScoreCalculatorTests
     {
         var calculator = new DownhillResultScoreCalculator();
 
-        Assert.Equal(
-            96,
-            calculator.CalculatePositionScore(rank: 2, fieldSize),
-            precision: 10);
+        Assert.Equal(96, calculator.CalculatePositionScore(rank: 2, fieldSize), precision: 10);
     }
 
     [Fact]
@@ -54,14 +60,16 @@ public sealed class DownhillResultScoreCalculatorTests
             "target",
             [
                 Session(PaceSessionType.Final, targetRank: 1),
-                Session(PaceSessionType.Qualifying, targetRank: 5)
-            ]);
+                Session(PaceSessionType.Qualifying, targetRank: 5),
+            ]
+        );
         var strongQualifying = calculator.Calculate(
             "target",
             [
                 Session(PaceSessionType.Final, targetRank: 5),
-                Session(PaceSessionType.Qualifying, targetRank: 1)
-            ]);
+                Session(PaceSessionType.Qualifying, targetRank: 1),
+            ]
+        );
 
         Assert.True(strongFinal.Score > strongQualifying.Score);
         Assert.Equal(2, strongFinal.UsedSessions);
@@ -69,10 +77,7 @@ public sealed class DownhillResultScoreCalculatorTests
 
         var firstScore = calculator.CalculatePositionScore(rank: 1, fieldSize: 5);
         var lastScore = calculator.CalculatePositionScore(rank: 5, fieldSize: 5);
-        Assert.Equal(
-            0.85 * firstScore + 0.15 * lastScore,
-            strongFinal.Score!.Value,
-            precision: 10);
+        Assert.Equal(0.85 * firstScore + 0.15 * lastScore, strongFinal.Score!.Value, precision: 10);
     }
 
     [Fact]
@@ -84,13 +89,15 @@ public sealed class DownhillResultScoreCalculatorTests
             [
                 Session(PaceSessionType.Final, targetRank: 2),
                 Session(PaceSessionType.TimedTraining, targetRank: 1),
-                Session(PaceSessionType.Training, targetRank: 1)
-            ]);
+                Session(PaceSessionType.Training, targetRank: 1),
+            ]
+        );
 
         Assert.Equal(
             calculator.CalculatePositionScore(rank: 2, fieldSize: 5),
             result.Score!.Value,
-            precision: 10);
+            precision: 10
+        );
         Assert.Equal(1, result.UsedSessions);
     }
 
@@ -100,13 +107,13 @@ public sealed class DownhillResultScoreCalculatorTests
         var calculator = new DownhillResultScoreCalculator();
         var result = calculator.Calculate(
             "target",
-            [new PaceSessionData(
-                PaceSessionType.Final,
-                [
-                    Run("target", 1, isClassified: false),
-                    Run("rider-2", 1),
-                    Run("rider-3", 2)
-                ])]);
+            [
+                new PaceSessionData(
+                    PaceSessionType.Final,
+                    [Run("target", 1, isClassified: false), Run("rider-2", 1), Run("rider-3", 2)]
+                ),
+            ]
+        );
 
         Assert.Null(result.Score);
         Assert.Equal(0, result.UsedSessions);
@@ -125,15 +132,14 @@ public sealed class DownhillResultScoreCalculatorTests
                 Run("rider-2", 2),
                 Run("rider-3", 3),
                 Run("rider-4", 4),
-                Run("rider-5", 5)
-            ]);
+                Run("rider-5", 5),
+            ]
+        );
         var dnfFinal = dnsFinal with
         {
-            Runs = dnsFinal.Runs
-                .Select(run => run.RiderId == "target"
-                    ? run with { Status = "DNF" }
-                    : run)
-                .ToArray()
+            Runs = dnsFinal
+                .Runs.Select(run => run.RiderId == "target" ? run with { Status = "DNF" } : run)
+                .ToArray(),
         };
 
         var withDns = calculator.Calculate("target", [qualifying, dnsFinal]);
@@ -151,11 +157,11 @@ public sealed class DownhillResultScoreCalculatorTests
         var calculator = new DownhillResultScoreCalculator();
         var baselineSession = new PaceSessionData(
             PaceSessionType.Final,
-            [Run("winner", 1), Run("target", 2), Run("third", 3)]);
+            [Run("winner", 1), Run("target", 2), Run("third", 3)]
+        );
         var sessionWithDsq = baselineSession with
         {
-            Runs = baselineSession.Runs.Append(
-                Run("dsq", 1, status: "DSQ")).ToArray()
+            Runs = baselineSession.Runs.Append(Run("dsq", 1, status: "DSQ")).ToArray(),
         };
 
         var baseline = calculator.Calculate("target", [baselineSession]);
@@ -174,7 +180,7 @@ public sealed class DownhillResultScoreCalculatorTests
         var sessions = new[]
         {
             Session(PaceSessionType.Final, targetRank: 1, competitionClassPriority: 1),
-            Session(PaceSessionType.Final, targetRank: 5, competitionClassPriority: 2)
+            Session(PaceSessionType.Final, targetRank: 5, competitionClassPriority: 2),
         };
         var weighting = CompetitionClassWeighting.FromPriorities([1, 2]);
 
@@ -193,14 +199,8 @@ public sealed class DownhillResultScoreCalculatorTests
         var calculator = new DownhillResultScoreCalculator();
         var sessions = new[]
         {
-            Session(
-                PaceSessionType.Final,
-                targetRank: 1,
-                competitionClassPriority: priority),
-            Session(
-                PaceSessionType.Final,
-                targetRank: 5,
-                competitionClassPriority: priority)
+            Session(PaceSessionType.Final, targetRank: 1, competitionClassPriority: priority),
+            Session(PaceSessionType.Final, targetRank: 5, competitionClassPriority: priority),
         };
         var weighting = CompetitionClassWeighting.FromPriorities([priority]);
 
@@ -214,23 +214,25 @@ public sealed class DownhillResultScoreCalculatorTests
     private static PaceSessionData Session(
         PaceSessionType sessionType,
         int targetRank,
-        int? competitionClassPriority = null)
+        int? competitionClassPriority = null
+    )
     {
         return new PaceSessionData(
             sessionType,
-            Enumerable.Range(1, 5)
-                .Select(rank => Run(
-                    rank == targetRank ? "target" : $"rider-{rank}",
-                    rank))
+            Enumerable
+                .Range(1, 5)
+                .Select(rank => Run(rank == targetRank ? "target" : $"rider-{rank}", rank))
                 .ToArray(),
-            competitionClassPriority);
+            competitionClassPriority
+        );
     }
 
     private static PaceRiderRun Run(
         string riderId,
         int rank,
         bool isClassified = true,
-        string? status = null)
+        string? status = null
+    )
     {
         return new PaceRiderRun(
             RiderId: riderId,
@@ -238,6 +240,7 @@ public sealed class DownhillResultScoreCalculatorTests
             FinishRank: rank,
             FinishTimeSeconds: 200 + rank,
             IsClassified: isClassified,
-            Status: status);
+            Status: status
+        );
     }
 }

@@ -11,13 +11,15 @@ internal sealed record ConsistencyRunInput(
     int? CompetitionClassPriority = null,
     double? ProjectedFinishPositionScore = null,
     string? Status = null,
-    bool HasIncident = false);
+    bool HasIncident = false
+);
 
 internal sealed record ConsistencySectorTimeInput(
     string SectorKey,
     double? TimeSeconds,
     bool IsOutlier = false,
-    bool IsInvalidTiming = false);
+    bool IsInvalidTiming = false
+);
 
 internal sealed record SectorConsistencyResult(
     string CourseKey,
@@ -25,14 +27,16 @@ internal sealed record SectorConsistencyResult(
     double Consistency,
     double? RelativeVariation,
     int TotalRuns,
-    int CompletedRuns);
+    int CompletedRuns
+);
 
 internal sealed record RiderConsistencyResult(
     double? Consistency,
     double Confidence,
     int UsedRuns,
     int UsedSectors,
-    IReadOnlyList<SectorConsistencyResult> Sectors)
+    IReadOnlyList<SectorConsistencyResult> Sectors
+)
 {
     public double? IncidentReliability { get; init; }
 
@@ -45,4 +49,5 @@ internal sealed record RiderConsistencyResult(
 
 internal sealed record ConsistencyOutlierProfile(
     IReadOnlySet<int> SectorIndexes,
-    double? ProjectedFinishPositionScore);
+    double? ProjectedFinishPositionScore
+);

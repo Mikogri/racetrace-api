@@ -8,30 +8,34 @@ namespace RaceTrace.Api.Tests;
 
 public sealed class RiderProfileImageImportTests
 {
-    private const string FrontUrl = "https://assets.ucimtbworldseries.com/content/78108/conversions/10034793173_NEWKIRK_ANNA_F_CHRONO-newMediumThumb.png";
+    private const string FrontUrl =
+        "https://assets.ucimtbworldseries.com/content/78108/conversions/10034793173_NEWKIRK_ANNA_F_CHRONO-newMediumThumb.png";
 
     [Fact]
     public async Task ImportsFrontImageByUciIdExtractedFromUrl()
     {
         var supabase = new ProfileImageSupabaseClient();
         var service = new RiderProfileImageImportService(supabase);
-        var file = JsonFile(new JsonObject
-        {
-            ["results"] = new JsonArray
+        var file = JsonFile(
+            new JsonObject
             {
-                new JsonObject
+                ["results"] = new JsonArray
                 {
-                    ["riderName"] = "Anna Newkirk",
-                    ["rider"] = new JsonObject
+                    new JsonObject
                     {
-                        ["id"] = 25192,
-                        ["uciid"] = null,
-                        ["promoImageFront"] = "https://assets.ucimtbworldseries.com/content/78108/conversions/10034793173_NEWKIRK_ANNA_F_CHRONO-newLargeThumb.png",
-                        ["worldChampionPromoImageFront"] = FrontUrl
-                    }
-                }
+                        ["riderName"] = "Anna Newkirk",
+                        ["rider"] = new JsonObject
+                        {
+                            ["id"] = 25192,
+                            ["uciid"] = null,
+                            ["promoImageFront"] =
+                                "https://assets.ucimtbworldseries.com/content/78108/conversions/10034793173_NEWKIRK_ANNA_F_CHRONO-newLargeThumb.png",
+                            ["worldChampionPromoImageFront"] = FrontUrl,
+                        },
+                    },
+                },
             }
-        });
+        );
 
         var response = await service.ImportAsync([file], CancellationToken.None);
 
@@ -49,28 +53,30 @@ public sealed class RiderProfileImageImportTests
     {
         var supabase = new ProfileImageSupabaseClient(existingUrl: FrontUrl);
         var service = new RiderProfileImageImportService(supabase);
-        var file = JsonFile(new JsonObject
-        {
-            ["results"] = new JsonArray
+        var file = JsonFile(
+            new JsonObject
             {
-                new JsonObject
+                ["results"] = new JsonArray
                 {
-                    ["rider"] = new JsonObject
+                    new JsonObject
                     {
-                        ["uciid"] = "10034793173",
-                        ["promoImageFront"] = FrontUrl
-                    }
+                        ["rider"] = new JsonObject
+                        {
+                            ["uciid"] = "10034793173",
+                            ["promoImageFront"] = FrontUrl,
+                        },
+                    },
+                    new JsonObject
+                    {
+                        ["rider"] = new JsonObject
+                        {
+                            ["uciid"] = "10000000000",
+                            ["promoImageFront"] = null,
+                        },
+                    },
                 },
-                new JsonObject
-                {
-                    ["rider"] = new JsonObject
-                    {
-                        ["uciid"] = "10000000000",
-                        ["promoImageFront"] = null
-                    }
-                }
             }
-        });
+        );
 
         var response = await service.ImportAsync([file], CancellationToken.None);
 
@@ -94,11 +100,12 @@ public sealed class RiderProfileImageImportTests
         return new FormFile(new MemoryStream(bytes), 0, bytes.Length, "files", "results.json")
         {
             Headers = new HeaderDictionary(),
-            ContentType = "application/json"
+            ContentType = "application/json",
         };
     }
 
-    private sealed class ProfileImageSupabaseClient(string? existingUrl = null) : ISupabaseRestClient
+    private sealed class ProfileImageSupabaseClient(string? existingUrl = null)
+        : ISupabaseRestClient
     {
         public JsonObject? Patch { get; private set; }
 
@@ -106,7 +113,8 @@ public sealed class RiderProfileImageImportTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal(SupabaseRole.Service, role);
             Assert.Equal("riders", query.Table);
@@ -116,8 +124,8 @@ public sealed class RiderProfileImageImportTests
                 {
                     ["id"] = "101",
                     ["uci_id"] = "10034793173",
-                    ["profile_image_url"] = existingUrl
-                }
+                    ["profile_image_url"] = existingUrl,
+                },
             ];
             return Task.FromResult(new SupabaseQueryResult(rows, rows.Count));
         }
@@ -127,7 +135,8 @@ public sealed class RiderProfileImageImportTests
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal(SupabaseRole.Service, role);
             Assert.Equal("riders", table);
@@ -135,9 +144,32 @@ public sealed class RiderProfileImageImportTests
             return Task.FromResult<IReadOnlyList<JsonObject>>([]);
         }
 
-        public Task<JsonObject?> GetSingleAsync(SupabaseQuery query, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<JsonObject>> PostAsync(string table, JsonNode payload, SupabaseRole role, string? onConflict = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task DeleteAsync(string table, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<JsonObject?> GetSingleAsync(
+            SupabaseQuery query,
+            SupabaseRole role = SupabaseRole.Anon,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<JsonObject>> PostAsync(
+            string table,
+            JsonNode payload,
+            SupabaseRole role,
+            string? onConflict = null,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task DeleteAsync(
+            string table,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<JsonNode?> RpcAsync(
+            string functionName,
+            JsonObject payload,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 }

@@ -20,9 +20,17 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         _options = options.Value;
     }
 
-    public async Task<SupabaseQueryResult> GetAsync(SupabaseQuery query, bool count = false, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<SupabaseQueryResult> GetAsync(
+        SupabaseQuery query,
+        bool count = false,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, BuildRestUri(query.Table, query.Parameters));
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            BuildRestUri(query.Table, query.Parameters)
+        );
         AddAuthHeaders(request, role);
 
         if (count)
@@ -37,27 +45,44 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         return new SupabaseQueryResult(ParseArray(content), total);
     }
 
-    public async Task<JsonObject?> GetSingleAsync(SupabaseQuery query, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<JsonObject?> GetSingleAsync(
+        SupabaseQuery query,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         query.Limit(1);
         var result = await GetAsync(query, role: role, cancellationToken: cancellationToken);
         return result.Data.FirstOrDefault();
     }
 
-    public async Task<IReadOnlyList<JsonObject>> PostAsync(string table, JsonNode payload, SupabaseRole role, string? onConflict = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<JsonObject>> PostAsync(
+        string table,
+        JsonNode payload,
+        SupabaseRole role,
+        string? onConflict = null,
+        CancellationToken cancellationToken = default
+    )
     {
         var parameters = new List<KeyValuePair<string, string>>();
         if (!string.IsNullOrWhiteSpace(onConflict))
         {
             parameters.Add(new("on_conflict", onConflict));
         }
-        if (table == "riders") parameters.Add(new("select", Services.DomainQueryService.RiderSelect));
+        if (table == "riders")
+            parameters.Add(new("select", Services.DomainQueryService.RiderSelect));
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, BuildRestUri(table, parameters));
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            BuildRestUri(table, parameters)
+        );
         AddAuthHeaders(request, role);
-        request.Headers.TryAddWithoutValidation("Prefer", string.IsNullOrWhiteSpace(onConflict)
-            ? "return=representation"
-            : "resolution=merge-duplicates,return=representation");
+        request.Headers.TryAddWithoutValidation(
+            "Prefer",
+            string.IsNullOrWhiteSpace(onConflict)
+                ? "return=representation"
+                : "resolution=merge-duplicates,return=representation"
+        );
         request.Content = JsonContent(payload);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -65,11 +90,20 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         return ParseArray(content);
     }
 
-    public async Task<IReadOnlyList<JsonObject>> PatchAsync(string table, JsonObject payload, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<JsonObject>> PatchAsync(
+        string table,
+        JsonObject payload,
+        SupabaseQuery query,
+        SupabaseRole role,
+        CancellationToken cancellationToken = default
+    )
     {
         if (table == "riders" && !query.Parameters.Any(parameter => parameter.Key == "select"))
             query.Select(Services.DomainQueryService.RiderSelect);
-        using var request = new HttpRequestMessage(HttpMethod.Patch, BuildRestUri(table, query.Parameters));
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            BuildRestUri(table, query.Parameters)
+        );
         AddAuthHeaders(request, role);
         request.Headers.TryAddWithoutValidation("Prefer", "return=representation");
         request.Content = JsonContent(payload);
@@ -79,16 +113,29 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         return ParseArray(content);
     }
 
-    public async Task DeleteAsync(string table, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(
+        string table,
+        SupabaseQuery query,
+        SupabaseRole role,
+        CancellationToken cancellationToken = default
+    )
     {
-        using var request = new HttpRequestMessage(HttpMethod.Delete, BuildRestUri(table, query.Parameters));
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            BuildRestUri(table, query.Parameters)
+        );
         AddAuthHeaders(request, role);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         await ReadSuccessfulContentAsync(response, cancellationToken);
     }
 
-    public async Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role, CancellationToken cancellationToken = default)
+    public async Task<JsonNode?> RpcAsync(
+        string functionName,
+        JsonObject payload,
+        SupabaseRole role,
+        CancellationToken cancellationToken = default
+    )
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, BuildRpcUri(functionName));
         AddAuthHeaders(request, role);
@@ -97,15 +144,18 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         using var response = await _httpClient.SendAsync(
             request,
             HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+            cancellationToken
+        );
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
             EnsureSuccess(response, errorContent);
         }
 
-        if (response.StatusCode == System.Net.HttpStatusCode.NoContent ||
-            response.Content.Headers.ContentLength == 0)
+        if (
+            response.StatusCode == System.Net.HttpStatusCode.NoContent
+            || response.Content.Headers.ContentLength == 0
+        )
         {
             return null;
         }
@@ -118,7 +168,9 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
     {
         EnsureConfigured();
 
-        var builder = new StringBuilder($"{_options.Url.TrimEnd('/')}/rest/v1/{Uri.EscapeDataString(table)}");
+        var builder = new StringBuilder(
+            $"{_options.Url.TrimEnd('/')}/rest/v1/{Uri.EscapeDataString(table)}"
+        );
         AppendQuery(builder, parameters);
         return new Uri(builder.ToString());
     }
@@ -126,10 +178,15 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
     private Uri BuildRpcUri(string functionName)
     {
         EnsureConfigured();
-        return new Uri($"{_options.Url.TrimEnd('/')}/rest/v1/rpc/{Uri.EscapeDataString(functionName)}");
+        return new Uri(
+            $"{_options.Url.TrimEnd('/')}/rest/v1/rpc/{Uri.EscapeDataString(functionName)}"
+        );
     }
 
-    private static void AppendQuery(StringBuilder builder, IReadOnlyList<KeyValuePair<string, string>> parameters)
+    private static void AppendQuery(
+        StringBuilder builder,
+        IReadOnlyList<KeyValuePair<string, string>> parameters
+    )
     {
         if (parameters.Count == 0)
         {
@@ -155,9 +212,13 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
         var key = role == SupabaseRole.Service ? _options.ServiceRoleKey : _options.AnonKey;
         if (string.IsNullOrWhiteSpace(key))
         {
-            throw new ApiException(StatusCodes.Status503ServiceUnavailable, "SUPABASE_KEY_MISSING", role == SupabaseRole.Service
-                ? "Supabase service role key is not configured."
-                : "Supabase anon key is not configured.");
+            throw new ApiException(
+                StatusCodes.Status503ServiceUnavailable,
+                "SUPABASE_KEY_MISSING",
+                role == SupabaseRole.Service
+                    ? "Supabase service role key is not configured."
+                    : "Supabase anon key is not configured."
+            );
         }
 
         request.Headers.TryAddWithoutValidation("apikey", key);
@@ -168,16 +229,27 @@ public sealed class SupabaseRestClient : ISupabaseRestClient
     {
         if (string.IsNullOrWhiteSpace(_options.Url))
         {
-            throw new ApiException(StatusCodes.Status503ServiceUnavailable, "SUPABASE_URL_MISSING", "Supabase URL is not configured.");
+            throw new ApiException(
+                StatusCodes.Status503ServiceUnavailable,
+                "SUPABASE_URL_MISSING",
+                "Supabase URL is not configured."
+            );
         }
     }
 
     private static StringContent JsonContent(JsonNode payload)
     {
-        return new StringContent(payload.ToJsonString(JsonOptions), Encoding.UTF8, "application/json");
+        return new StringContent(
+            payload.ToJsonString(JsonOptions),
+            Encoding.UTF8,
+            "application/json"
+        );
     }
 
-    private static async Task<string> ReadSuccessfulContentAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private static async Task<string> ReadSuccessfulContentAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken
+    )
     {
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureSuccess(response, content);

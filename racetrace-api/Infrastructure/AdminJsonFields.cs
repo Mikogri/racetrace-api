@@ -7,13 +7,18 @@ internal static class AdminJsonFields
 {
     internal static JsonObject? ToDatabasePatch(JsonObject? patch)
     {
-        if (patch is null) return null;
+        if (patch is null)
+            return null;
         var result = new JsonObject();
         foreach (var property in patch)
         {
             var field = JsonNamingPolicy.SnakeCaseLower.ConvertName(property.Key);
             if (result.ContainsKey(field))
-                throw new ApiException(StatusCodes.Status400BadRequest, "DUPLICATE_ADMIN_FIELD", $"Field '{field}' was provided more than once.");
+                throw new ApiException(
+                    StatusCodes.Status400BadRequest,
+                    "DUPLICATE_ADMIN_FIELD",
+                    $"Field '{field}' was provided more than once."
+                );
             result[field] = property.Value?.DeepClone();
         }
         return result;
@@ -23,7 +28,9 @@ internal static class AdminJsonFields
     {
         foreach (var fields in resources.Select(property => property.Value).OfType<JsonArray>())
             for (var index = 0; index < fields.Count; index++)
-                fields[index] = ApiJsonNodeConverterFactory.CamelCaseField(fields[index]!.GetValue<string>());
+                fields[index] = ApiJsonNodeConverterFactory.CamelCaseField(
+                    fields[index]!.GetValue<string>()
+                );
         return resources;
     }
 }

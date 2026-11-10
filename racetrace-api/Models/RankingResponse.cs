@@ -7,9 +7,7 @@ public sealed record RankingResponse(
     PaginationMetadata Pagination,
     string Sort,
     string Order,
-    RankingSummary Summary);
+    RankingSummary Summary
+);
 
-public sealed record RankingSummary(
-    int Sessions,
-    int Finals,
-    int Riders);
+public sealed record RankingSummary(int Sessions, int Finals, int Riders);

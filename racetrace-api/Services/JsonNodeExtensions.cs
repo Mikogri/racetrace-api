@@ -24,17 +24,32 @@ public static class JsonNodeExtensions
             return null;
         }
 
-        if (node.GetValueKind() == System.Text.Json.JsonValueKind.Number && node.AsValue().TryGetValue<int>(out var number))
+        if (
+            node.GetValueKind() == System.Text.Json.JsonValueKind.Number
+            && node.AsValue().TryGetValue<int>(out var number)
+        )
         {
             return number;
         }
 
-        if (int.TryParse(node.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+        if (
+            int.TryParse(
+                node.ToString(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var parsed
+            )
+        )
         {
             return parsed;
         }
 
-        return decimal.TryParse(node.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue)
+        return decimal.TryParse(
+            node.ToString(),
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out var decimalValue
+        )
             ? (int?)decimal.ToInt32(decimalValue)
             : null;
     }
@@ -46,12 +61,22 @@ public static class JsonNodeExtensions
             return null;
         }
 
-        if (node.GetValueKind() == System.Text.Json.JsonValueKind.Number && node.AsValue().TryGetValue<decimal>(out var number))
+        if (
+            node.GetValueKind() == System.Text.Json.JsonValueKind.Number
+            && node.AsValue().TryGetValue<decimal>(out var number)
+        )
         {
             return number;
         }
 
-        return decimal.TryParse(node.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+        return decimal.TryParse(
+            node.ToString(),
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out var parsed
+        )
+            ? parsed
+            : null;
     }
 
     public static bool? Bool(this JsonObject json, string name)
@@ -61,7 +86,11 @@ public static class JsonNodeExtensions
             return null;
         }
 
-        if (node.GetValueKind() is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False)
+        if (
+            node.GetValueKind()
+            is System.Text.Json.JsonValueKind.True
+                or System.Text.Json.JsonValueKind.False
+        )
         {
             return node.GetValue<bool>();
         }
@@ -94,7 +123,12 @@ public static class JsonNodeExtensions
     {
         var firstName = rider.String("first_name");
         var lastName = rider.String("last_name");
-        var displayName = string.Join(" ", new[] { firstName, lastName }.Where(value => !string.IsNullOrWhiteSpace(value)));
-        return string.IsNullOrWhiteSpace(displayName) ? rider.String("uci_id") ?? rider.String("id") ?? string.Empty : displayName;
+        var displayName = string.Join(
+            " ",
+            new[] { firstName, lastName }.Where(value => !string.IsNullOrWhiteSpace(value))
+        );
+        return string.IsNullOrWhiteSpace(displayName)
+            ? rider.String("uci_id") ?? rider.String("id") ?? string.Empty
+            : displayName;
     }
 }

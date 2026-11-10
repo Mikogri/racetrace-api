@@ -1,5 +1,6 @@
-using RaceTrace.Api.Features.Metrics;
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Metrics;
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 
@@ -7,14 +8,15 @@ namespace RaceTrace.Api.Services;
 
 public sealed class SessionsService
 {
-    private static readonly Dictionary<string, string> Sorts =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["sessionDate"] = "session_date",
-            ["sessionType"] = "session_type",
-            ["sessionId"] = "id",
-            ["roundId"] = "round_id"
-        };
+    private static readonly Dictionary<string, string> Sorts = new Dictionary<string, string>(
+        StringComparer.OrdinalIgnoreCase
+    )
+    {
+        ["sessionDate"] = "session_date",
+        ["sessionType"] = "session_type",
+        ["sessionId"] = "id",
+        ["roundId"] = "round_id",
+    };
 
     private readonly ISupabaseRestClient _supabase;
     private readonly QueryValidationService _validator;
@@ -23,7 +25,8 @@ public sealed class SessionsService
     public SessionsService(
         ISupabaseRestClient supabase,
         QueryValidationService validator,
-        DomainQueryService domainQueries)
+        DomainQueryService domainQueries
+    )
     {
         _supabase = supabase;
         _validator = validator;
@@ -32,12 +35,14 @@ public sealed class SessionsService
 
     public async Task<PublicPagedResponse<CommonSessionDto>> ListCommonSessionsAsync(
         IQueryCollection queryString,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var page = _validator.Page(queryString);
         var requestedSort = _validator.Sort(queryString, Sorts, "sessionDate", "asc");
         var sortColumn = Sorts[requestedSort.Sort];
-        var riderIds = _validator.CsvAny(queryString, "riderId", "rider_id")
+        var riderIds = _validator
+            .CsvAny(queryString, "riderId", "rider_id")
             .Select(value =>
             {
                 if (!long.TryParse(value, out var parsed) || parsed <= 0)
@@ -49,16 +54,26 @@ public sealed class SessionsService
             })
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var commonOnly = _validator.BoolAny(queryString, "commonSessionsOnly", "common_sessions_only") == true;
-        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
-        var matchingSessions = await _domainQueries.GetMatchingSessionsAsync(context, cancellationToken: cancellationToken);
+        var commonOnly =
+            _validator.BoolAny(queryString, "commonSessionsOnly", "common_sessions_only") == true;
+        var context = await _domainQueries.ParseMetricsContextAsync(
+            queryString,
+            _validator,
+            cancellationToken
+        );
+        var matchingSessions = await _domainQueries.GetMatchingSessionsAsync(
+            context,
+            cancellationToken: cancellationToken
+        );
         var sessionIds = matchingSessions
             .Select(session => session.String("id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .ToArray();
 
-        var participatingBySession = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var participatingBySession = new Dictionary<string, HashSet<string>>(
+            StringComparer.OrdinalIgnoreCase
+        );
         if (sessionIds.Length > 0 && riderIds.Length > 0)
         {
             foreach (var batch in sessionIds.Chunk(100))
@@ -69,7 +84,8 @@ public sealed class SessionsService
                         .In("session_id", batch)
                         .In("rider_id", riderIds)
                         .Limit(5000),
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 foreach (var result in response.Data)
                 {
                     var sessionId = result.String("session_id");
@@ -98,8 +114,10 @@ public sealed class SessionsService
                     return true;
                 }
 
-                return participatingBySession.TryGetValue(session.String("id") ?? string.Empty, out var participants) &&
-                    riderIds.All(participants.Contains);
+                return participatingBySession.TryGetValue(
+                        session.String("id") ?? string.Empty,
+                        out var participants
+                    ) && riderIds.All(participants.Contains);
             })
             .Select(session => session.String("id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -115,8 +133,9 @@ public sealed class SessionsService
                     .In("id", filteredSessionIds)
                     .Order(sortColumn, requestedSort.Descending)
                     .Limit(5000),
-                cancellationToken: cancellationToken);
-            DomainQueryService.NormalizeSessionEmbeds(response.Data);
+                cancellationToken: cancellationToken
+            );
+            ResultEmbedMapping.NormalizeSessionEmbeds(response.Data);
             fullSessions = response.Data;
         }
 
@@ -134,7 +153,8 @@ public sealed class SessionsService
                     PublicApiCodes.ToPublicSessionType(session.String("session_type")),
                     PublicApiCodes.ToPublicCategory(session.Object("categories")?.String("code")),
                     PublicDtoMapping.Date(session.String("session_date")),
-                    participants.Select(PublicDtoMapping.Long).OrderBy(id => id).ToArray());
+                    participants.Select(PublicDtoMapping.Long).OrderBy(id => id).ToArray()
+                );
             })
             .ToArray();
 
@@ -142,6 +162,7 @@ public sealed class SessionsService
             items,
             page.Page,
             page.Limit,
-            fullSessions.Count);
+            fullSessions.Count
+        );
     }
 }

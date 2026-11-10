@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 using RaceTrace.Api.Services;
@@ -24,7 +25,8 @@ public sealed class DomainQueryPaginationTests
             null,
             null,
             null,
-            null);
+            null
+        );
 
         var results = await service.GetMatchingResultsAsync(context);
 
@@ -34,7 +36,7 @@ public sealed class DomainQueryPaginationTests
 
         var winner = Assert.Single(results, result => result.Int("position") == 1);
         Assert.Equal("1001", winner.String("id"));
-        Assert.True(DomainQueryService.IsFinalResult(winner));
+        Assert.True(ResultEmbedMapping.IsFinalResult(winner));
     }
 
     private static int QueryOffset(SupabaseQuery query)
@@ -51,13 +53,14 @@ public sealed class DomainQueryPaginationTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             if (query.Table == "sessions")
             {
-                return Task.FromResult(new SupabaseQueryResult(
-                    [new JsonObject { ["id"] = "session-final" }],
-                    1));
+                return Task.FromResult(
+                    new SupabaseQueryResult([new JsonObject { ["id"] = "session-final" }], 1)
+                );
             }
 
             if (query.Table != "results")
@@ -69,15 +72,14 @@ public sealed class DomainQueryPaginationTests
             var offset = QueryOffset(query);
             if (offset == 0)
             {
-                var firstPage = Enumerable.Range(1, 1000)
+                var firstPage = Enumerable
+                    .Range(1, 1000)
                     .Select(index => Result(index, position: index + 1))
                     .ToArray();
                 return Task.FromResult(new SupabaseQueryResult(firstPage, 1001));
             }
 
-            return Task.FromResult(new SupabaseQueryResult(
-                [Result(1001, position: 1)],
-                1001));
+            return Task.FromResult(new SupabaseQueryResult([Result(1001, position: 1)], 1001));
         }
 
         private static JsonObject Result(int id, int position)
@@ -92,40 +94,45 @@ public sealed class DomainQueryPaginationTests
                 ["sessions"] = new JsonObject
                 {
                     ["id"] = "session-final",
-                    ["session_type"] = "FINAL"
-                }
+                    ["session_type"] = "FINAL",
+                },
             };
         }
 
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<JsonObject>> PostAsync(
             string table,
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<JsonObject>> PatchAsync(
             string table,
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task DeleteAsync(
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<JsonNode?> RpcAsync(
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 }

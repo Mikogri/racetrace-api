@@ -7,7 +7,9 @@ namespace RaceTrace.Api.Services;
 
 public sealed class ChronoRaceJsonFetcher
 {
-    private static readonly HashSet<string> KnownRouteDisciplines = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> KnownRouteDisciplines = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
         "dh",
         "bmx",
@@ -16,7 +18,7 @@ public sealed class ChronoRaceJsonFetcher
         "track",
         "trials",
         "xco",
-        "xcc"
+        "xcc",
     };
 
     private readonly HttpClient _http;
@@ -25,21 +27,38 @@ public sealed class ChronoRaceJsonFetcher
     {
         _http = http;
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("racetrace-api/1.0");
-        _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        _http.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json")
+        );
     }
 
-    public async Task<ChronoRaceJsonFetchResult> FetchAsync(string url, CancellationToken cancellationToken)
+    public async Task<ChronoRaceJsonFetchResult> FetchAsync(
+        string url,
+        CancellationToken cancellationToken
+    )
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            throw new ApiException(StatusCodes.Status400BadRequest, "CHRONORACE_URL_REQUIRED", "chronorace_url is required.");
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "CHRONORACE_URL_REQUIRED",
+                "chronorace_url is required."
+            );
         }
 
-        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var source) ||
-            source.Scheme != Uri.UriSchemeHttps || source.Port != 443 || source.UserInfo.Length != 0 ||
-            source.Host.ToLowerInvariant() is not ("prod.chronorace.be" or "www.chronorace.be" or "chronorace.be"))
-            throw new ApiException(StatusCodes.Status400BadRequest, "CHRONORACE_URL_INVALID",
-                "chronorace_url must use an official ChronoRace HTTPS host without credentials or a custom port.");
+        if (
+            !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var source)
+            || source.Scheme != Uri.UriSchemeHttps
+            || source.Port != 443
+            || source.UserInfo.Length != 0
+            || source.Host.ToLowerInvariant()
+                is not ("prod.chronorace.be" or "www.chronorace.be" or "chronorace.be")
+        )
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "CHRONORACE_URL_INVALID",
+                "chronorace_url must use an official ChronoRace HTTPS host without credentials or a custom port."
+            );
 
         var attempted = new List<string>();
         var errors = new List<string>();
@@ -55,7 +74,11 @@ public sealed class ChronoRaceJsonFetcher
         {
             try
             {
-                using var response = await _http.GetAsync(candidate, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                using var response = await _http.GetAsync(
+                    candidate,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken
+                );
                 if (!response.IsSuccessStatusCode)
                 {
                     errors.Add($"{candidate} returned {(int)response.StatusCode}.");
@@ -89,7 +112,8 @@ public sealed class ChronoRaceJsonFetcher
         throw new ApiException(
             StatusCodes.Status400BadRequest,
             "CHRONORACE_JSON_NOT_FOUND",
-            $"Could not resolve ChronoRace JSON from '{url}'. Tried: {string.Join(", ", attempted)}");
+            $"Could not resolve ChronoRace JSON from '{url}'. Tried: {string.Join(", ", attempted)}"
+        );
     }
 
     public static bool IsChronoRaceResultJson(JsonObject json)
@@ -105,7 +129,8 @@ public sealed class ChronoRaceJsonFetcher
         }
 
         var json = JsonNode.Parse(body) as JsonObject;
-        if (json is not null) Features.Imports.ChronoRace.ChronoRacePayloadMapper.KeepSportingRiderFields(json);
+        if (json is not null)
+            Features.Imports.ChronoRace.ChronoRacePayloadMapper.KeepSportingRiderFields(json);
         return json is not null && IsChronoRaceResultJson(json) ? json : null;
     }
 
@@ -148,7 +173,10 @@ public sealed class ChronoRaceJsonFetcher
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToArray();
 
-        var eventIndex = Array.FindIndex(segments, segment => string.Equals(segment, "event", StringComparison.OrdinalIgnoreCase));
+        var eventIndex = Array.FindIndex(
+            segments,
+            segment => string.Equals(segment, "event", StringComparison.OrdinalIgnoreCase)
+        );
         if (eventIndex < 0 || eventIndex + 1 >= segments.Length)
         {
             return null;
@@ -172,4 +200,5 @@ public sealed class ChronoRaceJsonFetcher
 public sealed record ChronoRaceJsonFetchResult(
     JsonObject Json,
     string ResolvedUrl,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings
+);

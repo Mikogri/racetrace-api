@@ -5,4 +5,5 @@ public sealed record RoundImageFile(
     string ContentType,
     string? FileName,
     string? AltText,
-    string? StorageUrl = null);
+    string? StorageUrl = null
+);

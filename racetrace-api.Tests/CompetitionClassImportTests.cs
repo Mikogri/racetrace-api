@@ -11,13 +11,15 @@ public sealed class CompetitionClassImportTests
     [Fact]
     public async Task ExistingCodeIsMatchedCaseInsensitively()
     {
-        var supabase = new CompetitionClassSupabaseClient(
-            [new JsonObject { ["id"] = "7", ["code"] = "world_cup" }]);
+        var supabase = new CompetitionClassSupabaseClient([
+            new JsonObject { ["id"] = "7", ["code"] = "world_cup" },
+        ]);
         var service = new ChronoRaceImportService(supabase, null!, new TestPointAwardService());
 
         var result = await service.FindOrCreateLegacyCompetitionClassAsync(
             new ImportCompetitionClassPayload("WORLD_CUP", "World Cup", 2),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal("7", result.String("id"));
         Assert.Equal(0, supabase.PostCount);
@@ -34,15 +36,16 @@ public sealed class CompetitionClassImportTests
 
         var result = await service.FindOrCreateLegacyCompetitionClassAsync(
             new ImportCompetitionClassPayload("world_cup", "World Cup", 2),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal("8", result.String("id"));
         Assert.Equal(1, supabase.PostCount);
         Assert.Equal(1, supabase.PatchCount);
     }
 
-    private sealed class CompetitionClassSupabaseClient(
-        IReadOnlyList<JsonObject> initialRows) : ISupabaseRestClient
+    private sealed class CompetitionClassSupabaseClient(IReadOnlyList<JsonObject> initialRows)
+        : ISupabaseRestClient
     {
         private IReadOnlyList<JsonObject> _rows = initialRows;
 
@@ -58,7 +61,8 @@ public sealed class CompetitionClassImportTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal("competition_ranks", query.Table);
             return Task.FromResult(new SupabaseQueryResult(_rows, _rows.Count));
@@ -67,15 +71,16 @@ public sealed class CompetitionClassImportTests
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<JsonObject>> PostAsync(
             string table,
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal("competition_ranks", table);
             PostCount++;
@@ -86,11 +91,11 @@ public sealed class CompetitionClassImportTests
                 _rows = [new JsonObject { ["id"] = "8", ["code"] = "WORLD_CUP" }];
                 throw new SupabaseApiException(
                     StatusCodes.Status409Conflict,
-                    """{"code":"23505"}""");
+                    """{"code":"23505"}"""
+                );
             }
 
-            return Task.FromResult<IReadOnlyList<JsonObject>>(
-                [WithId(WrittenValues, "8")]);
+            return Task.FromResult<IReadOnlyList<JsonObject>>([WithId(WrittenValues, "8")]);
         }
 
         public Task<IReadOnlyList<JsonObject>> PatchAsync(
@@ -98,28 +103,30 @@ public sealed class CompetitionClassImportTests
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal("competition_ranks", table);
             PatchCount++;
             WrittenValues = payload.DeepClone().AsObject();
-            return Task.FromResult<IReadOnlyList<JsonObject>>(
-                [WithId(WrittenValues, _rows[0].String("id")!)]);
+            return Task.FromResult<IReadOnlyList<JsonObject>>([
+                WithId(WrittenValues, _rows[0].String("id")!),
+            ]);
         }
 
         public Task DeleteAsync(
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<JsonNode?> RpcAsync(
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         private static JsonObject WithId(JsonObject values, string id)
         {

@@ -59,23 +59,26 @@ internal sealed class SessionWeightOptions
             PaceSessionType.Seeding => Seeding,
             PaceSessionType.TimedTraining => TimedTraining,
             PaceSessionType.Training => Training,
-            _ => 0.0
+            _ => 0.0,
         };
     }
 
     public double[] ApplyFinalTargetImpact(
         IReadOnlyList<PaceSessionType> sessionTypes,
-        IReadOnlyList<double> weights)
+        IReadOnlyList<double> weights
+    )
     {
         if (sessionTypes.Count != weights.Count)
         {
             throw new ArgumentException("Session types and weights must have equal lengths.");
         }
 
-        var finalWeight = Enumerable.Range(0, weights.Count)
+        var finalWeight = Enumerable
+            .Range(0, weights.Count)
             .Where(index => sessionTypes[index] == PaceSessionType.Final)
             .Sum(index => Math.Max(0, weights[index]));
-        var earlierWeight = Enumerable.Range(0, weights.Count)
+        var earlierWeight = Enumerable
+            .Range(0, weights.Count)
             .Where(index => sessionTypes[index] != PaceSessionType.Final)
             .Sum(index => Math.Max(0, weights[index]));
         if (finalWeight <= 0 || earlierWeight <= 0)
@@ -83,10 +86,13 @@ internal sealed class SessionWeightOptions
             return weights.ToArray();
         }
 
-        return Enumerable.Range(0, weights.Count)
-            .Select(index => sessionTypes[index] == PaceSessionType.Final
-                ? weights[index] * FinalTargetImpact / finalWeight
-                : weights[index] * (1.0 - FinalTargetImpact) / earlierWeight)
+        return Enumerable
+            .Range(0, weights.Count)
+            .Select(index =>
+                sessionTypes[index] == PaceSessionType.Final
+                    ? weights[index] * FinalTargetImpact / finalWeight
+                    : weights[index] * (1.0 - FinalTargetImpact) / earlierWeight
+            )
             .ToArray();
     }
 }
@@ -183,9 +189,9 @@ internal sealed class PaceOptions
     // wpływ czasu mety ogranicza się do osobnego bonusu za dominującą przewagę nad P2.
     public double FinishPositiveGain { get; init; } = 0.0;
 
-	// Część dodatniej różnicy SpeedScore względem Pace sektorów dodawana do sesji.
-	// Wyższa zwiększa wpływ top speed; 0 sprawia, że prędkość nie zmienia Pace.
-	public double TopSpeedPositiveGain { get; init; } = 0.02;
+    // Część dodatniej różnicy SpeedScore względem Pace sektorów dodawana do sesji.
+    // Wyższa zwiększa wpływ top speed; 0 sprawia, że prędkość nie zmienia Pace.
+    public double TopSpeedPositiveGain { get; init; } = 0.02;
 
     // Maksymalny bonus Pace dla zwycięzcy sesji za wyraźną przewagę czasową nad P2.
     public double MaximumDominanceBonus { get; init; } = 3.0;
@@ -283,9 +289,9 @@ internal sealed class PaceOptions
     public double SparseQualifyingPaceCap { get; init; } = 72.0;
     public double SparseSeedingPaceCap { get; init; } = 68.0;
 
-	// Liczba początkowych sektorów używana do oceny wolnego przejazdu od startu.
-	// Wyższa daje szerszy obraz otwarcia; niższa szybciej podejmuje decyzję.
-	public int SlowRunOpeningSectorCount { get; init; } = 3;
+    // Liczba początkowych sektorów używana do oceny wolnego przejazdu od startu.
+    // Wyższa daje szerszy obraz otwarcia; niższa szybciej podejmuje decyzję.
+    public int SlowRunOpeningSectorCount { get; init; } = 3;
 
     // Wymagany spadek mediany percentyla otwarcia względem historycznego poziomu.
     // Wyższa odrzuca tylko wyraźnie słabsze przejazdy; niższa jest bardziej restrykcyjna.

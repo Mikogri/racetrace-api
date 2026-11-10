@@ -1,5 +1,5 @@
-using RaceTrace.Api.Models;
 using RaceTrace.Api.Infrastructure.Telemetry;
+using RaceTrace.Api.Models;
 
 namespace RaceTrace.Api.Infrastructure;
 
@@ -28,21 +28,36 @@ public sealed class ApiExceptionMiddleware
                 context.Response.Headers.WWWAuthenticate = "Bearer";
             }
 
-            await context.Response.WriteAsJsonAsync(new ApiErrorResponse(new ApiError(exception.Code, exception.Message)));
+            await context.Response.WriteAsJsonAsync(
+                new ApiErrorResponse(new ApiError(exception.Code, exception.Message))
+            );
         }
         catch (SupabaseApiException exception)
         {
-            _logger.LogWarning("Supabase request failed with status {StatusCode}", exception.StatusCode);
-            var statusCode = exception.StatusCode == StatusCodes.Status503ServiceUnavailable
-                ? StatusCodes.Status503ServiceUnavailable
-                : StatusCodes.Status500InternalServerError;
-            var code = statusCode == StatusCodes.Status503ServiceUnavailable ? "DATABASE_UNAVAILABLE" : "DATABASE_ERROR";
-            var message = statusCode == StatusCodes.Status503ServiceUnavailable ? "Database is temporarily unavailable." : "Database request failed.";
+            _logger.LogWarning(
+                "Supabase request failed with status {StatusCode}",
+                exception.StatusCode
+            );
+            var statusCode =
+                exception.StatusCode == StatusCodes.Status503ServiceUnavailable
+                    ? StatusCodes.Status503ServiceUnavailable
+                    : StatusCodes.Status500InternalServerError;
+            var code =
+                statusCode == StatusCodes.Status503ServiceUnavailable
+                    ? "DATABASE_UNAVAILABLE"
+                    : "DATABASE_ERROR";
+            var message =
+                statusCode == StatusCodes.Status503ServiceUnavailable
+                    ? "Database is temporarily unavailable."
+                    : "Database request failed.";
 
             context.Response.StatusCode = statusCode;
-            await context.Response.WriteAsJsonAsync(new ApiErrorResponse(new ApiError(code, message)));
+            await context.Response.WriteAsJsonAsync(
+                new ApiErrorResponse(new ApiError(code, message))
+            );
         }
-        catch (OperationCanceledException exception) when (context.RequestAborted.IsCancellationRequested)
+        catch (OperationCanceledException exception)
+            when (context.RequestAborted.IsCancellationRequested)
         {
             _logger.LogInformation(exception, "API request was cancelled by the client.");
             if (!context.Response.HasStarted)
@@ -55,13 +70,22 @@ public sealed class ApiExceptionMiddleware
             context.Items[ApiTelemetry.TimeoutKey] = true;
             _logger.LogWarning(exception, "External service request timed out or was cancelled.");
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            await context.Response.WriteAsJsonAsync(new ApiErrorResponse(new ApiError("UPSTREAM_TIMEOUT", "External service request timed out or was cancelled.")));
+            await context.Response.WriteAsJsonAsync(
+                new ApiErrorResponse(
+                    new ApiError(
+                        "UPSTREAM_TIMEOUT",
+                        "External service request timed out or was cancelled."
+                    )
+                )
+            );
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Unhandled API exception");
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            await context.Response.WriteAsJsonAsync(new ApiErrorResponse(new ApiError("INTERNAL_ERROR", "Unexpected server error.")));
+            await context.Response.WriteAsJsonAsync(
+                new ApiErrorResponse(new ApiError("INTERNAL_ERROR", "Unexpected server error."))
+            );
         }
     }
 }

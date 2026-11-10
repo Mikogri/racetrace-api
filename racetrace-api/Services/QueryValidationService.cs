@@ -28,17 +28,26 @@ public sealed class QueryValidationService
         return new PageRequest(page, limit);
     }
 
-    public SortRequest Sort(IQueryCollection query, IReadOnlyDictionary<string, string> allowedSorts, string defaultSort, string defaultOrder = "asc")
+    public SortRequest Sort(
+        IQueryCollection query,
+        IReadOnlyDictionary<string, string> allowedSorts,
+        string defaultSort,
+        string defaultOrder = "asc"
+    )
     {
         var sort = StringAny(query, "sortBy", "sort_by", "sort") ?? defaultSort;
         if (!allowedSorts.ContainsKey(sort))
         {
-            throw BadQuery($"Invalid sortBy '{sort}'. Allowed values: {string.Join(", ", allowedSorts.Keys)}.");
+            throw BadQuery(
+                $"Invalid sortBy '{sort}'. Allowed values: {string.Join(", ", allowedSorts.Keys)}."
+            );
         }
 
         var order = StringAny(query, "sortDirection", "sort_direction", "order") ?? defaultOrder;
-        if (!string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase))
+        if (
+            !string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase)
+        )
         {
             throw BadQuery("sortDirection must be asc or desc.");
         }
@@ -78,7 +87,9 @@ public sealed class QueryValidationService
             return null;
         }
 
-        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+        if (
+            !int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+        )
         {
             throw BadQuery($"{key} must be an integer.");
         }
@@ -110,7 +121,14 @@ public sealed class QueryValidationService
         var parsedValues = new List<int>(values.Length);
         foreach (var value in values)
         {
-            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            if (
+                !int.TryParse(
+                    value,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var parsed
+                )
+            )
             {
                 throw BadQuery($"{key} must contain integers separated by commas.");
             }
@@ -118,9 +136,7 @@ public sealed class QueryValidationService
             parsedValues.Add(parsed);
         }
 
-        return parsedValues
-            .Distinct()
-            .ToArray();
+        return parsedValues.Distinct().ToArray();
     }
 
     public int[] IntCsvAny(IQueryCollection query, params string[] keys)
@@ -144,7 +160,14 @@ public sealed class QueryValidationService
             return null;
         }
 
-        if (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))
+        if (
+            !decimal.TryParse(
+                value,
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out var parsed
+            )
+        )
         {
             throw BadQuery($"{key} must be a number.");
         }
@@ -173,7 +196,14 @@ public sealed class QueryValidationService
             return null;
         }
 
-        if (!DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+        if (
+            !DateOnly.TryParse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsed
+            )
+        )
         {
             throw BadQuery($"{key} must be an ISO date.");
         }
@@ -228,7 +258,10 @@ public sealed class QueryValidationService
         var value = String(query, key);
         return value is null
             ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            : value.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            );
     }
 
     public string[] CsvAny(IQueryCollection query, params string[] keys)
@@ -257,7 +290,9 @@ public sealed class QueryValidationService
         var value = String(query, key);
         if (value is not null && !allowed.Contains(value))
         {
-            throw BadQuery($"Invalid {key} '{value}'. Allowed values: {string.Join(", ", allowed)}.");
+            throw BadQuery(
+                $"Invalid {key} '{value}'. Allowed values: {string.Join(", ", allowed)}."
+            );
         }
     }
 

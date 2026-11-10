@@ -4,12 +4,10 @@ public sealed record CompareResponseDto(
     IReadOnlyList<CompareRiderDto> Riders,
     IReadOnlyList<CompareSessionDto> Sessions,
     IReadOnlyList<CompareSessionDto> CommonSessions,
-    CompareSummaryDto Summary);
+    CompareSummaryDto Summary
+);
 
-public sealed record CompareSummaryDto(
-    int RidersCount,
-    int SessionsCount,
-    int CommonSessionsCount);
+public sealed record CompareSummaryDto(int RidersCount, int SessionsCount, int CommonSessionsCount);
 
 public sealed record CompareRiderDto(
     long RiderId,
@@ -42,7 +40,8 @@ public sealed record CompareRiderDto(
     IReadOnlyList<CompareAverageSectorGapDto> AverageSectorGapsToBestSelected,
     decimal TotalPoints,
     IReadOnlyList<ComparePointsProgressDto> PointsProgress,
-    IReadOnlyList<CompareRoundMetricsDto> RoundMetrics)
+    IReadOnlyList<CompareRoundMetricsDto> RoundMetrics
+)
 {
     public decimal ConsistencyEvidence { get; init; }
 
@@ -54,7 +53,8 @@ public sealed record CompareRiderDto(
 public sealed record CompareSectorGapSummaryDto(
     int SectorIndex,
     decimal? AverageGap,
-    int SamplesCount);
+    int SamplesCount
+);
 
 public sealed record ComparePointsProgressDto(
     long ResultId,
@@ -64,7 +64,8 @@ public sealed record ComparePointsProgressDto(
     string? SessionType,
     string? Category,
     decimal AwardedPoints,
-    decimal CumulativePoints);
+    decimal CumulativePoints
+);
 
 public sealed record CompareRoundMetricsDto(
     long RoundId,
@@ -78,7 +79,8 @@ public sealed record CompareRoundMetricsDto(
     decimal? Rating,
     decimal? Pace,
     decimal? Consistency,
-    decimal Confidence)
+    decimal Confidence
+)
 {
     public decimal ConsistencyEvidence { get; init; }
 }
@@ -89,7 +91,8 @@ public sealed record CompareAverageSectorGapDto(
     int SectorIndex,
     bool IsFinishSector,
     decimal AverageGap,
-    int SamplesCount);
+    int SamplesCount
+);
 
 public sealed record CompareSessionDto(
     long SessionId,
@@ -109,7 +112,8 @@ public sealed record CompareSessionDto(
     string? CompetitionClassCode,
     string? CompetitionClassName,
     bool IsCommon,
-    IReadOnlyList<CompareSessionResultDto> Results);
+    IReadOnlyList<CompareSessionResultDto> Results
+);
 
 public sealed record CompareSessionResultDto(
     long ResultId,
@@ -121,11 +125,13 @@ public sealed record CompareSessionResultDto(
     string? TeamName,
     decimal? FinalTime,
     decimal? GapToBestSelected,
-    IReadOnlyList<CompareSectorResultDto> Sectors);
+    IReadOnlyList<CompareSectorResultDto> Sectors
+);
 
 public sealed record CompareSectorResultDto(
     int SectorIndex,
     bool IsFinishSector,
     decimal? Time,
     decimal? GapToBestSelected,
-    int? PositionAmongSelected);
+    int? PositionAmongSelected
+);

@@ -14,7 +14,8 @@ public sealed class RoundsController : ControllerBase
     public RoundsController(
         RoundsService rounds,
         QueryValidationService validator,
-        ResultsService? results = null)
+        ResultsService? results = null
+    )
     {
         _rounds = rounds;
         _validator = validator;
@@ -22,7 +23,10 @@ public sealed class RoundsController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.PublicPagedResponse<RaceTrace.Api.Models.RoundListItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.PublicPagedResponse<RaceTrace.Api.Models.RoundListItemDto>),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
         return Ok(await _rounds.ListRoundsAsync(Request.Query, cancellationToken));
@@ -39,7 +43,13 @@ public sealed class RoundsController : ControllerBase
     [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> Get(string roundId, CancellationToken cancellationToken)
     {
-        return Ok(await _rounds.GetRoundAsync(roundId, _validator.Csv(Request.Query, "include"), cancellationToken));
+        return Ok(
+            await _rounds.GetRoundAsync(
+                roundId,
+                _validator.Csv(Request.Query, "include"),
+                cancellationToken
+            )
+        );
     }
 
     [HttpGet("{roundId:long}/image")]
@@ -62,17 +72,26 @@ public sealed class RoundsController : ControllerBase
     }
 
     [HttpGet("{roundId}/sessions")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.PublicPagedResponse<RaceTrace.Api.Models.CommonSessionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.PublicPagedResponse<RaceTrace.Api.Models.CommonSessionDto>),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> Sessions(string roundId, CancellationToken cancellationToken)
     {
         return Ok(await _rounds.ListRoundSessionsAsync(roundId, Request.Query, cancellationToken));
     }
 
     [HttpGet("{roundId}/results")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.SessionResultsResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.SessionResultsResponseDto),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> Results(string roundId, CancellationToken cancellationToken)
     {
-        return Ok(await (_results ?? throw new InvalidOperationException("ResultsService is unavailable."))
-            .ListPublicRoundResultsAsync(roundId, Request.Query, cancellationToken));
+        return Ok(
+            await (
+                _results ?? throw new InvalidOperationException("ResultsService is unavailable.")
+            ).ListPublicRoundResultsAsync(roundId, Request.Query, cancellationToken)
+        );
     }
 }

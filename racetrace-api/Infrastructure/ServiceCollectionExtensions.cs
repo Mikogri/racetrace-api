@@ -1,37 +1,73 @@
 using System.Net;
 using RaceTrace.Api.Configuration;
-using RaceTrace.Api.Services;
 using RaceTrace.Api.Features.Fantasy;
 using RaceTrace.Api.Features.Fantasy.Import;
 using RaceTrace.Api.Features.Metadata;
 using RaceTrace.Api.Infrastructure.Calculations;
 using RaceTrace.Api.Infrastructure.Telemetry;
+using RaceTrace.Api.Services;
 
 namespace RaceTrace.Api.Infrastructure;
 
 /// <summary>Composition root. Lifetimes, cache policies and option precedence match the existing host.</summary>
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddRaceTraceConfiguration(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddRaceTraceConfiguration(
+        this IServiceCollection services,
+        IConfiguration configuration
+    )
     {
         services.Configure<SupabaseOptions>(configuration.GetSection(SupabaseOptions.SectionName));
         services.Configure<ReadOptimizationOptions>(configuration.GetSection("ReadOptimizations"));
-        services.Configure<ApiAccessOptions>(configuration.GetSection(ApiAccessOptions.SectionName));
+        services.Configure<ApiAccessOptions>(
+            configuration.GetSection(ApiAccessOptions.SectionName)
+        );
         services.Configure<AdminOptions>(configuration.GetSection(AdminOptions.SectionName));
-        services.Configure<PointSystemSeedOptions>(configuration.GetSection(PointSystemSeedOptions.SectionName));
-        services.AddOptions<RequestLimitOptions>().Bind(configuration.GetSection("RequestLimits"))
-            .Validate(options => options.RequestsPerMinute > 0 && options.AdminRequestsPerMinute > 0 && options.HeavyConcurrency > 0,
-                "Request limits must be positive.").ValidateOnStart();
+        services.Configure<PointSystemSeedOptions>(
+            configuration.GetSection(PointSystemSeedOptions.SectionName)
+        );
+        services
+            .AddOptions<RequestLimitOptions>()
+            .Bind(configuration.GetSection("RequestLimits"))
+            .Validate(
+                options =>
+                    options.RequestsPerMinute > 0
+                    && options.AdminRequestsPerMinute > 0
+                    && options.HeavyConcurrency > 0,
+                "Request limits must be positive."
+            )
+            .ValidateOnStart();
         services.AddHostedService<ProductionConfigurationCheck>();
-        services.AddOptions<FantasyOptions>().Bind(configuration.GetSection(FantasyOptions.SectionName))
-            .Validate(options => options.SyncInterval >= TimeSpan.FromMinutes(5) && options.LiveSyncInterval >= TimeSpan.FromMinutes(5), "Fantasy sync intervals must be at least five minutes.")
-            .Validate(options => !options.DistributedCoordinationEnabled ||
-                (options.LeaseDuration >= TimeSpan.FromSeconds(10) && options.LeaseDuration <= TimeSpan.FromMinutes(10) &&
-                 options.HeartbeatInterval > TimeSpan.Zero && options.HeartbeatInterval <= options.LeaseDuration / 3),
-                "Fantasy leases must last 10–600 seconds, with heartbeat at most one third of the lease.");
-        services.AddOptions<FantasyImportOptions>().Bind(configuration.GetSection("Fantasy:Import"))
-            .Validate(options => options.TimeoutSeconds is > 0 and <= 120 && options.StaleAfterHours > 0 && options.MinimumRiderCount >= 6,
-                "Fantasy import timeout, freshness and minimum rider count must be valid.");
+        services
+            .AddOptions<FantasyOptions>()
+            .Bind(configuration.GetSection(FantasyOptions.SectionName))
+            .Validate(
+                options =>
+                    options.SyncInterval >= TimeSpan.FromMinutes(5)
+                    && options.LiveSyncInterval >= TimeSpan.FromMinutes(5),
+                "Fantasy sync intervals must be at least five minutes."
+            )
+            .Validate(
+                options =>
+                    !options.DistributedCoordinationEnabled
+                    || (
+                        options.LeaseDuration >= TimeSpan.FromSeconds(10)
+                        && options.LeaseDuration <= TimeSpan.FromMinutes(10)
+                        && options.HeartbeatInterval > TimeSpan.Zero
+                        && options.HeartbeatInterval <= options.LeaseDuration / 3
+                    ),
+                "Fantasy leases must last 10–600 seconds, with heartbeat at most one third of the lease."
+            );
+        services
+            .AddOptions<FantasyImportOptions>()
+            .Bind(configuration.GetSection("Fantasy:Import"))
+            .Validate(
+                options =>
+                    options.TimeoutSeconds is > 0 and <= 120
+                    && options.StaleAfterHours > 0
+                    && options.MinimumRiderCount >= 6,
+                "Fantasy import timeout, freshness and minimum rider count must be valid."
+            );
         services.PostConfigure<ApiAccessOptions>(options =>
         {
             var environmentSecret = configuration["API_READ_SECRET"];
@@ -54,10 +90,15 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddRaceTraceHttp(this IServiceCollection services)
     {
         services.AddRequestLimits();
-        services.AddControllers(options => options.Filters.AddService<CalculationResponseFilter>())
+        services
+            .AddControllers(options => options.Filters.AddService<CalculationResponseFilter>())
             .AddJsonOptions(options =>
             {
-                options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+                options.JsonSerializerOptions.PropertyNamingPolicy = System
+                    .Text
+                    .Json
+                    .JsonNamingPolicy
+                    .CamelCase;
                 options.JsonSerializerOptions.DictionaryKeyPolicy = null;
                 options.JsonSerializerOptions.Converters.Add(new ApiJsonNodeConverterFactory());
             });
@@ -68,15 +109,12 @@ public static class ServiceCollectionExtensions
         });
         services.AddOutputCache(options =>
         {
-            options.AddPolicy(
-                "ranking",
-                new ApiReadOutputCachePolicy(TimeSpan.FromSeconds(30)));
+            options.AddPolicy("ranking", new ApiReadOutputCachePolicy(TimeSpan.FromSeconds(30)));
             options.AddPolicy(
                 "season-overview",
-                new ApiReadOutputCachePolicy(TimeSpan.FromSeconds(60)));
-            options.AddPolicy(
-                "analytics",
-                new ApiReadOutputCachePolicy(TimeSpan.FromMinutes(5)));
+                new ApiReadOutputCachePolicy(TimeSpan.FromSeconds(60))
+            );
+            options.AddPolicy("analytics", new ApiReadOutputCachePolicy(TimeSpan.FromMinutes(5)));
         });
         return services;
     }
@@ -87,12 +125,15 @@ public static class ServiceCollectionExtensions
         services
             .AddHttpClient<ISupabaseRestClient, SupabaseRestClient>()
             .AddHttpMessageHandler<SupabaseTelemetryHandler>()
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-            {
-                AutomaticDecompression = DecompressionMethods.GZip |
-                    DecompressionMethods.Deflate |
-                    DecompressionMethods.Brotli
-            });
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new SocketsHttpHandler
+                {
+                    AutomaticDecompression =
+                        DecompressionMethods.GZip
+                        | DecompressionMethods.Deflate
+                        | DecompressionMethods.Brotli,
+                }
+            );
         return services;
     }
 
@@ -137,7 +178,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<FantasyRacePrediction>();
         services.AddScoped<FantasyPreparationService>();
         services.AddScoped<FantasyService>();
-        services.AddHttpClient<FantasyTrainingParticipants>(client => client.Timeout = TimeSpan.FromSeconds(20));
+        services.AddHttpClient<FantasyTrainingParticipants>(client =>
+            client.Timeout = TimeSpan.FromSeconds(20)
+        );
         services.AddHostedService<FantasySyncHostedService>();
         services.AddScoped<TracksService>();
         services.AddScoped<TeamsService>();
@@ -152,12 +195,27 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UciMtbWorldSeriesSupplementService>();
         services.AddScoped<ChronoRaceImportService>();
         services.AddScoped<RiderProfileImageImportService>();
-        services.AddHttpClient<ChronoRaceJsonFetcher>(client => client.Timeout = TimeSpan.FromSeconds(30))
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
-        services.AddHttpClient<ChronoRaceLiveProxyService>(client => client.Timeout = TimeSpan.FromSeconds(30))
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
-        services.AddHttpClient<TissotTimingJsonFetcher>(client => client.Timeout = TimeSpan.FromSeconds(30))
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+        services
+            .AddHttpClient<ChronoRaceJsonFetcher>(client =>
+                client.Timeout = TimeSpan.FromSeconds(30)
+            )
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new SocketsHttpHandler { AllowAutoRedirect = false }
+            );
+        services
+            .AddHttpClient<ChronoRaceLiveProxyService>(client =>
+                client.Timeout = TimeSpan.FromSeconds(30)
+            )
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new SocketsHttpHandler { AllowAutoRedirect = false }
+            );
+        services
+            .AddHttpClient<TissotTimingJsonFetcher>(client =>
+                client.Timeout = TimeSpan.FromSeconds(30)
+            )
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new SocketsHttpHandler { AllowAutoRedirect = false }
+            );
         services.AddScoped<ChronoRaceRoundFormImportService>();
         services.AddSingleton<UciResultsPdfParser>();
         return services;

@@ -2,6 +2,18 @@
 
 Backend RaceTrace udostępnia wyniki zawodów downhill, ranking, profile zawodników, porównania, analitykę rund i prognozy. ASP.NET Core na .NET 10 pobiera dane przez Supabase/PostgREST, a obliczenia sportowe wykonuje w C#. Aplikacja React znajduje się w sąsiednim repozytorium `racetrace-web-app`.
 
+## Code formatting
+
+C# source uses CSharpier, pinned in `dotnet-tools.json`, with default formatting rules. From the repository root:
+
+```sh
+dotnet tool restore
+dotnet csharpier format .
+dotnet csharpier check .
+```
+
+Install the recommended VS Code extension to format C# on save. Generated files, dependencies, build outputs and existing migrations are excluded in `.csharpierignore`. CI checks formatting without changing files.
+
 ## Uruchomienie
 
 Z katalogu repozytorium:

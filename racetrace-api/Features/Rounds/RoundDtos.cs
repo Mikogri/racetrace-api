@@ -19,4 +19,5 @@ public sealed record RoundListItemDto(
     long? CompetitionClassId,
     string? CompetitionClassCode,
     string? CompetitionClassName,
-    int? CompetitionClassPriority);
+    int? CompetitionClassPriority
+);

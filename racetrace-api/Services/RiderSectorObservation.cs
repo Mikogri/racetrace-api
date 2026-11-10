@@ -6,4 +6,5 @@ internal sealed record RiderSectorObservation(
     string? CategoryCode,
     int SectorIndex,
     int SectorCount,
-    double Score);
+    double Score
+);

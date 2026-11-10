@@ -16,7 +16,8 @@ public static class RiderCategoryResolver
     public static string? CurrentCategory(
         JsonObject rider,
         DateOnly onDate,
-        string? fallbackCategory = null)
+        string? fallbackCategory = null
+    )
     {
         var gender = rider.String("gender")?.Trim().ToLowerInvariant();
         var birthDate = PublicDtoMapping.Date(rider.String("birth_date"));
@@ -25,7 +26,7 @@ public static class RiderCategoryResolver
         {
             "male" => junior ? "junior_men" : "elite_men",
             "female" => junior ? "junior_women" : "elite_women",
-            _ => PublicApiCodes.ToPublicCategory(fallbackCategory)
+            _ => PublicApiCodes.ToPublicCategory(fallbackCategory),
         };
     }
 

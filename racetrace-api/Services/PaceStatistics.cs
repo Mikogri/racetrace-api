@@ -30,7 +30,8 @@ internal sealed partial class DownhillPaceCalculator
             logMadScale,
             linearMadScale,
             values[0],
-            values.Length > 1 ? values[1] : null);
+            values.Length > 1 ? values[1] : null
+        );
     }
 
     private static FieldStatistics ToFieldStatistics(PaceFieldSummary summary)
@@ -43,7 +44,8 @@ internal sealed partial class DownhillPaceCalculator
             summary.LogMadScale,
             summary.LinearMadScale,
             summary.BestValue,
-            summary.SecondBestValue);
+            summary.SecondBestValue
+        );
     }
 
     private static PaceFieldSummary ToFieldSummary(FieldStatistics statistics)
@@ -55,13 +57,15 @@ internal sealed partial class DownhillPaceCalculator
             statistics.LogMadScale,
             statistics.LinearMadScale,
             statistics.BestValue,
-            statistics.SecondBestValue);
+            statistics.SecondBestValue
+        );
     }
 
     private static int? CalculateRank(
         double? value,
         FieldStatistics statistics,
-        bool lowerIsBetter = true)
+        bool lowerIsBetter = true
+    )
     {
         if (!value.HasValue || !double.IsFinite(value.Value) || value.Value <= 0)
         {
@@ -127,5 +131,6 @@ internal sealed partial class DownhillPaceCalculator
         double LogMadScale,
         double LinearMadScale,
         double? BestValue,
-        double? SecondBestValue);
+        double? SecondBestValue
+    );
 }

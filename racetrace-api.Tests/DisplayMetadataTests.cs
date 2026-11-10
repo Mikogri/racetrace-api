@@ -71,10 +71,10 @@ public sealed class DisplayMetadataTests
         using var http = new HttpClient(handler);
         var controller = new MetadataController(CreateService(http));
         var result = Assert.IsType<OkObjectResult>(await controller.Get(default));
-        var json = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.SerializeToElement(
+            result.Value,
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
+        );
 
         Assert.True(json.TryGetProperty("sessionTypes", out var sessions));
         Assert.Equal("Quali 1", sessions[0].GetProperty("shortName").GetString());
@@ -96,7 +96,11 @@ public sealed class DisplayMetadataTests
     [InlineData("EW", "elite_women", "WE")]
     [InlineData("JM", "junior_men", "MJ")]
     [InlineData("JW", "junior_women", "WJ")]
-    public async Task KeepsExistingCategoryAliases(string databaseCode, string publicCode, string alias)
+    public async Task KeepsExistingCategoryAliases(
+        string databaseCode,
+        string publicCode,
+        string alias
+    )
     {
         using var handler = new MetadataHandler(Metadata.Replace("\"EM\"", $"\"{databaseCode}\""));
         using var http = new HttpClient(handler);
@@ -127,9 +131,14 @@ public sealed class DisplayMetadataTests
     [Fact]
     public async Task UpstreamFailureIsNotConvertedToAnEmptySuccessfulDictionary()
     {
-        using var handler = new MetadataHandler("schema cache unavailable", HttpStatusCode.ServiceUnavailable);
+        using var handler = new MetadataHandler(
+            "schema cache unavailable",
+            HttpStatusCode.ServiceUnavailable
+        );
         using var http = new HttpClient(handler);
-        var error = await Assert.ThrowsAsync<SupabaseApiException>(() => CreateService(http).GetAsync(default));
+        var error = await Assert.ThrowsAsync<SupabaseApiException>(() =>
+            CreateService(http).GetAsync(default)
+        );
         Assert.Equal(503, error.StatusCode);
     }
 
@@ -151,7 +160,9 @@ public sealed class DisplayMetadataTests
         using var http = new HttpClient(handler);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateService(http).GetAsync(cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            CreateService(http).GetAsync(cancellation.Token)
+        );
         Assert.True(handler.CancellationRequested);
     }
 
@@ -159,13 +170,31 @@ public sealed class DisplayMetadataTests
     public void RegistersMetadataServiceInTheExistingCompositionRoot()
     {
         var services = new ServiceCollection().AddRaceTraceApplication();
-        Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, item => item.ServiceType == typeof(DisplayMetadataService)).Lifetime);
+        Assert.Equal(
+            ServiceLifetime.Scoped,
+            Assert
+                .Single(services, item => item.ServiceType == typeof(DisplayMetadataService))
+                .Lifetime
+        );
     }
 
-    private static DisplayMetadataService CreateService(HttpClient http) => new(new SupabaseRestClient(http,
-        Options.Create(new SupabaseOptions { Url = "https://example.supabase.co", AnonKey = "anon", ServiceRoleKey = "service" })));
+    private static DisplayMetadataService CreateService(HttpClient http) =>
+        new(
+            new SupabaseRestClient(
+                http,
+                Options.Create(
+                    new SupabaseOptions
+                    {
+                        Url = "https://example.supabase.co",
+                        AnonKey = "anon",
+                        ServiceRoleKey = "service",
+                    }
+                )
+            )
+        );
 
-    private sealed class MetadataHandler(string body, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
+    private sealed class MetadataHandler(string body, HttpStatusCode status = HttpStatusCode.OK)
+        : HttpMessageHandler
     {
         public int CallCount { get; private set; }
         public string? Method { get; private set; }
@@ -174,7 +203,10 @@ public sealed class DisplayMetadataTests
         public string? ApiKey { get; private set; }
         public bool CancellationRequested { get; private set; }
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
         {
             CallCount++;
             CancellationRequested = cancellationToken.IsCancellationRequested;

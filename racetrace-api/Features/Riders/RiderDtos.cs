@@ -11,26 +11,21 @@ public sealed record RiderTeamHistoryDto(
     DateOnly ValidFrom,
     DateOnly? ValidTo,
     bool IsCurrent,
-    long? SourceRoundId);
+    long? SourceRoundId
+);
 
 public sealed record SessionPositionDto(
     long RoundId,
     long SessionId,
     string SessionType,
-    int? Position);
+    int? Position
+);
 
-public sealed record SpeedGroupDto(
-    decimal? TopSpeed,
-    decimal? AverageSpeed);
+public sealed record SpeedGroupDto(decimal? TopSpeed, decimal? AverageSpeed);
 
-public sealed record RiderSpeedDto(
-    SpeedGroupDto Qualification,
-    SpeedGroupDto Final);
+public sealed record RiderSpeedDto(SpeedGroupDto Qualification, SpeedGroupDto Final);
 
-public sealed record AverageSectorTimeDto(
-    int SectorIndex,
-    decimal AverageTime,
-    int SamplesCount);
+public sealed record AverageSectorTimeDto(int SectorIndex, decimal AverageTime, int SamplesCount);
 
 public sealed record RiderStatisticsDto(
     long RiderId,
@@ -73,7 +68,8 @@ public sealed record RiderStatisticsDto(
     decimal? AverageSemiFinalPosition,
     decimal? AverageFinalPosition,
     IReadOnlyList<AverageSectorTimeDto> AverageSectorTimes,
-    decimal? AverageFinishTime);
+    decimal? AverageFinishTime
+);
 
 public sealed record RiderRoundResultDto(
     long RoundId,
@@ -98,7 +94,8 @@ public sealed record RiderRoundResultDto(
     int? Qualifying2Position,
     int? SemiFinalPosition,
     int? FinalPosition,
-    decimal AwardedPoints);
+    decimal AwardedPoints
+);
 
 public sealed record RiderTrackStatisticsDto(
     long TrackId,
@@ -115,7 +112,8 @@ public sealed record RiderTrackStatisticsDto(
     decimal? AverageQualifying2Position,
     decimal? AverageSemiFinalPosition,
     decimal? AverageFinalPosition,
-    int StartsCount);
+    int StartsCount
+);
 
 public sealed record RiderOverviewDto(
     RiderStatisticsDto Statistics,
@@ -123,15 +121,19 @@ public sealed record RiderOverviewDto(
     IReadOnlyList<RiderTrackStatisticsDto> TrackStatistics,
     JsonArray SessionResults,
     JsonNode? PressurePerformance,
-    JsonArray TeamHistory)
+    JsonArray TeamHistory
+)
 {
-    public RiderChartStatisticsDto ChartStatistics { get; init; } = new(null, new Dictionary<string, decimal>(), new Dictionary<string, decimal?>());
+    public RiderChartStatisticsDto ChartStatistics { get; init; } =
+        new(null, new Dictionary<string, decimal>(), new Dictionary<string, decimal?>());
 }
 
 public sealed record RiderChartStatisticsDto(
     decimal? ResultsAveragePosition,
     IReadOnlyDictionary<string, decimal> CumulativePointsByRound,
-    IReadOnlyDictionary<string, decimal?> PreFinalAverageByTrack)
+    IReadOnlyDictionary<string, decimal?> PreFinalAverageByTrack
+)
 {
-    public IReadOnlyDictionary<string, decimal?> CumulativeRatingByRound { get; init; } = new Dictionary<string, decimal?>();
+    public IReadOnlyDictionary<string, decimal?> CumulativeRatingByRound { get; init; } =
+        new Dictionary<string, decimal?>();
 }

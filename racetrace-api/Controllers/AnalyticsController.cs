@@ -17,7 +17,10 @@ public sealed class AnalyticsController : ControllerBase
 
     [HttpGet("round-profile")]
     [OutputCache(PolicyName = "analytics")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.RoundProfileResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.RoundProfileResponseDto),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> RoundProfile(CancellationToken cancellationToken)
     {
         return Ok(await _analytics.GetRoundProfileAsync(Request.Query, cancellationToken));
@@ -25,14 +28,17 @@ public sealed class AnalyticsController : ControllerBase
 
     [HttpGet("riders/{riderId}/pressure-performance")]
     [OutputCache(PolicyName = "analytics")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.PressurePerformanceResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.PressurePerformanceResponseDto),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> PressurePerformance(
         string riderId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return Ok(await _analytics.GetPressurePerformanceAsync(
-            riderId,
-            Request.Query,
-            cancellationToken));
+        return Ok(
+            await _analytics.GetPressurePerformanceAsync(riderId, Request.Query, cancellationToken)
+        );
     }
 }

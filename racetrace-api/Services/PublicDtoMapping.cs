@@ -7,7 +7,8 @@ public static class PublicDtoMapping
 {
     public static long Long(string? value) => long.TryParse(value, out var parsed) ? parsed : 0;
 
-    public static long? NullableLong(string? value) => long.TryParse(value, out var parsed) ? parsed : null;
+    public static long? NullableLong(string? value) =>
+        long.TryParse(value, out var parsed) ? parsed : null;
 
     public static DateOnly? Date(string? value)
     {
@@ -17,8 +18,9 @@ public static class PublicDtoMapping
         }
 
         return DateTimeOffset.TryParse(value, out var parsed)
-            ? DateOnly.FromDateTime(parsed.UtcDateTime)
-            : DateOnly.TryParse(value, out date) ? date : null;
+                ? DateOnly.FromDateTime(parsed.UtcDateTime)
+            : DateOnly.TryParse(value, out date) ? date
+            : null;
     }
 
     public static decimal? Seconds(int? milliseconds) =>
@@ -32,10 +34,7 @@ public static class PublicDtoMapping
         }
 
         var name = condition.String("name");
-        return new ConditionDto(
-            NullableLong(condition.String("id")),
-            Slug(name),
-            name);
+        return new ConditionDto(NullableLong(condition.String("id")), Slug(name), name);
     }
 
     public static string? Slug(string? value)

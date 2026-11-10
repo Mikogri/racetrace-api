@@ -1,10 +1,10 @@
-using RaceTrace.Api.Features.Compare;
-using static RaceTrace.Api.Features.Compare.CompareSessionSelection;
-using RaceTrace.Api.Features.Metrics;
 using System.Globalization;
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Compare;
+using RaceTrace.Api.Features.Metrics;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
+using static RaceTrace.Api.Features.Compare.CompareSessionSelection;
 
 namespace RaceTrace.Api.Services;
 
@@ -23,7 +23,8 @@ public sealed class CompareService
         DomainQueryService domainQueries,
         MetricsService metrics,
         RankingService ranking,
-        CompareInputPackageReader? inputPackages = null)
+        CompareInputPackageReader? inputPackages = null
+    )
     {
         _validator = validator;
         _domainQueries = domainQueries;
@@ -34,10 +35,15 @@ public sealed class CompareService
 
     public async Task<CompareResponseDto> CompareAsync(
         IQueryCollection queryString,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var riderIds = ParseRiderIds(queryString, _validator);
-        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
+        var context = await _domainQueries.ParseMetricsContextAsync(
+            queryString,
+            _validator,
+            cancellationToken
+        );
         if (context.CategoryCodes.Count != 1)
         {
             throw _validator.BadQuery("Select exactly one category for comparison.");
@@ -52,15 +58,24 @@ public sealed class CompareService
             }
             var shared = await sharedInput.WaitAsync(token);
             return shared is null
-                ? await _domainQueries.GetRiderDetailDataAsync(context, riderId, cancellationToken: token)
+                ? await _domainQueries.GetRiderDetailDataAsync(
+                    context,
+                    riderId,
+                    cancellationToken: token
+                )
                 : CompareInputPackageReader.ForRider(shared, riderId);
         }
         var snapshotTasks = riderIds
-            .Select(riderId => _ranking.BuildSnapshotAsync(
-                context,
-                cancellationToken,
-                riderId: riderId,
-                suppliedRiderBundleFactory: _inputPackages is null ? null : token => RiderInputAsync(riderId, token)))
+            .Select(riderId =>
+                _ranking.BuildSnapshotAsync(
+                    context,
+                    cancellationToken,
+                    riderId: riderId,
+                    suppliedRiderBundleFactory: _inputPackages is null
+                        ? null
+                        : token => RiderInputAsync(riderId, token)
+                )
+            )
             .ToArray();
         var snapshots = await Task.WhenAll(snapshotTasks);
         var sources = new List<CompareRiderSource>(riderIds.Length);
@@ -69,31 +84,38 @@ public sealed class CompareService
         {
             var riderId = riderIds[index];
             var snapshot = snapshots[index];
-            var row = snapshot.Rows.FirstOrDefault(item => string.Equals(
-                item.String("rider_id"),
-                riderId,
-                StringComparison.OrdinalIgnoreCase));
+            var row = snapshot.Rows.FirstOrDefault(item =>
+                string.Equals(item.String("rider_id"), riderId, StringComparison.OrdinalIgnoreCase)
+            );
             var rider = row?.Object("rider")?.DeepClone().AsObject();
             if (rider is null)
             {
                 rider = await _domainQueries.FindByIdAsync(
                     "riders",
                     riderId,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 if (rider is null)
                 {
                     throw new ApiException(
                         StatusCodes.Status404NotFound,
                         "RIDER_NOT_FOUND",
-                        $"Rider '{riderId}' was not found.");
+                        $"Rider '{riderId}' was not found."
+                    );
                 }
             }
 
             var source = new CompareRiderSource(riderId, rider, row, snapshot);
-            sources.Add(source with
-            {
-                RoundMetrics = await CalculateRoundMetricsAsync(source, context, cancellationToken)
-            });
+            sources.Add(
+                source with
+                {
+                    RoundMetrics = await CalculateRoundMetricsAsync(
+                        source,
+                        context,
+                        cancellationToken
+                    ),
+                }
+            );
         }
 
         var response = BuildResponse(sources);
@@ -101,20 +123,32 @@ public sealed class CompareService
         return response;
     }
 
-    internal static void ValidateCategoryData(CompareResponseDto response, string category, QueryValidationService validator)
+    internal static void ValidateCategoryData(
+        CompareResponseDto response,
+        string category,
+        QueryValidationService validator
+    )
     {
         var expected = PublicApiCodes.ToPublicCategory(category);
-        bool Matches(string? value) => string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);
-        if (response.Riders.Any(rider => !rider.Categories.Any(Matches)) ||
-            response.Sessions.Any(session => session.Category is not null && !Matches(session.Category)))
+        bool Matches(string? value) =>
+            string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);
+        if (
+            response.Riders.Any(rider => !rider.Categories.Any(Matches))
+            || response.Sessions.Any(session =>
+                session.Category is not null && !Matches(session.Category)
+            )
+        )
         {
-            throw validator.BadQuery("Both riders must have data in the selected category for the selected range.");
+            throw validator.BadQuery(
+                "Both riders must have data in the selected category for the selected range."
+            );
         }
     }
 
     internal static string[] ParseRiderIds(
         IQueryCollection queryString,
-        QueryValidationService validator)
+        QueryValidationService validator
+    )
     {
         var values = validator.CsvAny(
             queryString,
@@ -122,13 +156,24 @@ public sealed class CompareService
             "rider_ids",
             "riderId",
             "rider_id",
-            "riders");
+            "riders"
+        );
         var riderIds = values
             .Select(value =>
             {
-                if (!long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) || parsed <= 0)
+                if (
+                    !long.TryParse(
+                        value,
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out var parsed
+                    )
+                    || parsed <= 0
+                )
                 {
-                    throw validator.BadQuery("riderIds must contain positive integer identifiers separated by commas.");
+                    throw validator.BadQuery(
+                        "riderIds must contain positive integer identifiers separated by commas."
+                    );
                 }
 
                 return parsed.ToString(CultureInfo.InvariantCulture);
@@ -143,7 +188,9 @@ public sealed class CompareService
 
         if (riderIds.Length > MaximumComparedRiders)
         {
-            throw validator.BadQuery($"No more than {MaximumComparedRiders} riders can be compared at once.");
+            throw validator.BadQuery(
+                $"No more than {MaximumComparedRiders} riders can be compared at once."
+            );
         }
 
         return riderIds;
@@ -152,18 +199,25 @@ public sealed class CompareService
     internal static CompareResponseDto BuildResponse(IReadOnlyList<CompareRiderSource> sources) =>
         CompareResponseProjection.BuildResponse(sources);
 
-    internal static IReadOnlyList<string> FindCommonSessionIds(IReadOnlyList<CompareRiderSource> sources) =>
-        CompareSessionSelection.FindCommonSessionIds(sources);
+    internal static IReadOnlyList<string> FindCommonSessionIds(
+        IReadOnlyList<CompareRiderSource> sources
+    ) => CompareSessionSelection.FindCommonSessionIds(sources);
 
-    internal static IReadOnlyList<CompareSectorGapSummaryDto> SummarizeSectorGaps(IEnumerable<CompareAverageSectorGapDto> sectors) =>
-        CompareResponseProjection.SummarizeSectorGaps(sectors);
+    internal static IReadOnlyList<CompareSectorGapSummaryDto> SummarizeSectorGaps(
+        IEnumerable<CompareAverageSectorGapDto> sectors
+    ) => CompareResponseProjection.SummarizeSectorGaps(sectors);
 
-    private async Task<IReadOnlyDictionary<string, RiderPerformanceMetricValues>> CalculateRoundMetricsAsync(
+    private async Task<
+        IReadOnlyDictionary<string, RiderPerformanceMetricValues>
+    > CalculateRoundMetricsAsync(
         CompareRiderSource source,
         RiderMetricsContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var metrics = new Dictionary<string, RiderPerformanceMetricValues>(StringComparer.OrdinalIgnoreCase);
+        var metrics = new Dictionary<string, RiderPerformanceMetricValues>(
+            StringComparer.OrdinalIgnoreCase
+        );
         var groups = SourceResults(source)
             .GroupBy(ResultRoundId, StringComparer.OrdinalIgnoreCase)
             .Where(group => !string.IsNullOrWhiteSpace(group.Key));
@@ -175,24 +229,31 @@ public sealed class CompareService
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Select(id => id!)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var availableSessions = source.Snapshot.Sessions
-                .Where(session => sessionIds.Contains(session.String("id") ?? string.Empty))
+            var availableSessions = source
+                .Snapshot.Sessions.Where(session =>
+                    sessionIds.Contains(session.String("id") ?? string.Empty)
+                )
                 .ToArray();
             IReadOnlyDictionary<string, RiderPerformanceMetricValues> calculated;
             if (source.Snapshot.PrecomputedSessions is not null)
             {
-                var precomputed = source.Snapshot.PrecomputedSessions
-                    .Where(session => sessionIds.Contains(session.SessionId))
+                var precomputed = source
+                    .Snapshot.PrecomputedSessions.Where(session =>
+                        sessionIds.Contains(session.SessionId)
+                    )
                     .ToArray();
                 calculated = _metrics.CalculatePrecomputedPerformanceByRider(
                     roundResults,
                     precomputed,
-                    availableSessions);
+                    availableSessions
+                );
             }
             else
             {
-                var fieldResults = source.Snapshot.FieldResults
-                    .Where(result => sessionIds.Contains(ResultSessionId(result) ?? string.Empty))
+                var fieldResults = source
+                    .Snapshot.FieldResults.Where(result =>
+                        sessionIds.Contains(ResultSessionId(result) ?? string.Empty)
+                    )
                     .ToArray();
                 var fieldResultIds = fieldResults
                     .Select(result => result.String("id"))
@@ -204,10 +265,13 @@ public sealed class CompareService
                     context,
                     cancellationToken,
                     availableSessions: availableSessions,
-                    suppliedSplits: source.Snapshot.Splits
-                        .Where(split => fieldResultIds.Contains(split.String("result_id") ?? string.Empty))
+                    suppliedSplits: source
+                        .Snapshot.Splits.Where(split =>
+                            fieldResultIds.Contains(split.String("result_id") ?? string.Empty)
+                        )
                         .ToArray(),
-                    suppliedFieldResults: fieldResults);
+                    suppliedFieldResults: fieldResults
+                );
             }
 
             if (calculated.TryGetValue(source.RiderId, out var performance))
@@ -218,7 +282,6 @@ public sealed class CompareService
 
         return metrics;
     }
-
 }
 
 internal sealed record CompareRiderSource(
@@ -226,4 +289,5 @@ internal sealed record CompareRiderSource(
     JsonObject Rider,
     JsonObject? RankingRow,
     RankingSnapshot Snapshot,
-    IReadOnlyDictionary<string, RiderPerformanceMetricValues>? RoundMetrics = null);
+    IReadOnlyDictionary<string, RiderPerformanceMetricValues>? RoundMetrics = null
+);

@@ -15,7 +15,10 @@ public sealed class TeamsController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.ListResponse<System.Text.Json.Nodes.JsonObject>), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.ListResponse<System.Text.Json.Nodes.JsonObject>),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
         return Ok(await _teams.ListTeamsAsync(Request.Query, cancellationToken));

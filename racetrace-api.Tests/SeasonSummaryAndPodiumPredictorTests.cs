@@ -50,16 +50,14 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
     [Fact]
     public void MonteCarloIsDeterministicAndProducesCoherentProbabilities()
     {
-        var options = new PodiumPredictionOptions
-        {
-            MonteCarloIterations = 2_000,
-            RandomSeed = 42
-        };
+        var options = new PodiumPredictionOptions { MonteCarloIterations = 2_000, RandomSeed = 42 };
         var distributions = new PodiumPredictionCalibration(options).Calculate(
-            Enumerable.Range(0, 8)
+            Enumerable
+                .Range(0, 8)
                 .Select(index => Feature(index.ToString(), 95 - index * 3, 95 - index * 3))
                 .ToArray(),
-            false);
+            false
+        );
         var simulator = new MonteCarloRaceSimulator(options);
 
         var first = simulator.Simulate(distributions);
@@ -74,9 +72,7 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
     [Fact]
     public void TrackPaceUsesAtMostCurrentAndTwoPreviousSeasons()
     {
-        Assert.Equal(
-            [2024, 2025, 2026],
-            PodiumPredictorService.RecentTrackSeasons(2026));
+        Assert.Equal([2024, 2025, 2026], PodiumPredictorService.RecentTrackSeasons(2026));
     }
 
     [Theory]
@@ -102,13 +98,13 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
     public void PreviousSeasonJuniorIsResolvedFromAge(
         string birthDate,
         int season,
-        bool expectedJunior)
+        bool expectedJunior
+    )
     {
         Assert.Equal(
             expectedJunior,
-            RiderCategoryResolver.WasJuniorInSeason(
-                DateOnly.Parse(birthDate),
-                season));
+            RiderCategoryResolver.WasJuniorInSeason(DateOnly.Parse(birthDate), season)
+        );
     }
 
     [Theory]
@@ -119,26 +115,23 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
     public void CurrentCategoryIsResolvedFromAgeAndGender(
         string gender,
         string birthDate,
-        string expectedCategory)
+        string expectedCategory
+    )
     {
-        var rider = new JsonObject
-        {
-            ["gender"] = gender,
-            ["birth_date"] = birthDate
-        };
+        var rider = new JsonObject { ["gender"] = gender, ["birth_date"] = birthDate };
 
         Assert.Equal(
             expectedCategory,
-            RiderCategoryResolver.CurrentCategory(
-                rider,
-                new DateOnly(2026, 8, 20)));
+            RiderCategoryResolver.CurrentCategory(rider, new DateOnly(2026, 8, 20))
+        );
     }
 
     [Fact]
     public async Task SummaryFiltersDefaultToSeasonFromCurrentDateAndMenElite()
     {
         var service = ParserOnlySeasonSummaryService(
-            new DateTimeOffset(2028, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            new DateTimeOffset(2028, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        );
 
         var season = service.ReadSeason(Query());
         var category = await service.ReadCategoryAsync(Query(), default);
@@ -166,7 +159,7 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
                 ["venue"] = "Val di Sole",
                 ["country_code"] = "ITA",
                 ["length_m"] = 2100,
-                ["avg_slope"] = 24.5m
+                ["avg_slope"] = 24.5m,
             },
             ["competition_class_id"] = "2",
             ["competition_class_priority"] = 2,
@@ -175,13 +168,14 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
                 ["id"] = "2",
                 ["code"] = "world_cup",
                 ["name"] = "World Cup",
-                ["priority"] = 2
-            }
+                ["priority"] = 2,
+            },
         };
 
         var dto = SeasonSummaryService.ToRoundDto(
             round,
-            new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero));
+            new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero)
+        );
 
         Assert.Equal(12, dto.RoundId);
         Assert.Equal("Black Snake", dto.TrackName);
@@ -191,17 +185,16 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
         Assert.Equal("world_cup", dto.CompetitionClassCode);
     }
 
-    private static SeasonSummaryService ParserOnlySeasonSummaryService(
-        DateTimeOffset now) =>
+    private static SeasonSummaryService ParserOnlySeasonSummaryService(DateTimeOffset now) =>
         new(
             null!,
             new QueryValidationService(),
             new DomainQueryService(null!),
             null!,
-            new FixedTimeProvider(now));
+            new FixedTimeProvider(now)
+        );
 
-    private static QueryCollection Query(
-        Dictionary<string, StringValues>? values = null) =>
+    private static QueryCollection Query(Dictionary<string, StringValues>? values = null) =>
         new(values ?? []);
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
@@ -214,7 +207,8 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
         double rating = 85,
         double pace = 85,
         double consistency = 80,
-        double confidence = 80) =>
+        double confidence = 80
+    ) =>
         new(
             riderId,
             (decimal)rating,
@@ -232,5 +226,6 @@ public sealed class SeasonSummaryAndPodiumPredictorTests
             0,
             0,
             0.08,
-            12);
+            12
+        );
 }

@@ -11,13 +11,20 @@ public sealed class ChronoRaceBatchStoreTests
     {
         var client = new RecordingClient();
         var store = new ChronoRaceBatchStore(client);
-        var ids = Enumerable.Range(1, 201).Select(value => value.ToString()).Concat(["", "  ", "1"]);
+        var ids = Enumerable
+            .Range(1, 201)
+            .Select(value => value.ToString())
+            .Concat(["", "  ", "1"]);
 
         await store.GetRowsByValuesAsync("riders", "id", "id", ids, default);
 
         Assert.Equal(3, client.Reads.Count);
         Assert.All(client.Reads, query => Assert.Equal("riders", query.Table));
-        Assert.All(client.Reads, query => Assert.Contains(new KeyValuePair<string, string>("select", "id"), query.Parameters));
+        Assert.All(
+            client.Reads,
+            query =>
+                Assert.Contains(new KeyValuePair<string, string>("select", "id"), query.Parameters)
+        );
         Assert.All(client.Roles, role => Assert.Equal(SupabaseRole.Service, role));
     }
 
@@ -55,14 +62,25 @@ public sealed class ChronoRaceBatchStoreTests
         public List<string?> ConflictKeys { get; } = [];
         public List<SupabaseRole> Roles { get; } = [];
 
-        public Task<SupabaseQueryResult> GetAsync(SupabaseQuery query, bool count = false, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+        public Task<SupabaseQueryResult> GetAsync(
+            SupabaseQuery query,
+            bool count = false,
+            SupabaseRole role = SupabaseRole.Anon,
+            CancellationToken cancellationToken = default
+        )
         {
             Reads.Add(query);
             Roles.Add(role);
             return Task.FromResult(new SupabaseQueryResult([], null));
         }
 
-        public Task<IReadOnlyList<JsonObject>> PostAsync(string table, JsonNode payload, SupabaseRole role, string? onConflict = null, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<JsonObject>> PostAsync(
+            string table,
+            JsonNode payload,
+            SupabaseRole role,
+            string? onConflict = null,
+            CancellationToken cancellationToken = default
+        )
         {
             var rows = payload.AsArray().OfType<JsonObject>().ToArray();
             WriteSizes.Add(rows.Length);
@@ -71,9 +89,32 @@ public sealed class ChronoRaceBatchStoreTests
             return Task.FromResult<IReadOnlyList<JsonObject>>(rows);
         }
 
-        public Task<JsonObject?> GetSingleAsync(SupabaseQuery query, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<JsonObject>> PatchAsync(string table, JsonObject payload, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task DeleteAsync(string table, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<JsonObject?> GetSingleAsync(
+            SupabaseQuery query,
+            SupabaseRole role = SupabaseRole.Anon,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<JsonObject>> PatchAsync(
+            string table,
+            JsonObject payload,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task DeleteAsync(
+            string table,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<JsonNode?> RpcAsync(
+            string functionName,
+            JsonObject payload,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 }

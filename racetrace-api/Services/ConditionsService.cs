@@ -6,11 +6,13 @@ namespace RaceTrace.Api.Services;
 
 public sealed class ConditionsService
 {
-    private static readonly Dictionary<string, string> ConditionSorts = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> ConditionSorts = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
         ["id"] = "id",
         ["name"] = "name",
-        ["is_dry"] = "is_dry"
+        ["is_dry"] = "is_dry",
     };
 
     private readonly ISupabaseRestClient _supabase;
@@ -22,7 +24,10 @@ public sealed class ConditionsService
         _validator = validator;
     }
 
-    public async Task<ListResponse<JsonObject>> ListConditionsAsync(IQueryCollection queryString, CancellationToken cancellationToken)
+    public async Task<ListResponse<JsonObject>> ListConditionsAsync(
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, ConditionSorts, "name", "asc");
@@ -37,10 +42,25 @@ public sealed class ConditionsService
         var q = _validator.String(queryString, "q");
         if (!string.IsNullOrWhiteSpace(q))
         {
-            query.Filter("name", "ilike", $"*{q.Replace("*", string.Empty, StringComparison.Ordinal)}*");
+            query.Filter(
+                "name",
+                "ilike",
+                $"*{q.Replace("*", string.Empty, StringComparison.Ordinal)}*"
+            );
         }
 
-        var response = await _supabase.GetAsync(query, count: true, cancellationToken: cancellationToken);
-        return ResponseFactory.Page(response.Data, page.Page, page.Limit, response.Total, sort.Sort, sort.Order);
+        var response = await _supabase.GetAsync(
+            query,
+            count: true,
+            cancellationToken: cancellationToken
+        );
+        return ResponseFactory.Page(
+            response.Data,
+            page.Page,
+            page.Limit,
+            response.Total,
+            sort.Sort,
+            sort.Order
+        );
     }
 }

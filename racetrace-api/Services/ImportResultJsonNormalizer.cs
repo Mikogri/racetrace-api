@@ -11,14 +11,15 @@ public static class ImportResultJsonNormalizer
 
     public static bool IsSupported(JsonObject json)
     {
-        return ChronoRaceJsonFetcher.IsChronoRaceResultJson(json) ||
-            UciWorldChampionshipJsonAdapter.IsResultJson(json);
+        return ChronoRaceJsonFetcher.IsChronoRaceResultJson(json)
+            || UciWorldChampionshipJsonAdapter.IsResultJson(json);
     }
 
     public static NormalizedImportResultJson Normalize(
         JsonObject json,
         string competitionClassCode,
-        string categoryCode)
+        string categoryCode
+    )
     {
         if (ChronoRaceJsonFetcher.IsChronoRaceResultJson(json))
         {
@@ -29,28 +30,44 @@ public static class ImportResultJsonNormalizer
         {
             throw Invalid(
                 "INVALID_RESULT_JSON",
-                "Result JSON must contain either ChronoRace Riders/Results or UCI World Championship event/results data.");
+                "Result JSON must contain either ChronoRace Riders/Results or UCI World Championship event/results data."
+            );
         }
 
-        if (!string.Equals(competitionClassCode, "world_championship", StringComparison.OrdinalIgnoreCase))
+        if (
+            !string.Equals(
+                competitionClassCode,
+                "world_championship",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
             throw Invalid(
                 "RESULT_FORMAT_COMPETITION_CLASS_MISMATCH",
-                "UCI World Championship result JSON requires competition_class_code 'world_championship'.");
+                "UCI World Championship result JSON requires competition_class_code 'world_championship'."
+            );
         }
 
         var detectedCategory = UciWorldChampionshipJsonAdapter.DetectCategoryCode(json);
-        if (detectedCategory is not null &&
-            !string.Equals(detectedCategory, NormalizeCategory(categoryCode), StringComparison.OrdinalIgnoreCase))
+        if (
+            detectedCategory is not null
+            && !string.Equals(
+                detectedCategory,
+                NormalizeCategory(categoryCode),
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
             throw Invalid(
                 "RESULT_FORMAT_CATEGORY_MISMATCH",
-                $"The UCI result JSON describes category '{detectedCategory}', but the import selected '{categoryCode}'.");
+                $"The UCI result JSON describes category '{detectedCategory}', but the import selected '{categoryCode}'."
+            );
         }
 
         return new NormalizedImportResultJson(
             UciWorldChampionshipJsonAdapter.Normalize(json),
-            UciWorldChampionshipFormat);
+            UciWorldChampionshipFormat
+        );
     }
 
     private static string NormalizeCategory(string categoryCode)
@@ -80,7 +97,10 @@ public static class UciWorldChampionshipJsonAdapter
     {
         if (!IsResultJson(source))
         {
-            throw Invalid("INVALID_UCI_WORLD_CHAMPIONSHIP_JSON", "UCI result JSON must contain event and results.");
+            throw Invalid(
+                "INVALID_UCI_WORLD_CHAMPIONSHIP_JSON",
+                "UCI result JSON must contain event and results."
+            );
         }
 
         var sourceResults = source.Array("results")!.OfType<JsonObject>().ToArray();
@@ -96,7 +116,8 @@ public static class UciWorldChampionshipJsonAdapter
             {
                 throw Invalid(
                     "UCI_RESULT_RIDER_REQUIRED",
-                    $"UCI result at index {index} has no rider object.");
+                    $"UCI result at index {index} has no rider object."
+                );
             }
 
             var uciId = sourceRider.String("uciRiderId")?.Trim();
@@ -104,7 +125,8 @@ public static class UciWorldChampionshipJsonAdapter
             {
                 throw Invalid(
                     "UCI_RIDER_ID_REQUIRED",
-                    $"UCI result at index {index} has no rider.uciRiderId.");
+                    $"UCI result at index {index} has no rider.uciRiderId."
+                );
             }
 
             var technicalKey = uciId;
@@ -116,7 +138,7 @@ public static class UciWorldChampionshipJsonAdapter
                 ["UciRiderId"] = uciId,
                 ["FamilyName"] = familyName,
                 ["GivenName"] = givenName,
-                ["Nation"] = sourceRider.String("nation")?.Trim().ToUpperInvariant()
+                ["Nation"] = sourceRider.String("nation")?.Trim().ToUpperInvariant(),
             };
 
             var status = ResultStatus(sourceResult);
@@ -125,24 +147,23 @@ public static class UciWorldChampionshipJsonAdapter
                 ? ResolveFinishTimeMilliseconds(sourceResult, leaderTimeMs)
                 : null;
             var times = NormalizeSplits(sourceResult.Array("splits"));
-            results.Add(new JsonObject
-            {
-                ["RaceNr"] = technicalKey,
-                ["Position"] = position,
-                ["RaceTime"] = raceTimeMs,
-                ["CompletedDistance"] = null,
-                ["Status"] = status,
-                ["InResult"] = position is not null && raceTimeMs is > 0 && status == "Finished",
-                ["Speed"] = ParseDecimal(sourceResult.String("speed")),
-                ["Times"] = times
-            });
+            results.Add(
+                new JsonObject
+                {
+                    ["RaceNr"] = technicalKey,
+                    ["Position"] = position,
+                    ["RaceTime"] = raceTimeMs,
+                    ["CompletedDistance"] = null,
+                    ["Status"] = status,
+                    ["InResult"] =
+                        position is not null && raceTimeMs is > 0 && status == "Finished",
+                    ["Speed"] = ParseDecimal(sourceResult.String("speed")),
+                    ["Times"] = times,
+                }
+            );
         }
 
-        return new JsonObject
-        {
-            ["Riders"] = riders,
-            ["Results"] = results
-        };
+        return new JsonObject { ["Riders"] = riders, ["Results"] = results };
     }
 
     public static string? DetectCategoryCode(JsonObject source)
@@ -153,26 +174,34 @@ public static class UciWorldChampionshipJsonAdapter
             return null;
         }
 
-        if (name.Contains("women junior", StringComparison.Ordinal) ||
-            name.Contains("junior women", StringComparison.Ordinal))
+        if (
+            name.Contains("women junior", StringComparison.Ordinal)
+            || name.Contains("junior women", StringComparison.Ordinal)
+        )
         {
             return "JW";
         }
 
-        if (name.Contains("men junior", StringComparison.Ordinal) ||
-            name.Contains("junior men", StringComparison.Ordinal))
+        if (
+            name.Contains("men junior", StringComparison.Ordinal)
+            || name.Contains("junior men", StringComparison.Ordinal)
+        )
         {
             return "JM";
         }
 
-        if (name.Contains("women elite", StringComparison.Ordinal) ||
-            name.Contains("elite women", StringComparison.Ordinal))
+        if (
+            name.Contains("women elite", StringComparison.Ordinal)
+            || name.Contains("elite women", StringComparison.Ordinal)
+        )
         {
             return "EW";
         }
 
-        if (name.Contains("men elite", StringComparison.Ordinal) ||
-            name.Contains("elite men", StringComparison.Ordinal))
+        if (
+            name.Contains("men elite", StringComparison.Ordinal)
+            || name.Contains("elite men", StringComparison.Ordinal)
+        )
         {
             return "EM";
         }
@@ -189,9 +218,17 @@ public static class UciWorldChampionshipJsonAdapter
 
         var normalized = value.Trim().TrimStart('+').Replace(',', '.');
         var parts = normalized.Split(':', StringSplitOptions.TrimEntries);
-        if (parts.Length is < 1 or > 3 ||
-            !decimal.TryParse(parts[^1], NumberStyles.Number, CultureInfo.InvariantCulture, out var seconds) ||
-            seconds < 0 || seconds >= 60 && parts.Length > 1)
+        if (
+            parts.Length is < 1 or > 3
+            || !decimal.TryParse(
+                parts[^1],
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out var seconds
+            )
+            || seconds < 0
+            || seconds >= 60 && parts.Length > 1
+        )
         {
             return null;
         }
@@ -199,8 +236,16 @@ public static class UciWorldChampionshipJsonAdapter
         decimal totalSeconds = seconds;
         if (parts.Length >= 2)
         {
-            if (!int.TryParse(parts[^2], NumberStyles.None, CultureInfo.InvariantCulture, out var minutes) ||
-                minutes < 0 || minutes >= 60 && parts.Length == 3)
+            if (
+                !int.TryParse(
+                    parts[^2],
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var minutes
+                )
+                || minutes < 0
+                || minutes >= 60 && parts.Length == 3
+            )
             {
                 return null;
             }
@@ -210,7 +255,15 @@ public static class UciWorldChampionshipJsonAdapter
 
         if (parts.Length == 3)
         {
-            if (!int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var hours) || hours < 0)
+            if (
+                !int.TryParse(
+                    parts[0],
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var hours
+                )
+                || hours < 0
+            )
             {
                 return null;
             }
@@ -225,10 +278,18 @@ public static class UciWorldChampionshipJsonAdapter
     private static int? FindLeaderTimeMilliseconds(IReadOnlyList<JsonObject> results)
     {
         return results
-            .Where(result => result.Int("rank") == 1 &&
-                string.Equals(result.String("resultType"), "Time", StringComparison.OrdinalIgnoreCase))
+            .Where(result =>
+                result.Int("rank") == 1
+                && string.Equals(
+                    result.String("resultType"),
+                    "Time",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             .Select(ResultTimeText)
-            .Where(value => !string.IsNullOrWhiteSpace(value) && !value!.TrimStart().StartsWith('+'))
+            .Where(value =>
+                !string.IsNullOrWhiteSpace(value) && !value!.TrimStart().StartsWith('+')
+            )
             .Select(ParseTimeMilliseconds)
             .FirstOrDefault(value => value is > 0);
     }
@@ -241,7 +302,8 @@ public static class UciWorldChampionshipJsonAdapter
         {
             throw Invalid(
                 "UCI_RESULT_TIME_INVALID",
-                $"Could not parse finish time '{value}' for rider '{result.Object("rider")?.String("uciRiderId")}'.");
+                $"Could not parse finish time '{value}' for rider '{result.Object("rider")?.String("uciRiderId")}'."
+            );
         }
 
         if (!value!.TrimStart().StartsWith('+'))
@@ -253,7 +315,8 @@ public static class UciWorldChampionshipJsonAdapter
         {
             throw Invalid(
                 "UCI_LEADER_TIME_REQUIRED",
-                "The UCI result JSON contains time gaps, but no absolute leader time was found.");
+                "The UCI result JSON contains time gaps, but no absolute leader time was found."
+            );
         }
 
         try
@@ -262,7 +325,10 @@ public static class UciWorldChampionshipJsonAdapter
         }
         catch (OverflowException)
         {
-            throw Invalid("UCI_RESULT_TIME_INVALID", "Calculated UCI finish time exceeds the supported range.");
+            throw Invalid(
+                "UCI_RESULT_TIME_INVALID",
+                "Calculated UCI finish time exceeds the supported range."
+            );
         }
     }
 
@@ -278,7 +344,13 @@ public static class UciWorldChampionshipJsonAdapter
         for (var index = 0; index < sourceRows.Length; index++)
         {
             var split = sourceRows[index];
-            if (!string.Equals(split.String("resultType"), "Time", StringComparison.OrdinalIgnoreCase))
+            if (
+                !string.Equals(
+                    split.String("resultType"),
+                    "Time",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             {
                 continue;
             }
@@ -289,12 +361,14 @@ public static class UciWorldChampionshipJsonAdapter
                 continue;
             }
 
-            times.Add(new JsonObject
-            {
-                ["SplitIndex"] = index + 1,
-                ["RaceTime"] = raceTimeMs,
-                ["Speed"] = null
-            });
+            times.Add(
+                new JsonObject
+                {
+                    ["SplitIndex"] = index + 1,
+                    ["RaceTime"] = raceTimeMs,
+                    ["Speed"] = null,
+                }
+            );
         }
 
         return times;
@@ -318,8 +392,11 @@ public static class UciWorldChampionshipJsonAdapter
 
     private static (string? FamilyName, string? GivenName) SplitRiderName(string? value)
     {
-        var parts = value?
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+        var parts =
+            value?.Split(
+                ' ',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            ) ?? [];
         if (parts.Length == 0)
         {
             return (null, null);
@@ -338,7 +415,8 @@ public static class UciWorldChampionshipJsonAdapter
 
         return (
             string.Join(' ', parts.Take(familyPartCount)),
-            familyPartCount < parts.Length ? string.Join(' ', parts.Skip(familyPartCount)) : null);
+            familyPartCount < parts.Length ? string.Join(' ', parts.Skip(familyPartCount)) : null
+        );
     }
 
     private static bool IsUpperNamePart(string value)
@@ -348,10 +426,14 @@ public static class UciWorldChampionshipJsonAdapter
     }
 
     private static int? ParseInteger(string? value) =>
-        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
 
     private static decimal? ParseDecimal(string? value) =>
-        decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+        decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
 
     private static string? FirstNonBlank(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));

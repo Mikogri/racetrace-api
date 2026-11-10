@@ -10,12 +10,17 @@ public sealed class FilterOptionsService(ISupabaseRestClient client)
     {
         RespectNullableAnnotations = true,
         PropertyNameCaseInsensitive = false,
-        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict,
     };
 
     public async Task<FilterOptionsDto> GetAsync(CancellationToken cancellationToken)
     {
-        var payload = await client.RpcAsync("get_filter_options", new(), SupabaseRole.Anon, cancellationToken);
+        var payload = await client.RpcAsync(
+            "get_filter_options",
+            new(),
+            SupabaseRole.Anon,
+            cancellationToken
+        );
         return payload?.Deserialize<FilterOptionsDto>(JsonOptions)
             ?? throw new JsonException("The filter options RPC returned no dictionaries.");
     }

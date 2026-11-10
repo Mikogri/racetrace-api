@@ -8,16 +8,53 @@ namespace RaceTrace.Api.Tests;
 
 public sealed class ApiJsonNamingTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData(94.4)]
+    public void TypedNestedMetricsPreserveTheExistingWireShape(double? rating)
+    {
+        var metrics = JsonSerializer.Deserialize<RaceTrace.Api.Models.RiderMetricValues>(
+            """{"rating":null,"points":1442,"bestResult":{"race_time_ms":123456,"nested_row":{"rider_id":42},"missing_value":null}}""",
+            JsonSerializerOptions.Web
+        )! with
+        {
+            Rating = rating is null ? null : (decimal)rating.Value,
+        };
+        var legacy = new JsonObject
+        {
+            ["rider_id"] = 42,
+            ["metrics"] = RaceTrace.Api.Services.JsonSerializerProxy.ToJsonObject(metrics),
+        };
+        var typed = new JsonObject
+        {
+            ["rider_id"] = 42,
+            ["metrics"] = RaceTrace.Api.Services.JsonSerializerProxy.ToJsonValue(metrics),
+        };
+        Assert.Equal(
+            JsonSerializer.Serialize(legacy, HttpOptions()),
+            JsonSerializer.Serialize(typed, HttpOptions())
+        );
+    }
+
     private static JsonSerializerOptions HttpOptions()
     {
-        using var services = new ServiceCollection().AddLogging().AddRaceTraceHttp().BuildServiceProvider();
-        return services.GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>().Value.JsonSerializerOptions;
+        using var services = new ServiceCollection()
+            .AddLogging()
+            .AddRaceTraceHttp()
+            .BuildServiceProvider();
+        return services
+            .GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>()
+            .Value.JsonSerializerOptions;
     }
 
     [Fact]
     public void DynamicResponsesUseCamelCaseWithoutMutatingDatabaseRows()
     {
-        var row = JsonNode.Parse("""{"rider_id":42,"race_time_ms":123456,"round_categories":[{"round_id":8,"top_speed":52.125}],"missing_value":null}""")!.AsObject();
+        var row = JsonNode
+            .Parse(
+                """{"rider_id":42,"race_time_ms":123456,"round_categories":[{"round_id":8,"top_speed":52.125}],"missing_value":null}"""
+            )!
+            .AsObject();
         var before = row.ToJsonString();
 
         var response = JsonSerializer.SerializeToNode(row, HttpOptions())!;
@@ -32,7 +69,10 @@ public sealed class ApiJsonNamingTests
     [Fact]
     public void ProviderPayloadsAreReadWithoutRewritingTheirKeys()
     {
-        var payload = JsonSerializer.Deserialize<JsonObject>("""{"RaceTime":123,"rider_id":42,"Times":[{"SplitIndex":1}]}""", HttpOptions())!;
+        var payload = JsonSerializer.Deserialize<JsonObject>(
+            """{"RaceTime":123,"rider_id":42,"Times":[{"SplitIndex":1}]}""",
+            HttpOptions()
+        )!;
         Assert.Equal(123, payload["RaceTime"]!.GetValue<int>());
         Assert.Equal(42, payload["rider_id"]!.GetValue<int>());
         Assert.Equal(1, payload["Times"]![0]!["SplitIndex"]!.GetValue<int>());
@@ -50,16 +90,25 @@ public sealed class ApiJsonNamingTests
     [Fact]
     public void MvcAndOpenApiUseTheSameCamelCasePolicy()
     {
-        using var services = new ServiceCollection().AddLogging().AddRaceTraceHttp().BuildServiceProvider();
-        var mvc = services.GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>().Value.JsonSerializerOptions;
-        var http = services.GetRequiredService<IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions>>().Value.SerializerOptions;
+        using var services = new ServiceCollection()
+            .AddLogging()
+            .AddRaceTraceHttp()
+            .BuildServiceProvider();
+        var mvc = services
+            .GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>()
+            .Value.JsonSerializerOptions;
+        var http = services
+            .GetRequiredService<IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions>>()
+            .Value.SerializerOptions;
         Assert.Equal("raceTimeMs", mvc.PropertyNamingPolicy!.ConvertName("RaceTimeMs"));
         Assert.Equal("raceTimeMs", http.PropertyNamingPolicy!.ConvertName("RaceTimeMs"));
     }
 
     [Fact]
     public void InvalidProviderDocumentShapeStillFailsModelBinding() =>
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<JsonObject>("[]", HttpOptions()));
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<JsonObject>("[]", HttpOptions())
+        );
 
     [Fact]
     public void AdminPatchRejectsAmbiguousNamesRatherThanOverwritingAField()
@@ -73,7 +122,11 @@ public sealed class ApiJsonNamingTests
     [Fact]
     public void EditableResourcesAdvertiseTheCanonicalPatchFieldNames()
     {
-        var resources = JsonNode.Parse("""{"competition-classes":["is_active"],"tracks":["country_code","length_m"]}""")!.AsObject();
+        var resources = JsonNode
+            .Parse(
+                """{"competition-classes":["is_active"],"tracks":["country_code","length_m"]}"""
+            )!
+            .AsObject();
         var result = AdminJsonFields.EditableResources(resources);
         Assert.Equal("isActive", result["competition-classes"]![0]!.GetValue<string>());
         Assert.Equal("countryCode", result["tracks"]![0]!.GetValue<string>());

@@ -13,30 +13,51 @@ public sealed partial class ChronoRaceLiveProxyService
     {
         _http = http;
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("RaceTrace-Live/1.0");
-        _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        _http.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json")
+        );
     }
 
     public Task<JsonNode?> GetCatalogAsync(string context, CancellationToken cancellationToken) =>
         GetAsync(context, null, cancellationToken);
 
-    public Task<JsonNode?> GetResultsAsync(string context, string key, CancellationToken cancellationToken) =>
-        GetAsync(context, key, cancellationToken);
+    public Task<JsonNode?> GetResultsAsync(
+        string context,
+        string key,
+        CancellationToken cancellationToken
+    ) => GetAsync(context, key, cancellationToken);
 
-    private async Task<JsonNode?> GetAsync(string context, string? key, CancellationToken cancellationToken)
+    private async Task<JsonNode?> GetAsync(
+        string context,
+        string? key,
+        CancellationToken cancellationToken
+    )
     {
         if (!SafePart().IsMatch(context) || (key is not null && !SafePart().IsMatch(key)))
         {
-            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_CHRONORACE_CONTEXT", "Invalid ChronoRace context or session key.");
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "INVALID_CHRONORACE_CONTEXT",
+                "Invalid ChronoRace context or session key."
+            );
         }
 
         var encodedContext = Uri.EscapeDataString(context);
         var url = key is null
             ? $"https://prod.chronorace.be/api/results/uci/dh/cms/{encodedContext}"
             : $"https://prod.chronorace.be/api/results/generic/uci/{encodedContext}/dh/{Uri.EscapeDataString(key)}";
-        using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await _http.GetAsync(
+            url,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
         if (!response.IsSuccessStatusCode)
         {
-            throw new ApiException(StatusCodes.Status502BadGateway, "CHRONORACE_UNAVAILABLE", $"ChronoRace returned {(int)response.StatusCode}.");
+            throw new ApiException(
+                StatusCodes.Status502BadGateway,
+                "CHRONORACE_UNAVAILABLE",
+                $"ChronoRace returned {(int)response.StatusCode}."
+            );
         }
 
         var content = await ExternalJsonResponse.ReadAsync(response, cancellationToken);

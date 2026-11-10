@@ -18,7 +18,8 @@ public sealed class AdminDataController : ControllerBase
     public AdminDataController(
         AdminDataService adminData,
         AdminSessionReimportService sessionReimport,
-        UciMtbWorldSeriesSupplementService resultsSupplement)
+        UciMtbWorldSeriesSupplementService resultsSupplement
+    )
     {
         _adminData = adminData;
         _sessionReimport = sessionReimport;
@@ -37,9 +38,16 @@ public sealed class AdminDataController : ControllerBase
     public async Task<IActionResult> UpdateRider(
         string riderId,
         [FromBody] JsonObject? patch,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return Ok(await _adminData.UpdateRiderAsync(riderId, AdminJsonFields.ToDatabasePatch(patch), cancellationToken));
+        return Ok(
+            await _adminData.UpdateRiderAsync(
+                riderId,
+                AdminJsonFields.ToDatabasePatch(patch),
+                cancellationToken
+            )
+        );
     }
 
     [HttpPatch("{resource}/{id:long}")]
@@ -48,9 +56,17 @@ public sealed class AdminDataController : ControllerBase
         string resource,
         string id,
         [FromBody] JsonObject? patch,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return Ok(await _adminData.UpdateAsync(resource, id, AdminJsonFields.ToDatabasePatch(patch), cancellationToken));
+        return Ok(
+            await _adminData.UpdateAsync(
+                resource,
+                id,
+                AdminJsonFields.ToDatabasePatch(patch),
+                cancellationToken
+            )
+        );
     }
 
     [HttpPatch("rounds/{roundId:long}/track")]
@@ -58,9 +74,16 @@ public sealed class AdminDataController : ControllerBase
     public async Task<IActionResult> UpdateRoundTrack(
         string roundId,
         [FromBody] JsonObject? patch,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return Ok(await _adminData.UpdateRoundTrackAsync(roundId, AdminJsonFields.ToDatabasePatch(patch), cancellationToken));
+        return Ok(
+            await _adminData.UpdateRoundTrackAsync(
+                roundId,
+                AdminJsonFields.ToDatabasePatch(patch),
+                cancellationToken
+            )
+        );
     }
 
     [HttpPut("rounds/{roundId:long}/image")]
@@ -68,7 +91,8 @@ public sealed class AdminDataController : ControllerBase
     public async Task<IActionResult> UpsertRoundImage(
         string roundId,
         [FromBody] ImportRoundImagePayload payload,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return Ok(await _adminData.UpsertRoundImageAsync(roundId, payload, cancellationToken));
     }
@@ -78,7 +102,8 @@ public sealed class AdminDataController : ControllerBase
     public async Task<IActionResult> ConvertRoundImagesToWebp(
         [FromServices] RoundImageBackfillService backfill,
         [FromQuery] int limit = 10,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         return Ok(await backfill.ConvertBatchAsync(limit, cancellationToken));
     }
@@ -87,27 +112,36 @@ public sealed class AdminDataController : ControllerBase
     [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonObject), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteRound(
         string roundId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return Ok(await _adminData.DeleteRoundAsync(roundId, cancellationToken));
     }
 
     [HttpPost("sessions/{sessionId:long}/reimport")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.ChronoRaceSessionReimportResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.ChronoRaceSessionReimportResponse),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> ReimportSession(
         string sessionId,
         [FromBody] ChronoRaceSessionReimportRequest? request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return Ok(await _sessionReimport.ReimportAsync(sessionId, request, cancellationToken));
     }
 
     [HttpPost("sessions/{sessionId:long}/supplement/uci-mtb-world-series")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.UciMtbWorldSeriesSupplementResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.UciMtbWorldSeriesSupplementResponse),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> SupplementUciMtbWorldSeriesResults(
         string sessionId,
         [FromBody] JsonObject? payload,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return Ok(await _resultsSupplement.SupplementAsync(sessionId, payload, cancellationToken));
     }

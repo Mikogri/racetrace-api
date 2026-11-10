@@ -15,12 +15,14 @@ internal static class ResultTimingAnalytics
     internal static void DecorateSectors(
         IReadOnlyList<JsonObject> pageResults,
         IReadOnlyList<JsonObject> sessionResults,
-        IReadOnlyList<JsonObject> splits)
+        IReadOnlyList<JsonObject> splits
+    )
     {
         var sectorsByResultId = BuildSectorsByResultId(
             splits,
             sessionResults,
-            includeFinishSector: true);
+            includeFinishSector: true
+        );
         var eligibleResultIds = sessionResults
             .Where(IsEligiblePerfectRunResult)
             .Select(result => result.String("id"))
@@ -33,15 +35,21 @@ internal static class ResultTimingAnalytics
             .ToArray();
         var sectorReferences = BuildTimingReferences(
             eligibleSectors,
-            sector => sector.SectorTimeMs);
+            sector => sector.SectorTimeMs
+        );
         var allSectors = sectorsByResultId.Values.SelectMany(value => value).ToArray();
         var leaderSectorTimes = BuildLeaderTimes(
             sessionResults,
             allSectors,
-            sector => sector.SectorTimeMs);
+            sector => sector.SectorTimeMs
+        );
         var statusOrders = sessionResults
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
-            .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(
+                result => result.String("id")!,
+                ResultStatusOrder,
+                StringComparer.OrdinalIgnoreCase
+            );
         var sectorPositions = BuildSectorPositions(allSectors, statusOrders);
 
         foreach (var result in pageResults)
@@ -53,20 +61,21 @@ internal static class ResultTimingAnalytics
                 continue;
             }
 
-            result["sectors"] = new JsonArray(sectors
-                .Select(sector => ToSectorJson(
-                    sector,
-                    sectorReferences,
-                    leaderSectorTimes,
-                    sectorPositions))
-                .ToArray());
+            result["sectors"] = new JsonArray(
+                sectors
+                    .Select(sector =>
+                        ToSectorJson(sector, sectorReferences, leaderSectorTimes, sectorPositions)
+                    )
+                    .ToArray()
+            );
         }
     }
 
     internal static void DecorateSplits(
         IReadOnlyList<JsonObject> pageResults,
         IReadOnlyList<JsonObject> sessionResults,
-        IReadOnlyList<JsonObject> splits)
+        IReadOnlyList<JsonObject> splits
+    )
     {
         var splitsByResultId = BuildSectorsByResultId(splits);
         var eligibleResultIds = sessionResults
@@ -79,17 +88,20 @@ internal static class ResultTimingAnalytics
             .Where(pair => eligibleResultIds.Contains(pair.Key))
             .SelectMany(pair => pair.Value)
             .ToArray();
-        var splitReferences = BuildTimingReferences(
-            eligibleSplits,
-            split => split.RaceTimeMs);
+        var splitReferences = BuildTimingReferences(eligibleSplits, split => split.RaceTimeMs);
         var allSplits = splitsByResultId.Values.SelectMany(value => value).ToArray();
         var leaderSplitTimes = BuildLeaderTimes(
             sessionResults,
             allSplits,
-            split => split.RaceTimeMs);
+            split => split.RaceTimeMs
+        );
         var statusOrders = sessionResults
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
-            .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(
+                result => result.String("id")!,
+                ResultStatusOrder,
+                StringComparer.OrdinalIgnoreCase
+            );
         var splitPositions = BuildSplitPositions(allSplits, statusOrders);
 
         foreach (var result in pageResults)
@@ -101,13 +113,13 @@ internal static class ResultTimingAnalytics
                 continue;
             }
 
-            result["splits"] = new JsonArray(resultSplits
-                .Select(split => ToSplitJson(
-                    split,
-                    splitReferences,
-                    leaderSplitTimes,
-                    splitPositions))
-                .ToArray());
+            result["splits"] = new JsonArray(
+                resultSplits
+                    .Select(split =>
+                        ToSplitJson(split, splitReferences, leaderSplitTimes, splitPositions)
+                    )
+                    .ToArray()
+            );
         }
     }
 
@@ -122,21 +134,24 @@ internal static class ResultTimingAnalytics
         foreach (var result in results)
         {
             var raceTime = result.Int("race_time_ms");
-            result["gap_ms"] = bestTime is > 0 && raceTime is > 0 && IsCompletedResult(result)
-                ? raceTime.Value - bestTime.Value
-                : null;
+            result["gap_ms"] =
+                bestTime is > 0 && raceTime is > 0 && IsCompletedResult(result)
+                    ? raceTime.Value - bestTime.Value
+                    : null;
         }
     }
 
     internal static void DecorateLoadedTiming(
         IReadOnlyList<JsonObject> results,
         IReadOnlyList<JsonObject> splits,
-        string timingMode)
+        string timingMode
+    )
     {
         var timingsByResult = BuildSectorsByResultId(
             splits,
             results,
-            includeFinishSector: timingMode == TimingModeSectors);
+            includeFinishSector: timingMode == TimingModeSectors
+        );
         var allTimings = timingsByResult.Values.SelectMany(value => value).ToArray();
         var eligibleIds = results
             .Where(IsEligiblePerfectRunResult)
@@ -149,17 +164,24 @@ internal static class ResultTimingAnalytics
             .ToArray();
         var references = BuildTimingReferences(
             eligibleTimings,
-            timing => timingMode == TimingModeSectors ? timing.SectorTimeMs : timing.RaceTimeMs);
+            timing => timingMode == TimingModeSectors ? timing.SectorTimeMs : timing.RaceTimeMs
+        );
         var leaderTimes = BuildLeaderTimes(
             results,
             allTimings,
-            timing => timingMode == TimingModeSectors ? timing.SectorTimeMs : timing.RaceTimeMs);
+            timing => timingMode == TimingModeSectors ? timing.SectorTimeMs : timing.RaceTimeMs
+        );
         var statusOrders = results
             .Where(result => !string.IsNullOrWhiteSpace(result.String("id")))
-            .ToDictionary(result => result.String("id")!, ResultStatusOrder, StringComparer.OrdinalIgnoreCase);
-        var positions = timingMode == TimingModeSectors
-            ? BuildSectorPositions(allTimings, statusOrders)
-            : BuildSplitPositions(allTimings, statusOrders);
+            .ToDictionary(
+                result => result.String("id")!,
+                ResultStatusOrder,
+                StringComparer.OrdinalIgnoreCase
+            );
+        var positions =
+            timingMode == TimingModeSectors
+                ? BuildSectorPositions(allTimings, statusOrders)
+                : BuildSplitPositions(allTimings, statusOrders);
 
         foreach (var result in results)
         {
@@ -169,10 +191,15 @@ internal static class ResultTimingAnalytics
                 continue;
             }
 
-            result[timingMode] = new JsonArray(timings.Select(timing =>
-                timingMode == TimingModeSectors
-                    ? ToSectorJson(timing, references, leaderTimes, positions)
-                    : ToSplitJson(timing, references, leaderTimes, positions)).ToArray());
+            result[timingMode] = new JsonArray(
+                timings
+                    .Select(timing =>
+                        timingMode == TimingModeSectors
+                            ? ToSectorJson(timing, references, leaderTimes, positions)
+                            : ToSplitJson(timing, references, leaderTimes, positions)
+                    )
+                    .ToArray()
+            );
         }
     }
 
@@ -184,7 +211,7 @@ internal static class ResultTimingAnalytics
             "DNS" => 2,
             "DSQ" => 3,
             _ when result.Int("position") is > 0 => 0,
-            _ => 4
+            _ => 4,
         };
     }
 }

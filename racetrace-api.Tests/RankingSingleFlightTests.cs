@@ -67,7 +67,8 @@ public sealed class RankingSingleFlightTests
         }
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            singleFlight.RunAsync("same", Factory, CancellationToken.None));
+            singleFlight.RunAsync("same", Factory, CancellationToken.None)
+        );
         await singleFlight.RunAsync("same", Factory, CancellationToken.None);
 
         Assert.Equal(2, calls);

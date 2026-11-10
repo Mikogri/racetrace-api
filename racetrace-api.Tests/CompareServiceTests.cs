@@ -13,9 +13,7 @@ public sealed class CompareServiceTests
     {
         var validator = new QueryValidationService();
 
-        Assert.Equal(
-            ["3", "8"],
-            CompareService.ParseRiderIds(Query("3,8,3"), validator));
+        Assert.Equal(["3", "8"], CompareService.ParseRiderIds(Query("3,8,3"), validator));
         Assert.Throws<ApiException>(() => CompareService.ParseRiderIds(Query("3,8,11"), validator));
         Assert.Throws<ApiException>(() => CompareService.ParseRiderIds(Query("3,3"), validator));
         Assert.Throws<ApiException>(() => CompareService.ParseRiderIds(Query("3,nope"), validator));
@@ -31,20 +29,22 @@ public sealed class CompareServiceTests
                 Result("12", "1", "200", "FINAL", 1, "Finished", 200_000),
                 Result("13", "1", "300", "FINAL", 4, "Finished", 205_000),
                 Result("14", "1", "400", "Q2", 80, "DNF", null),
-                Result("15", "1", "500", "Q2", null, "DNS", null)
+                Result("15", "1", "500", "Q2", null, "DNS", null),
             ],
             [],
-            []);
+            []
+        );
         var second = Source(
             "2",
             [
                 Result("21", "2", "100", "Q1", 1, "Finished", 98_000),
                 Result("22", "2", "200", "FINAL", 2, "Finished", 203_000),
                 Result("24", "2", "400", "Q2", 1, "Finished", 190_000),
-                Result("25", "2", "500", "Q2", 1, "Finished", 188_000)
+                Result("25", "2", "500", "Q2", 1, "Finished", 188_000),
             ],
             [],
-            []);
+            []
+        );
 
         var common = CompareService.FindCommonSessionIds([first, second]);
 
@@ -58,12 +58,12 @@ public sealed class CompareServiceTests
         {
             Result("11", "1", "100", "Q1", 2, "Finished", 100_000),
             Result("12", "1", "200", "FINAL", 1, "Finished", 200_000),
-            Result("13", "1", "300", "FINAL", 4, "Finished", 205_000)
+            Result("13", "1", "300", "FINAL", 4, "Finished", 205_000),
         };
         var secondResults = new[]
         {
             Result("21", "2", "100", "Q1", 1, "Finished", 102_000),
-            Result("22", "2", "200", "FINAL", 2, "Finished", 203_000)
+            Result("22", "2", "200", "FINAL", 2, "Finished", 203_000),
         };
         firstResults[0]["awarded_points"] = 10;
         firstResults[1]["awarded_points"] = 20;
@@ -73,31 +73,27 @@ public sealed class CompareServiceTests
             firstResults,
             [
                 Split("11", 1, splitRank: 1, sectorRank: 1),
-                Split("12", 1, splitRank: 1, sectorRank: 1)
+                Split("12", 1, splitRank: 1, sectorRank: 1),
             ],
-            [
-                PaceSession("1", "100", 100, 50, 50),
-                PaceSession("1", "200", 200, 90, 110)
-            ],
+            [PaceSession("1", "100", 100, 50, 50), PaceSession("1", "200", 200, 90, 110)],
             rating: 96,
             pace: 97,
             consistency: 92,
-            confidence: 88);
+            confidence: 88
+        );
         var second = Source(
             "2",
             secondResults,
             [
                 Split("21", 1, splitRank: 2, sectorRank: 2),
-                Split("22", 1, splitRank: 2, sectorRank: 2)
+                Split("22", 1, splitRank: 2, sectorRank: 2),
             ],
-            [
-                PaceSession("2", "100", 102, 51, 51),
-                PaceSession("2", "200", 203, 92, 111)
-            ],
+            [PaceSession("2", "100", 102, 51, 51), PaceSession("2", "200", 203, 92, 111)],
             rating: 93,
             pace: 94,
             consistency: 90,
-            confidence: 84);
+            confidence: 84
+        );
 
         var response = CompareService.BuildResponse([first, second]);
 
@@ -120,27 +116,39 @@ public sealed class CompareServiceTests
         Assert.Equal(2, firstRider.WonSectorsCount);
         Assert.Equal(96m, firstRider.Rating);
         Assert.Equal(0m, firstRider.AverageFinishGapToBestSelected);
-        Assert.Equal([10m, 30m, 60m], firstRider.PointsProgress
-            .Select(point => point.CumulativePoints)
-            .ToArray());
+        Assert.Equal(
+            [10m, 30m, 60m],
+            firstRider.PointsProgress.Select(point => point.CumulativePoints).ToArray()
+        );
         Assert.Equal(60m, firstRider.TotalPoints);
         Assert.Equal(["elite_men"], firstRider.Categories);
         Assert.Equal(1.5m, firstRider.ResultsAveragePosition);
         CompareService.ValidateCategoryData(response, "EM", new QueryValidationService());
-        Assert.Throws<ApiException>(() => CompareService.ValidateCategoryData(response, "EW", new QueryValidationService()));
-        Assert.Throws<ApiException>(() => CompareService.ValidateCategoryData(
-            response with { Riders = [firstRider with { Categories = [] }, response.Riders[1]] },
-            "EM", new QueryValidationService()));
+        Assert.Throws<ApiException>(() =>
+            CompareService.ValidateCategoryData(response, "EW", new QueryValidationService())
+        );
+        Assert.Throws<ApiException>(() =>
+            CompareService.ValidateCategoryData(
+                response with
+                {
+                    Riders = [firstRider with { Categories = [] }, response.Riders[1]],
+                },
+                "EM",
+                new QueryValidationService()
+            )
+        );
 
         var secondRider = response.Riders[1];
         Assert.Equal(2.5m, secondRider.AverageFinishGapToBestSelected);
         Assert.Equal(2, secondRider.FinishGapSamplesCount);
-        Assert.Equal([1.5m, 1m], secondRider.AverageSectorGapsToBestSelected
-            .Select(gap => gap.AverageGap)
-            .ToArray());
-        Assert.Equal([1, 2], secondRider.AverageSectorGapsToBestSelected
-            .Select(gap => gap.SectorIndex)
-            .ToArray());
+        Assert.Equal(
+            [1.5m, 1m],
+            secondRider.AverageSectorGapsToBestSelected.Select(gap => gap.AverageGap).ToArray()
+        );
+        Assert.Equal(
+            [1, 2],
+            secondRider.AverageSectorGapsToBestSelected.Select(gap => gap.SectorIndex).ToArray()
+        );
     }
 
     [Fact]
@@ -150,29 +158,28 @@ public sealed class CompareServiceTests
             "1",
             [Result("11", "1", "100", "Q1", 1, "Finished", 100_000)],
             [],
-            [PaceSession("1", "100", 100, 40, 60)]);
+            [PaceSession("1", "100", 100, 40, 60)]
+        );
         var second = Source(
             "2",
             [Result("21", "2", "100", "Q1", 2, "DNF", null)],
             [],
-            [PaceSession("2", "100", 100, 42)]);
+            [PaceSession("2", "100", 100, 42)]
+        );
 
         var response = CompareService.BuildResponse([first, second]);
 
         Assert.Single(response.CommonSessions);
         Assert.All(
             response.CommonSessions[0].Results,
-            result => Assert.Single(result.Sectors, sector => sector.GapToBestSelected.HasValue));
-        Assert.All(
-            response.Riders,
-            rider => Assert.Single(rider.AverageSectorGapsToBestSelected));
+            result => Assert.Single(result.Sectors, sector => sector.GapToBestSelected.HasValue)
+        );
+        Assert.All(response.Riders, rider => Assert.Single(rider.AverageSectorGapsToBestSelected));
         Assert.Equal(2m, response.Riders[1].AverageSectorGapsToBestSelected[0].AverageGap);
     }
 
-    private static QueryCollection Query(string riderIds) => new(new Dictionary<string, StringValues>
-    {
-        ["riderIds"] = riderIds
-    });
+    private static QueryCollection Query(string riderIds) =>
+        new(new Dictionary<string, StringValues> { ["riderIds"] = riderIds });
 
     private static CompareRiderSource Source(
         string riderId,
@@ -182,7 +189,8 @@ public sealed class CompareServiceTests
         decimal? rating = null,
         decimal? pace = null,
         decimal? consistency = null,
-        decimal confidence = 0)
+        decimal confidence = 0
+    )
     {
         var rider = new JsonObject
         {
@@ -191,12 +199,14 @@ public sealed class CompareServiceTests
             ["first_name"] = $"Rider{riderId}",
             ["last_name"] = "Test",
             ["nation"] = "FRA",
-            ["teams"] = new JsonArray(new JsonObject
-            {
-                ["id"] = riderId,
-                ["name"] = $"Team {riderId}",
-                ["code"] = $"T{riderId}"
-            })
+            ["teams"] = new JsonArray(
+                new JsonObject
+                {
+                    ["id"] = riderId,
+                    ["name"] = $"Team {riderId}",
+                    ["code"] = $"T{riderId}",
+                }
+            ),
         };
         foreach (var result in results)
         {
@@ -210,20 +220,14 @@ public sealed class CompareServiceTests
             ["rating"] = rating,
             ["pace"] = pace,
             ["consistency"] = consistency,
-            ["confidence"] = confidence
+            ["confidence"] = confidence,
         };
         var sessions = results
             .Select(result => result.Object("sessions")!.DeepClone().AsObject())
             .GroupBy(session => session.String("id"))
             .Select(group => group.First())
             .ToArray();
-        var snapshot = new RankingSnapshot(
-            [row],
-            results,
-            results,
-            splits,
-            sessions,
-            paceSessions);
+        var snapshot = new RankingSnapshot([row], results, results, splits, sessions, paceSessions);
         return new CompareRiderSource(riderId, rider, row, snapshot);
     }
 
@@ -234,7 +238,8 @@ public sealed class CompareServiceTests
         string sessionType,
         int? position,
         string status,
-        int? raceTimeMs)
+        int? raceTimeMs
+    )
     {
         var session = new JsonObject
         {
@@ -256,9 +261,9 @@ public sealed class CompareServiceTests
                     ["id"] = "7",
                     ["name"] = "Test Track",
                     ["venue"] = "Test Venue",
-                    ["country_code"] = "FRA"
-                }
-            }
+                    ["country_code"] = "FRA",
+                },
+            },
         };
         return new JsonObject
         {
@@ -270,24 +275,26 @@ public sealed class CompareServiceTests
             ["is_classified"] = status == "Finished",
             ["race_time_ms"] = raceTimeMs,
             ["teams"] = new JsonObject { ["id"] = riderId, ["name"] = $"Team {riderId}" },
-            ["sessions"] = session
+            ["sessions"] = session,
         };
     }
 
-    private static JsonObject Split(string resultId, int index, int splitRank, int sectorRank) => new()
-    {
-        ["result_id"] = resultId,
-        ["split_index"] = index,
-        ["race_time"] = 50_000,
-        ["split_rank"] = splitRank,
-        ["sector_rank"] = sectorRank
-    };
+    private static JsonObject Split(string resultId, int index, int splitRank, int sectorRank) =>
+        new()
+        {
+            ["result_id"] = resultId,
+            ["split_index"] = index,
+            ["race_time"] = 50_000,
+            ["split_rank"] = splitRank,
+            ["sector_rank"] = sectorRank,
+        };
 
     private static PacePrecomputedSessionData PaceSession(
         string riderId,
         string sessionId,
         double finishTime,
-        params double[] sectorTimes)
+        params double[] sectorTimes
+    )
     {
         var summary = new PaceFieldSummary(2, 50, Math.Log(50), 1, 1, 50, 51);
         return new PacePrecomputedSessionData(
@@ -295,12 +302,19 @@ public sealed class CompareServiceTests
             "track:7|category:1",
             "1",
             sessionId == "200" ? PaceSessionType.Final : PaceSessionType.Qualifying,
-            new PaceRiderRun(riderId, sectorTimes.Cast<double?>().ToArray(), FinishTimeSeconds: finishTime),
+            new PaceRiderRun(
+                riderId,
+                sectorTimes.Cast<double?>().ToArray(),
+                FinishTimeSeconds: finishTime
+            ),
             2,
-            sectorTimes.Select((time, index) => new PacePrecomputedSector(index, time, index + 1, summary)).ToArray(),
+            sectorTimes
+                .Select((time, index) => new PacePrecomputedSector(index, time, index + 1, summary))
+                .ToArray(),
             null,
             null,
             summary,
-            sectorTimes.Select(_ => (PaceFieldSummary?)summary).ToArray());
+            sectorTimes.Select(_ => (PaceFieldSummary?)summary).ToArray()
+        );
     }
 }

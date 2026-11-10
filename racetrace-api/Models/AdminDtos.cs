@@ -9,7 +9,8 @@ public sealed record ChronoRaceImportRequest(
     ImportConditionPayload? Condition,
     string CategoryCode,
     ImportSessionPayload Session,
-    JsonObject ChronoraceJson);
+    JsonObject ChronoraceJson
+);
 
 public sealed record ImportRoundPayload(
     string ContextName,
@@ -20,31 +21,28 @@ public sealed record ImportRoundPayload(
     long? CompetitionClassId = null,
     string? CompetitionClassCode = null,
     bool IsSeasonFinalRound = false,
-    string? Status = null);
+    string? Status = null
+);
 
 public sealed record ImportTrackPayload(
     string Name,
     string Venue,
     string? CountryCode,
     int? LengthM,
-    decimal? AvgSlope);
+    decimal? AvgSlope
+);
 
-public sealed record ImportCompetitionClassPayload(
-    string Code,
-    string Name,
-    int? Priority);
+public sealed record ImportCompetitionClassPayload(string Code, string Name, int? Priority);
 
-public sealed record ImportConditionPayload(
-    int? Id,
-    string? Name,
-    bool? IsDry);
+public sealed record ImportConditionPayload(int? Id, string? Name, bool? IsDry);
 
 public sealed record ImportSessionPayload(
     string Name,
     string SessionType,
     DateOnly? SessionDate,
     string? Status,
-    string? ChronoraceUrl = null);
+    string? ChronoraceUrl = null
+);
 
 public sealed record ChronoRaceImportResponse(
     string RoundId,
@@ -54,19 +52,22 @@ public sealed record ChronoRaceImportResponse(
     int ResultsUpserted,
     int SplitsUpserted,
     bool PointsRecalculated,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings
+);
 
 public sealed record ChronoRaceSessionReimportRequest(
     string? ChronoraceUrl,
     JsonObject? ChronoraceJson,
-    JsonObject? ResultJson = null);
+    JsonObject? ResultJson = null
+);
 
 public sealed record ChronoRaceSessionReimportResponse(
     string SessionId,
     string? ChronoraceUrl,
     string? ResolvedChronoraceJsonUrl,
     ChronoRaceImportResponse Import,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings
+);
 
 public sealed record UciMtbWorldSeriesSupplementResponse(
     string SessionId,
@@ -76,7 +77,8 @@ public sealed record UciMtbWorldSeriesSupplementResponse(
     int SplitsUpserted,
     int SkippedResults,
     bool PointsRecalculated,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings
+);
 
 public sealed record RiderProfileImageImportResponse(
     int FilesProcessed,
@@ -85,7 +87,8 @@ public sealed record RiderProfileImageImportResponse(
     int Unchanged,
     int UnmatchedRiders,
     int InvalidUrls,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings
+);
 
 public sealed record ChronoRaceRoundFormImportRequest(
     ImportRoundPayload Round,
@@ -93,14 +96,16 @@ public sealed record ChronoRaceRoundFormImportRequest(
     ImportCompetitionClassPayload? CompetitionClass,
     ImportConditionPayload? Condition,
     IReadOnlyList<ChronoRaceRoundFormSessionPayload> Sessions,
-    ImportRoundImagePayload? Image = null);
+    ImportRoundImagePayload? Image = null
+);
 
 public sealed record ImportRoundImagePayload(
     string ImageBase64,
     string? FileName,
     string? AltText,
     int? WidthPx,
-    int? HeightPx);
+    int? HeightPx
+);
 
 public sealed record PlannedRoundCreateRequest(
     int SeasonYear,
@@ -119,14 +124,16 @@ public sealed record PlannedRoundCreateRequest(
     bool IsSeasonFinalRound = false,
     ImportRoundImagePayload? Image = null,
     string? ContextName = null,
-    long? ImageSourceRoundId = null);
+    long? ImageSourceRoundId = null
+);
 
 public sealed record PlannedRoundCreateResponse(
     string RoundId,
     string Status,
     string TrackId,
     IReadOnlyList<string> CategoryCodes,
-    bool ImageUpserted);
+    bool ImageUpserted
+);
 
 public sealed record ChronoRaceRoundFormSessionPayload(
     string Name,
@@ -134,14 +141,16 @@ public sealed record ChronoRaceRoundFormSessionPayload(
     DateOnly? SessionDate,
     string? Status,
     ImportConditionPayload? Condition,
-    IReadOnlyList<ChronoRaceRoundFormCategoryPayload> Categories);
+    IReadOnlyList<ChronoRaceRoundFormCategoryPayload> Categories
+);
 
 public sealed record ChronoRaceRoundFormCategoryPayload(
     string CategoryCode,
     string? ChronoraceUrl,
     JsonObject? ChronoraceJson,
     JsonObject? ResultJson = null,
-    string? ResultUrl = null);
+    string? ResultUrl = null
+);
 
 public sealed record PdfRoundFormImportRequest(
     ImportRoundPayload Round,
@@ -149,7 +158,8 @@ public sealed record PdfRoundFormImportRequest(
     ImportCompetitionClassPayload? CompetitionClass,
     ImportConditionPayload? Condition,
     IReadOnlyList<PdfRoundFormSessionPayload> Sessions,
-    ImportRoundImagePayload? Image = null);
+    ImportRoundImagePayload? Image = null
+);
 
 public sealed record PdfRoundFormSessionPayload(
     string Name,
@@ -157,11 +167,10 @@ public sealed record PdfRoundFormSessionPayload(
     DateOnly? SessionDate,
     string? Status,
     ImportConditionPayload? Condition,
-    IReadOnlyList<PdfRoundFormCategoryPayload> Categories);
+    IReadOnlyList<PdfRoundFormCategoryPayload> Categories
+);
 
-public sealed record PdfRoundFormCategoryPayload(
-    string CategoryCode,
-    string PdfFileName);
+public sealed record PdfRoundFormCategoryPayload(string CategoryCode, string PdfFileName);
 
 public sealed record ChronoRaceRoundFormImportResponse(
     string? RoundId,
@@ -174,7 +183,8 @@ public sealed record ChronoRaceRoundFormImportResponse(
     int PointsRecalculated,
     IReadOnlyList<ChronoRaceRoundFormImportItemResponse> Items,
     IReadOnlyList<string> Warnings,
-    bool ImageUpserted);
+    bool ImageUpserted
+);
 
 public sealed record ChronoRaceRoundFormImportItemResponse(
     string SessionName,
@@ -189,12 +199,14 @@ public sealed record ChronoRaceRoundFormImportItemResponse(
     int ResultsUpserted,
     int SplitsUpserted,
     bool PointsRecalculated,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings
+);
 
 public sealed record PointsRecalculateRequest(
     string? SessionId,
     int? SeasonYear,
     string? CategoryCode,
-    string? Scope);
+    string? Scope
+);
 
 public sealed record RankingPreaggregationRefreshRequest(string? Mode);

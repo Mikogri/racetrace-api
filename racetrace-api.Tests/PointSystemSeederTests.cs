@@ -53,7 +53,9 @@ public sealed class PointSystemSeederTests
         Assert.Equal("point_system_id,session_type", supabase.StageConflictTarget);
     }
 
-    private static async Task<RaceTrace.Api.Models.PointSystemSeedResult> SeedAsync(PointSystemSeeder seeder)
+    private static async Task<RaceTrace.Api.Models.PointSystemSeedResult> SeedAsync(
+        PointSystemSeeder seeder
+    )
     {
         await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(SeedJson));
         return await seeder.SeedAsync(stream);
@@ -72,19 +74,21 @@ public sealed class PointSystemSeederTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Roles.Add(role);
             JsonObject? row = query.Table switch
             {
                 "competition_levels" => new() { ["id"] = "1", ["code"] = "world_cup" },
                 "categories" => new() { ["id"] = "2", ["code"] = "EM" },
-                _ => throw new NotSupportedException(query.Table)
+                _ => throw new NotSupportedException(query.Table),
             };
             return Task.FromResult<JsonObject?>(row);
         }
@@ -94,7 +98,8 @@ public sealed class PointSystemSeederTests
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Roles.Add(role);
             if (table == "points_systems")
@@ -117,7 +122,12 @@ public sealed class PointSystemSeederTests
 
             if (table == "point_rules")
             {
-                Rules.AddRange(payload.AsArray().OfType<JsonObject>().Select(rule => rule.DeepClone().AsObject()));
+                Rules.AddRange(
+                    payload
+                        .AsArray()
+                        .OfType<JsonObject>()
+                        .Select(rule => rule.DeepClone().AsObject())
+                );
                 return Task.FromResult<IReadOnlyList<JsonObject>>([]);
             }
 
@@ -129,13 +139,15 @@ public sealed class PointSystemSeederTests
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task DeleteAsync(
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Roles.Add(role);
             Assert.Equal("point_rules", table);
@@ -147,6 +159,7 @@ public sealed class PointSystemSeederTests
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 }

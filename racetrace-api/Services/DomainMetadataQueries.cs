@@ -6,14 +6,22 @@ using RaceTrace.Api.Models;
 
 namespace RaceTrace.Api.Services;
 
-internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, DisplayMetadataService metadata)
+internal sealed class DomainMetadataQueries(
+    ISupabaseRestClient supabase,
+    DisplayMetadataService metadata
+)
 {
     private readonly ISupabaseRestClient _supabase = supabase;
     private readonly DisplayMetadataService _metadata = metadata;
     private Task<DisplayMetadataDto>? _metadataTask;
-    private readonly Dictionary<string, Task<JsonObject?>> _categoryReads = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Task<JsonObject?>> _categoryReads = new(
+        StringComparer.Ordinal
+    );
 
-    public async Task<string> ResolveCategoryCodeAsync(string value, CancellationToken cancellationToken)
+    public async Task<string> ResolveCategoryCodeAsync(
+        string value,
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -27,7 +35,10 @@ internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, Displa
         }
     }
 
-    public async Task<string> ResolveSessionTypeCodeAsync(string value, CancellationToken cancellationToken)
+    public async Task<string> ResolveSessionTypeCodeAsync(
+        string value,
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -37,7 +48,10 @@ internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, Displa
         {
             var metadata = await GetMetadataAsync(cancellationToken);
             return FindDatabaseCode(metadata.SessionTypes, value)
-                ?? throw new ArgumentException($"Unsupported session type '{value}'.", nameof(value));
+                ?? throw new ArgumentException(
+                    $"Unsupported session type '{value}'.",
+                    nameof(value)
+                );
         }
     }
 
@@ -48,12 +62,19 @@ internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, Displa
     private static string? FindDatabaseCode(IEnumerable<DisplayLabelDto> entries, string value)
     {
         var normalized = value.Trim();
-        return entries.FirstOrDefault(entry =>
-            string.Equals(entry.Code, normalized, StringComparison.OrdinalIgnoreCase) ||
-            entry.Aliases.Contains(normalized, StringComparer.OrdinalIgnoreCase))?.DatabaseCode;
+        return entries
+            .FirstOrDefault(entry =>
+                string.Equals(entry.Code, normalized, StringComparison.OrdinalIgnoreCase)
+                || entry.Aliases.Contains(normalized, StringComparer.OrdinalIgnoreCase)
+            )
+            ?.DatabaseCode;
     }
 
-    public async Task<string?> FindCategoryIdByCodeAsync(string? categoryCode, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<string?> FindCategoryIdByCodeAsync(
+        string? categoryCode,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         if (string.IsNullOrWhiteSpace(categoryCode))
         {
@@ -70,27 +91,35 @@ internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, Displa
             // Admin-managed categories outside the public DHI set keep their database code.
         }
 
-        Task<JsonObject?> ReadCategory() => _supabase.GetSingleAsync(
-            new SupabaseQuery("categories")
-                .Select("id,code")
-                .Filter("code", "eq", normalizedCode),
-            role,
-            cancellationToken);
+        Task<JsonObject?> ReadCategory() =>
+            _supabase.GetSingleAsync(
+                new SupabaseQuery("categories")
+                    .Select("id,code")
+                    .Filter("code", "eq", normalizedCode),
+                role,
+                cancellationToken
+            );
 
         // Share identical public reads within this request; privileged imports stay fresh.
         Task<JsonObject?> pending;
-        if (role != SupabaseRole.Anon) pending = ReadCategory();
-        else lock (_categoryReads)
-        {
-            if (!_categoryReads.TryGetValue(normalizedCode, out pending!))
-                _categoryReads[normalizedCode] = pending = ReadCategory();
-        }
+        if (role != SupabaseRole.Anon)
+            pending = ReadCategory();
+        else
+            lock (_categoryReads)
+            {
+                if (!_categoryReads.TryGetValue(normalizedCode, out pending!))
+                    _categoryReads[normalizedCode] = pending = ReadCategory();
+            }
         var category = await pending.WaitAsync(cancellationToken);
 
         return category?.String("id");
     }
 
-    internal async Task<string?> FindLegacyCompetitionClassIdByCodeAsync(string? code, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    internal async Task<string?> FindLegacyCompetitionClassIdByCodeAsync(
+        string? code,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         if (string.IsNullOrWhiteSpace(code))
         {
@@ -98,16 +127,19 @@ internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, Displa
         }
 
         var competitionClass = await _supabase.GetSingleAsync(
-            new SupabaseQuery("competition_ranks")
-                .Select("id,code")
-                .Filter("code", "eq", code),
+            new SupabaseQuery("competition_ranks").Select("id,code").Filter("code", "eq", code),
             role,
-            cancellationToken);
+            cancellationToken
+        );
 
         return competitionClass?.String("id");
     }
 
-    public async Task<string?> FindCompetitionClassIdByCodeAsync(string? code, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<string?> FindCompetitionClassIdByCodeAsync(
+        string? code,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         if (string.IsNullOrWhiteSpace(code))
         {
@@ -119,9 +151,9 @@ internal sealed class DomainMetadataQueries(ISupabaseRestClient supabase, Displa
                 .Select("id,code,is_active")
                 .Filter("code", "eq", code.Trim().ToLowerInvariant()),
             role,
-            cancellationToken);
+            cancellationToken
+        );
 
         return competitionClass?.String("id");
     }
-
 }

@@ -11,7 +11,8 @@ public sealed class UciResultsPdfParserTests
     [InlineData("COMMENCAL/MUC-OFF", "COMMENCAL/MUC-OFF")]
     public void NormalizesRepeatedEmbeddedGlyphsOnlyWhenTheWholeTokenUsesThatEncoding(
         string source,
-        string expected)
+        string expected
+    )
     {
         Assert.Equal(expected, UciResultsPdfParser.NormalizeEmbeddedText(source));
     }

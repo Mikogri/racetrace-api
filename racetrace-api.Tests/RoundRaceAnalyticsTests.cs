@@ -1,5 +1,5 @@
-using System.Text.Json.Nodes;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using RaceTrace.Api.Features.Analytics;
 using RaceTrace.Api.Models;
 using RaceTrace.Api.Services;
@@ -47,7 +47,10 @@ public sealed class RoundRaceAnalyticsTests
     [Fact]
     public void AnalyticsUsesPublicCamelCaseApplicationContract()
     {
-        var json = JsonSerializer.SerializeToNode(Calculate(), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        var json = JsonSerializer.SerializeToNode(
+            Calculate(),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        )!;
         Assert.NotNull(json["sectorEfficiency"]);
         Assert.NotNull(json["chaos"]!["dnfCount"]);
         Assert.NotNull(json["correlation"]!["points"]![0]!["riderId"]);
@@ -75,7 +78,13 @@ public sealed class RoundRaceAnalyticsTests
     [Fact]
     public void CorrelationUsesPairedRidersAndAverageRanksForTies()
     {
-        var preFinal = new[] { Row(1, 1, 30000), Row(2, 1, 30000), Row(3, 3, 32000), Row(9, 4, 33000) };
+        var preFinal = new[]
+        {
+            Row(1, 1, 30000),
+            Row(2, 1, 30000),
+            Row(3, 3, 32000),
+            Row(9, 4, 33000),
+        };
         var result = Calculate(preFinal: preFinal);
         Assert.Equal(3, result.Correlation.Points.Count);
         Assert.Equal(0.866m, result.Correlation.Spearman);
@@ -129,33 +138,86 @@ public sealed class RoundRaceAnalyticsTests
     {
         var final = Session(9, "FINAL", "2026-09-27", 5);
         var selected = RoundRaceAnalytics.SelectPreFinal(
-            [Session(1, "Q1", "2026-09-26", 1), Session(2, "Q2", "2026-09-27", 2),
-             Session(3, "TIMED_TRAINING", "2026-09-27", 3), Session(4, "SEMI", "2026-09-27", 4, "2"),
-             Session(10, "Q2", "2026-09-28", 1)], final);
+            [
+                Session(1, "Q1", "2026-09-26", 1),
+                Session(2, "Q2", "2026-09-27", 2),
+                Session(3, "TIMED_TRAINING", "2026-09-27", 3),
+                Session(4, "SEMI", "2026-09-27", 4, "2"),
+                Session(10, "Q2", "2026-09-28", 1),
+            ],
+            final
+        );
         Assert.Equal(2, selected!["id"]!.GetValue<int>());
     }
 
-    private static RoundRaceAnalyticsDto Calculate(JsonObject[]? rows = null, JsonObject[]? splits = null, JsonObject[]? preFinal = null) =>
-        RoundRaceAnalytics.Calculate(rows ?? Rows(), splits ?? [Split(1, 1, 10000), Split(2, 1, 9000), Split(3, 1, 12000)],
+    private static RoundRaceAnalyticsDto Calculate(
+        JsonObject[]? rows = null,
+        JsonObject[]? splits = null,
+        JsonObject[]? preFinal = null
+    ) =>
+        RoundRaceAnalytics.Calculate(
+            rows ?? Rows(),
+            splits ?? [Split(1, 1, 10000), Split(2, 1, 9000), Split(3, 1, 12000)],
             [Observation(1, 100), Observation(2, 50), Observation(3, 0), Observation(4, 10)],
-            preFinal ?? [Row(1, 1, 30000), Row(2, 2, 32000), Row(3, 3, 34000)], "Q2");
+            preFinal ?? [Row(1, 1, 30000), Row(2, 2, 32000), Row(3, 3, 34000)],
+            "Q2"
+        );
 
     private static JsonObject[] Rows() => [Row(1, 1, 30000), Row(2, 2, 32000), Row(3, 3, 34000)];
-    private static JsonObject Row(int id, int position, int time, string status = "OK") => new()
-    {
-        ["id"] = id, ["rider_id"] = id, ["session_id"] = 9, ["position"] = position,
-        ["race_time_ms"] = time, ["status"] = status,
-        ["riders"] = new JsonObject { ["first_name"] = "Rider", ["last_name"] = id.ToString() }
-    };
-    private static JsonObject Split(int resultId, int index, int time) => new()
-    {
-        ["result_id"] = resultId, ["split_index"] = index, ["race_time"] = time
-    };
-    private static JsonObject Session(int id, string type, string date, int order, string category = "1") => new()
-    {
-        ["id"] = id, ["session_type"] = type, ["session_date"] = date, ["session_order"] = order,
-        ["round_id"] = "10", ["category_id"] = category
-    };
-    private static RiderSessionPaceObservation Observation(int id, double pace) => new("9", id.ToString(),
-        new RiderSessionPaceResult(id.ToString(), PaceSessionType.Final, pace, null, null, null, 1, 1, true, null, []));
+
+    private static JsonObject Row(int id, int position, int time, string status = "OK") =>
+        new()
+        {
+            ["id"] = id,
+            ["rider_id"] = id,
+            ["session_id"] = 9,
+            ["position"] = position,
+            ["race_time_ms"] = time,
+            ["status"] = status,
+            ["riders"] = new JsonObject { ["first_name"] = "Rider", ["last_name"] = id.ToString() },
+        };
+
+    private static JsonObject Split(int resultId, int index, int time) =>
+        new()
+        {
+            ["result_id"] = resultId,
+            ["split_index"] = index,
+            ["race_time"] = time,
+        };
+
+    private static JsonObject Session(
+        int id,
+        string type,
+        string date,
+        int order,
+        string category = "1"
+    ) =>
+        new()
+        {
+            ["id"] = id,
+            ["session_type"] = type,
+            ["session_date"] = date,
+            ["session_order"] = order,
+            ["round_id"] = "10",
+            ["category_id"] = category,
+        };
+
+    private static RiderSessionPaceObservation Observation(int id, double pace) =>
+        new(
+            "9",
+            id.ToString(),
+            new RiderSessionPaceResult(
+                id.ToString(),
+                PaceSessionType.Final,
+                pace,
+                null,
+                null,
+                null,
+                1,
+                1,
+                true,
+                null,
+                []
+            )
+        );
 }

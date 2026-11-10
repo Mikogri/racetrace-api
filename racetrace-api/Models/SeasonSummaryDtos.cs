@@ -16,7 +16,8 @@ public sealed record SeasonSummaryRoundDto(
     long? CompetitionClassId,
     string? CompetitionClassCode,
     string? CompetitionClassName,
-    int? CompetitionClassPriority);
+    int? CompetitionClassPriority
+);
 
 public sealed record SeasonSummaryResultDto(
     int Position,
@@ -27,13 +28,15 @@ public sealed record SeasonSummaryResultDto(
     long? TeamId,
     string? TeamName,
     decimal? Time,
-    decimal? GapToLeader);
+    decimal? GapToLeader
+);
 
 public sealed record SeasonProgressDto(
     int RoundsCount,
     int CompletedRoundsCount,
     int FinalWinnersCount,
-    int CategoriesCount);
+    int CategoriesCount
+);
 
 public sealed record SeasonTopRatedRiderDto(
     int Position,
@@ -45,7 +48,8 @@ public sealed record SeasonTopRatedRiderDto(
     decimal Rating,
     decimal? Pace,
     decimal? Consistency,
-    decimal Confidence);
+    decimal Confidence
+);
 
 public sealed record SeasonStandingRiderDto(
     int Position,
@@ -54,7 +58,8 @@ public sealed record SeasonStandingRiderDto(
     string? CountryCode,
     long? TeamId,
     string? TeamName,
-    decimal Points);
+    decimal Points
+);
 
 public sealed record SeasonSummaryResponseDto(
     int Season,
@@ -64,7 +69,8 @@ public sealed record SeasonSummaryResponseDto(
     IReadOnlyList<SeasonSummaryResultDto> LastRoundResults,
     SeasonProgressDto SeasonProgress,
     IReadOnlyList<SeasonTopRatedRiderDto> SeasonTopRated,
-    IReadOnlyList<SeasonStandingRiderDto> CurrentStandings);
+    IReadOnlyList<SeasonStandingRiderDto> CurrentStandings
+);
 
 public sealed record PodiumPredictionRiderDto(
     int Position,
@@ -78,7 +84,8 @@ public sealed record PodiumPredictionRiderDto(
     decimal? CurrentSeasonRating,
     decimal? LastTrackPace,
     decimal? PreviousSeasonRating,
-    decimal Confidence)
+    decimal Confidence
+)
 {
     public decimal WinProbability { get; init; }
 
@@ -100,13 +107,15 @@ public sealed record PodiumPredictionContextDto(
     decimal ConditionsAffinity,
     decimal RecentForm,
     decimal Pressure,
-    decimal PressureResponse);
+    decimal PressureResponse
+);
 
 public sealed record PodiumPredictionResponseDto(
     int Season,
     string Category,
     SeasonSummaryRoundDto? Round,
-    IReadOnlyList<PodiumPredictionRiderDto> Items)
+    IReadOnlyList<PodiumPredictionRiderDto> Items
+)
 {
     public string ModelVersion { get; init; } = "ridge-monte-carlo-v1";
 }

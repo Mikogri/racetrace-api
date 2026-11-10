@@ -101,8 +101,9 @@ public sealed class SupabaseQuery
             DateTimeOffset dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
             DateTime dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
             bool boolean => boolean.ToString().ToLowerInvariant(),
-            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,
-            _ => value.ToString() ?? string.Empty
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture)
+                ?? string.Empty,
+            _ => value.ToString() ?? string.Empty,
         };
     }
 }

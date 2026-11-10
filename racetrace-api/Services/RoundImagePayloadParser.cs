@@ -9,7 +9,8 @@ internal sealed record PreparedRoundImage(
     string? FileName,
     string? AltText,
     int? WidthPx,
-    int? HeightPx);
+    int? HeightPx
+);
 
 internal static class RoundImagePayloadParser
 {
@@ -17,11 +18,7 @@ internal static class RoundImagePayloadParser
     internal const string ContentType = "image/webp";
     private const int WebpQuality = 88;
 
-    private static readonly byte[] PngSignature =
-    [
-        0x89, 0x50, 0x4E, 0x47,
-        0x0D, 0x0A, 0x1A, 0x0A
-    ];
+    private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
     public static PreparedRoundImage? Parse(ImportRoundImagePayload? payload)
     {
@@ -32,7 +29,10 @@ internal static class RoundImagePayloadParser
 
         if (string.IsNullOrWhiteSpace(payload.ImageBase64))
         {
-            throw Invalid("ROUND_IMAGE_REQUIRED", "image.image_base64 is required when image is provided.");
+            throw Invalid(
+                "ROUND_IMAGE_REQUIRED",
+                "image.image_base64 is required when image is provided."
+            );
         }
 
         ValidateMetadata(payload);
@@ -40,7 +40,10 @@ internal static class RoundImagePayloadParser
         var maximumEncodedLength = ((MaximumImageBytes + 2L) / 3L) * 4L;
         if (base64.Length > maximumEncodedLength)
         {
-            throw Invalid("ROUND_IMAGE_TOO_LARGE", $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB.");
+            throw Invalid(
+                "ROUND_IMAGE_TOO_LARGE",
+                $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB."
+            );
         }
 
         byte[] bytes;
@@ -50,12 +53,18 @@ internal static class RoundImagePayloadParser
         }
         catch (FormatException)
         {
-            throw Invalid("ROUND_IMAGE_INVALID_BASE64", "image.image_base64 must contain valid Base64 data.");
+            throw Invalid(
+                "ROUND_IMAGE_INVALID_BASE64",
+                "image.image_base64 must contain valid Base64 data."
+            );
         }
 
         if (bytes.Length > MaximumImageBytes)
         {
-            throw Invalid("ROUND_IMAGE_TOO_LARGE", $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB.");
+            throw Invalid(
+                "ROUND_IMAGE_TOO_LARGE",
+                $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB."
+            );
         }
 
         return ConvertPng(bytes, payload.FileName, payload.AltText);
@@ -64,29 +73,43 @@ internal static class RoundImagePayloadParser
     internal static PreparedRoundImage ConvertPng(byte[] bytes, string? fileName, string? altText)
     {
         if (bytes.Length > MaximumImageBytes)
-            throw Invalid("ROUND_IMAGE_TOO_LARGE", $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB.");
+            throw Invalid(
+                "ROUND_IMAGE_TOO_LARGE",
+                $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB."
+            );
 
-        if (bytes.Length < PngSignature.Length ||
-            !bytes.AsSpan(0, PngSignature.Length).SequenceEqual(PngSignature))
+        if (
+            bytes.Length < PngSignature.Length
+            || !bytes.AsSpan(0, PngSignature.Length).SequenceEqual(PngSignature)
+        )
         {
             throw Invalid("ROUND_IMAGE_NOT_PNG", "Round image must be a PNG file.");
         }
 
-        using var bitmap = SKBitmap.Decode(bytes)
+        using var bitmap =
+            SKBitmap.Decode(bytes)
             ?? throw Invalid("ROUND_IMAGE_INVALID_DATA", "Round image contains invalid PNG data.");
         using var image = SKImage.FromBitmap(bitmap);
-        using var encoded = image.Encode(SKEncodedImageFormat.Webp, WebpQuality)
-            ?? throw Invalid("ROUND_IMAGE_CONVERSION_FAILED", "Round image could not be converted to WebP.");
+        using var encoded =
+            image.Encode(SKEncodedImageFormat.Webp, WebpQuality)
+            ?? throw Invalid(
+                "ROUND_IMAGE_CONVERSION_FAILED",
+                "Round image could not be converted to WebP."
+            );
         var webpBytes = encoded.ToArray();
         if (webpBytes.Length > MaximumImageBytes)
-            throw Invalid("ROUND_IMAGE_TOO_LARGE", $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB.");
+            throw Invalid(
+                "ROUND_IMAGE_TOO_LARGE",
+                $"Round image must not exceed {MaximumImageBytes / 1024 / 1024} MB."
+            );
 
         return new PreparedRoundImage(
             webpBytes,
             fileName is null ? null : Path.ChangeExtension(fileName.Trim(), ".webp"),
             altText,
             bitmap.Width,
-            bitmap.Height);
+            bitmap.Height
+        );
     }
 
     private static string ExtractBase64(string value)
@@ -97,13 +120,19 @@ internal static class RoundImagePayloadParser
         }
 
         var commaIndex = value.IndexOf(',', StringComparison.Ordinal);
-        if (commaIndex < 0 ||
-            !string.Equals(
+        if (
+            commaIndex < 0
+            || !string.Equals(
                 value[..commaIndex],
                 "data:image/png;base64",
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
-            throw Invalid("ROUND_IMAGE_NOT_PNG", "Only data:image/png;base64 image data URLs are supported.");
+            throw Invalid(
+                "ROUND_IMAGE_NOT_PNG",
+                "Only data:image/png;base64 image data URLs are supported."
+            );
         }
 
         return value[(commaIndex + 1)..];
@@ -128,7 +157,10 @@ internal static class RoundImagePayloadParser
 
         if (payload.HeightPx is <= 0)
         {
-            throw Invalid("ROUND_IMAGE_HEIGHT_INVALID", "image.height_px must be greater than zero.");
+            throw Invalid(
+                "ROUND_IMAGE_HEIGHT_INVALID",
+                "image.height_px must be greater than zero."
+            );
         }
     }
 

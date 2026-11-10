@@ -8,13 +8,24 @@ public sealed class PaceOptimizationTests
     public void OverallEvidenceUsesEachSessionWeightAndFinalConfidenceSeparately()
     {
         var calculator = new DownhillPaceCalculator();
-        var final = new RiderSessionPaceResult("target", PaceSessionType.Final, 90, 90,
-            null, null, 50, 4, true, null, []);
+        var final = new RiderSessionPaceResult(
+            "target",
+            PaceSessionType.Final,
+            90,
+            90,
+            null,
+            null,
+            50,
+            4,
+            true,
+            null,
+            []
+        );
         var qualifying = final with
         {
             SessionType = PaceSessionType.Qualifying,
             Confidence = 25,
-            SessionWeight = 1.5
+            SessionWeight = 1.5,
         };
         var ignoredRider = final with { RiderId = "other", Confidence = 100 };
 
@@ -26,10 +37,20 @@ public sealed class PaceOptimizationTests
         Assert.Equal(2, result.UsedSessions);
         Assert.Equal(1, result.UsedFinals);
 
-        var weighted = calculator.CalculatePace("target",
-            [final with { CompetitionClassPriority = 1 },
-                qualifying with { CompetitionClassPriority = 2 }],
-            competitionClassWeighting: CompetitionClassWeighting.FromPriorities([1, 2]));
+        var weighted = calculator.CalculatePace(
+            "target",
+            [
+                final with
+                {
+                    CompetitionClassPriority = 1,
+                },
+                qualifying with
+                {
+                    CompetitionClassPriority = 2,
+                },
+            ],
+            competitionClassWeighting: CompetitionClassWeighting.FromPriorities([1, 2])
+        );
         Assert.Equal(4.375, weighted.TotalEvidence, precision: 12);
         Assert.Equal(1, weighted.FinalEvidence, precision: 12);
     }
@@ -38,12 +59,20 @@ public sealed class PaceOptimizationTests
     public void RejectsNonFiniteAndZeroDivisorConfiguration()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new DownhillPaceCalculator(new PaceOptions { TempoPower = 0 }));
+            new DownhillPaceCalculator(new PaceOptions { TempoPower = 0 })
+        );
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new DownhillPaceCalculator(new PaceOptions { TempoPower = double.NaN }));
+            new DownhillPaceCalculator(new PaceOptions { TempoPower = double.NaN })
+        );
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new DownhillPaceCalculator(new PaceOptions { FullEvidenceSectorCount = double.PositiveInfinity }));
+            new DownhillPaceCalculator(
+                new PaceOptions { FullEvidenceSectorCount = double.PositiveInfinity }
+            )
+        );
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new DownhillPaceCalculator(new PaceOptions { SessionWeights = new() { Final = double.NaN } }));
+            new DownhillPaceCalculator(
+                new PaceOptions { SessionWeights = new() { Final = double.NaN } }
+            )
+        );
     }
 }

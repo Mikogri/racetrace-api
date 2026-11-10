@@ -7,7 +7,9 @@ namespace RaceTrace.Api.Tests;
 
 public sealed class RankingDataRequestTests
 {
-    private static RiderMetricsContext EmptyContext => new(null, null, null, null, null, null, null, null, null, null, null);
+    private static RiderMetricsContext EmptyContext =>
+        new(null, null, null, null, null, null, null, null, null, null, null);
+
     [Fact]
     public async Task TeamHistoryIsSharedWithinRequestButReturnedJsonIsIndependent()
     {
@@ -37,7 +39,9 @@ public sealed class RankingDataRequestTests
     {
         var client = new CapturingSupabaseClient { FailNextHistoryRead = true };
         var domain = new DomainQueryService(client);
-        await Assert.ThrowsAsync<HttpRequestException>(() => domain.GetRiderTeamHistoryAsync(["18"]));
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            domain.GetRiderTeamHistoryAsync(["18"])
+        );
         Assert.Single(await domain.GetRiderTeamHistoryAsync(["18"]));
         Assert.Equal(2, client.HistoryRequests);
     }
@@ -45,7 +49,9 @@ public sealed class RankingDataRequestTests
     [Fact]
     public async Task ConcurrentHistoryReadersSharePendingReadAndOneWaiterCanCancel()
     {
-        var gate = new TaskCompletionSource<SupabaseQueryResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource<SupabaseQueryResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var client = new CapturingSupabaseClient { PendingHistory = gate.Task };
         var domain = new DomainQueryService(client);
         var first = domain.GetRiderTeamHistoryAsync(["18"]);
@@ -65,7 +71,22 @@ public sealed class RankingDataRequestTests
     {
         var client = new CapturingSupabaseClient();
         var domain = new DomainQueryService(client);
-        await domain.GetRiderDetailDataAsync(new RiderMetricsContext(null, "EM", null, null, null, null, null, null, null, null, null), "18");
+        await domain.GetRiderDetailDataAsync(
+            new RiderMetricsContext(
+                null,
+                "EM",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+            ),
+            "18"
+        );
         Assert.Equal("get_rider_detail_data", client.FunctionName);
         Assert.Equal(18, client.Payload!.Int("p_rider_id"));
     }
@@ -73,14 +94,19 @@ public sealed class RankingDataRequestTests
     [Fact]
     public async Task SlimPackagesCannotPoisonFullPackageCache()
     {
-        using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(
+            new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()
+        );
         var client = new CapturingSupabaseClient();
         var domain = new DomainQueryService(client, packageCache: cache);
         JsonObject[] sessions = [new() { ["id"] = 1 }];
         await domain.GetRankingPreaggregatesAsync(sessions, includeSplits: false);
         await domain.GetRankingPreaggregatesAsync(sessions);
         await domain.GetRankingPreaggregatesAsync(sessions, includeSplits: false);
-        Assert.Equal(new[] { "get_ranking_input_packages", "get_ranking_input_packages" }, client.PackageFunctions);
+        Assert.Equal(
+            new[] { "get_ranking_input_packages", "get_ranking_input_packages" },
+            client.PackageFunctions
+        );
     }
 
     [Theory]
@@ -90,8 +116,15 @@ public sealed class RankingDataRequestTests
     {
         var client = new CapturingSupabaseClient { PointsComplete = complete };
         var domain = new DomainQueryService(client);
-        var rows = await domain.GetPointsSummaryAsync(EmptyContext, [new JsonObject { ["id"] = 1 }], default);
-        Assert.Equal(complete ? "get_ranking_points_summary" : "get_ranking_points_raw_summary", client.FunctionName);
+        var rows = await domain.GetPointsSummaryAsync(
+            EmptyContext,
+            [new JsonObject { ["id"] = 1 }],
+            default
+        );
+        Assert.Equal(
+            complete ? "get_ranking_points_summary" : "get_ranking_points_raw_summary",
+            client.FunctionName
+        );
         var row = Assert.Single(rows!);
         Assert.Equal("A Rider", row.String("rider_name"));
         Assert.Equal(0m, row.Decimal("points"));
@@ -103,7 +136,14 @@ public sealed class RankingDataRequestTests
     {
         var client = new CapturingSupabaseClient { PointsComplete = true };
         var domain = new DomainQueryService(client);
-        await domain.GetPointsSummaryAsync(EmptyContext with { Status = "DNF" }, [new JsonObject { ["id"] = 1 }], default);
+        await domain.GetPointsSummaryAsync(
+            EmptyContext with
+            {
+                Status = "DNF",
+            },
+            [new JsonObject { ["id"] = 1 }],
+            default
+        );
         Assert.Equal("get_ranking_points_raw_summary", client.FunctionName);
         Assert.Equal("DNF", client.Payload!.String("p_status"));
     }
@@ -114,8 +154,17 @@ public sealed class RankingDataRequestTests
         var client = new CapturingSupabaseClient();
         var domain = new DomainQueryService(client);
         var rows = await domain.GetPointsSummaryAsync(
-            EmptyContext with { Status = "DNF" },
-            [new JsonObject { ["id"] = 1 }, new JsonObject { ["id"] = 1 }, new JsonObject { ["id"] = 2 }], default);
+            EmptyContext with
+            {
+                Status = "DNF",
+            },
+            [
+                new JsonObject { ["id"] = 1 },
+                new JsonObject { ["id"] = 1 },
+                new JsonObject { ["id"] = 2 },
+            ],
+            default
+        );
         Assert.Single(rows);
         Assert.Equal("get_ranking_points_raw_summary", client.FunctionName);
         Assert.Equal("[1,2]", client.Payload!["p_session_ids"]!.ToJsonString());
@@ -126,7 +175,9 @@ public sealed class RankingDataRequestTests
     public async Task EmptyPointsScopeDoesNotQueryDatabase()
     {
         var client = new CapturingSupabaseClient();
-        Assert.Empty(await new DomainQueryService(client).GetPointsSummaryAsync(EmptyContext, [], default));
+        Assert.Empty(
+            await new DomainQueryService(client).GetPointsSummaryAsync(EmptyContext, [], default)
+        );
         Assert.Null(client.FunctionName);
     }
 
@@ -137,15 +188,31 @@ public sealed class RankingDataRequestTests
         var domain = new DomainQueryService(client);
         var context = EmptyContext with
         {
-            SeasonYears = [2025, 2026], RoundId = "10", TrackIds = ["2"], TrackName = "%Snake%",
-            CountryCodes = ["ITA"], VenueNames = ["Val di Sole"], ConditionIds = [1], ConditionNames = ["Wet"],
-            CompetitionClassIds = [2], CompetitionClassCodes = ["world_championship"], CategoryCodes = ["EM"],
-            SessionTypes = ["FINAL"], FromDate = new DateOnly(2025, 1, 1), ToDate = new DateOnly(2026, 12, 31), Status = "Finished"
+            SeasonYears = [2025, 2026],
+            RoundId = "10",
+            TrackIds = ["2"],
+            TrackName = "%Snake%",
+            CountryCodes = ["ITA"],
+            VenueNames = ["Val di Sole"],
+            ConditionIds = [1],
+            ConditionNames = ["Wet"],
+            CompetitionClassIds = [2],
+            CompetitionClassCodes = ["world_championship"],
+            CategoryCodes = ["EM"],
+            SessionTypes = ["FINAL"],
+            FromDate = new DateOnly(2025, 1, 1),
+            ToDate = new DateOnly(2026, 12, 31),
+            Status = "Finished",
         };
         await domain.GetRankingDataAsync(context, resolvedSessionIds: ["1", "2"]);
         var expected = client.Payload!.DeepClone().AsObject();
-        foreach (var key in new[] { "p_rider_id", "p_rider_query", "p_nation" }) expected.Remove(key);
-        await domain.GetPointsSummaryAsync(context, [new JsonObject { ["id"] = 1 }, new JsonObject { ["id"] = 2 }], default);
+        foreach (var key in new[] { "p_rider_id", "p_rider_query", "p_nation" })
+            expected.Remove(key);
+        await domain.GetPointsSummaryAsync(
+            context,
+            [new JsonObject { ["id"] = 1 }, new JsonObject { ["id"] = 2 }],
+            default
+        );
         Assert.Equal("get_ranking_points_raw_summary", client.FunctionName);
         Assert.True(JsonNode.DeepEquals(expected, client.Payload));
     }
@@ -153,7 +220,9 @@ public sealed class RankingDataRequestTests
     [Fact]
     public async Task OverlappingPackagesAreFetchedOnlyOnceAndRolesStaySeparate()
     {
-        using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(
+            new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()
+        );
         var client = new CapturingSupabaseClient();
         var domain = new DomainQueryService(client, packageCache: cache);
         JsonObject Session(int id) => new() { ["id"] = id };
@@ -168,10 +237,13 @@ public sealed class RankingDataRequestTests
     [Fact]
     public void PointsOnlyRowsPreserveTieBreaksAndZeroPointRiders()
     {
-        JsonObject Row(int rider, string name, decimal points) => new()
-        {
-            ["rider_id"] = rider, ["rider_name"] = name + " Rider", ["points"] = points
-        };
+        JsonObject Row(int rider, string name, decimal points) =>
+            new()
+            {
+                ["rider_id"] = rider,
+                ["rider_name"] = name + " Rider",
+                ["points"] = points,
+            };
         JsonObject[] rows = [Row(9, "Z", 10), Row(2, "A", 10), Row(3, "A", 10), Row(4, "None", 0)];
         Assert.Equal(1, RankingService.PointsPosition(rows, "2"));
         Assert.Equal(2, RankingService.PointsPosition(rows, "3"));
@@ -186,7 +258,18 @@ public sealed class RankingDataRequestTests
         var supabase = new CapturingSupabaseClient();
         var service = new DomainQueryService(supabase);
         var context = new RiderMetricsContext(
-            null, null, null, null, null, null, null, null, null, null, null);
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
 
         await service.GetRankingDataAsync(context, riderId: "9");
 
@@ -211,76 +294,119 @@ public sealed class RankingDataRequestTests
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             FunctionName = functionName;
             Payload = payload;
             if (functionName is "get_ranking_points_summary" or "get_ranking_points_raw_summary")
-                return Task.FromResult<JsonNode?>(new JsonObject
-                {
-                    ["complete"] = PointsComplete || functionName == "get_ranking_points_raw_summary",
-                    ["rows"] = new JsonArray(new JsonObject { ["rider_id"] = "2", ["points"] = 0,
-                        ["rider"] = new JsonObject { ["first_name"] = "A", ["last_name"] = "Rider" } })
-                });
+                return Task.FromResult<JsonNode?>(
+                    new JsonObject
+                    {
+                        ["complete"] =
+                            PointsComplete || functionName == "get_ranking_points_raw_summary",
+                        ["rows"] = new JsonArray(
+                            new JsonObject
+                            {
+                                ["rider_id"] = "2",
+                                ["points"] = 0,
+                                ["rider"] = new JsonObject
+                                {
+                                    ["first_name"] = "A",
+                                    ["last_name"] = "Rider",
+                                },
+                            }
+                        ),
+                    }
+                );
             if (functionName is "get_ranking_input_packages")
             {
                 PackageFunctions.Add(functionName);
                 PackageRequests.Add(payload["p_session_ids"]!.ToJsonString());
-                return Task.FromResult<JsonNode?>(new JsonArray(payload["p_session_ids"]!.AsArray()
-                    .Select(id => (JsonNode)new JsonObject { ["session_id"] = id!.DeepClone(), ["payload"] = new JsonObject { ["v"] = 2 } }).ToArray()));
+                return Task.FromResult<JsonNode?>(
+                    new JsonArray(
+                        payload["p_session_ids"]!
+                            .AsArray()
+                            .Select(id =>
+                                (JsonNode)
+                                    new JsonObject
+                                    {
+                                        ["session_id"] = id!.DeepClone(),
+                                        ["payload"] = new JsonObject { ["v"] = 2 },
+                                    }
+                            )
+                            .ToArray()
+                    )
+                );
             }
-            return Task.FromResult<JsonNode?>(new JsonObject
-            {
-                ["v"] = 1,
-                ["s"] = new JsonArray(),
-                ["r"] = new JsonArray(),
-                ["f"] = new JsonArray(),
-                ["x"] = new JsonArray(),
-                ["d"] = new JsonArray(),
-                ["t"] = new JsonArray()
-            });
+            return Task.FromResult<JsonNode?>(
+                new JsonObject
+                {
+                    ["v"] = 1,
+                    ["s"] = new JsonArray(),
+                    ["r"] = new JsonArray(),
+                    ["f"] = new JsonArray(),
+                    ["x"] = new JsonArray(),
+                    ["d"] = new JsonArray(),
+                    ["t"] = new JsonArray(),
+                }
+            );
         }
 
         public Task<SupabaseQueryResult> GetAsync(
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
-            if (query.Table != "rider_team_history") throw new NotSupportedException();
+            if (query.Table != "rider_team_history")
+                throw new NotSupportedException();
             HistoryRequests++;
-            if (PendingHistory is not null) return PendingHistory.WaitAsync(cancellationToken);
+            if (PendingHistory is not null)
+                return PendingHistory.WaitAsync(cancellationToken);
             if (FailNextHistoryRead)
             {
                 FailNextHistoryRead = false;
-                return Task.FromException<SupabaseQueryResult>(new HttpRequestException("Unavailable"));
+                return Task.FromException<SupabaseQueryResult>(
+                    new HttpRequestException("Unavailable")
+                );
             }
-            return Task.FromResult(new SupabaseQueryResult([new JsonObject { ["rider_id"] = 18, ["team_id"] = 8 }], null));
+            return Task.FromResult(
+                new SupabaseQueryResult(
+                    [new JsonObject { ["rider_id"] = 18, ["team_id"] = 8 }],
+                    null
+                )
+            );
         }
 
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<JsonObject>> PostAsync(
             string table,
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<JsonObject>> PatchAsync(
             string table,
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task DeleteAsync(
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 }

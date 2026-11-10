@@ -8,7 +8,9 @@ public sealed class FantasyConfigurationTests
     [Fact]
     public void ManifestIncludesEffectiveFantasySimulationAndCalibrationSettings()
     {
-        var manifest = System.Text.Json.JsonSerializer.SerializeToNode(AlgorithmCatalog.Current.Manifest["fantasy"].Configuration)!;
+        var manifest = System.Text.Json.JsonSerializer.SerializeToNode(
+            AlgorithmCatalog.Current.Manifest["fantasy"].Configuration
+        )!;
         Assert.NotNull(manifest["model"]);
         Assert.Equal(10_000, manifest["model"]!["HistoricalIterations"]!.GetValue<int>());
         Assert.Equal(50_000, manifest["model"]!["ForecastIterations"]!.GetValue<int>());

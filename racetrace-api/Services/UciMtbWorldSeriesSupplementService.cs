@@ -11,18 +11,21 @@ public sealed class UciMtbWorldSeriesSupplementService
 {
     private static readonly Regex DurationPattern = new(
         @"^(?:(?<hours>\d+):)?(?<minutes>\d{1,2}):(?<seconds>\d{2})\.(?<milliseconds>\d{3})$",
-        RegexOptions.CultureInvariant);
+        RegexOptions.CultureInvariant
+    );
 
     private static readonly Regex SplitPattern = new(
         @"^Split\s+(?<index>\d+)$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
 
     private readonly ISupabaseRestClient _supabase;
     private readonly IPointAwardService _pointAwards;
 
     public UciMtbWorldSeriesSupplementService(
         ISupabaseRestClient supabase,
-        IPointAwardService pointAwards)
+        IPointAwardService pointAwards
+    )
     {
         _supabase = supabase;
         _pointAwards = pointAwards;
@@ -31,59 +34,81 @@ public sealed class UciMtbWorldSeriesSupplementService
     public async Task<UciMtbWorldSeriesSupplementResponse> SupplementAsync(
         string sessionId,
         JsonObject? payload,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         EnsurePositiveId(sessionId);
         if (payload is null)
         {
-            throw Invalid("UCI_RESULTS_JSON_REQUIRED", "The UCI MTB World Series JSON body is required.");
+            throw Invalid(
+                "UCI_RESULTS_JSON_REQUIRED",
+                "The UCI MTB World Series JSON body is required."
+            );
         }
 
         if (payload.Bool("error") == true)
         {
-            throw Invalid("UCI_RESULTS_SOURCE_ERROR", "The supplied UCI MTB World Series response reports an error.");
+            throw Invalid(
+                "UCI_RESULTS_SOURCE_ERROR",
+                "The supplied UCI MTB World Series response reports an error."
+            );
         }
 
         var sourceArray = payload.Array("results");
         if (sourceArray is null || sourceArray.Count == 0)
         {
-            throw Invalid("UCI_RESULTS_REQUIRED", "The JSON body must contain a non-empty results array.");
+            throw Invalid(
+                "UCI_RESULTS_REQUIRED",
+                "The JSON body must contain a non-empty results array."
+            );
         }
 
         var session = await _supabase.GetSingleAsync(
             new SupabaseQuery("sessions").Select("id").Filter("id", "eq", sessionId),
             SupabaseRole.Service,
-            cancellationToken);
+            cancellationToken
+        );
         if (session is null)
         {
-            throw new ApiException(StatusCodes.Status404NotFound, "SESSION_NOT_FOUND", $"Session '{sessionId}' was not found.");
+            throw new ApiException(
+                StatusCodes.Status404NotFound,
+                "SESSION_NOT_FOUND",
+                $"Session '{sessionId}' was not found."
+            );
         }
 
         var existingRows = await _supabase.GetAsync(
             new SupabaseQuery("results")
-                .Select("id,rider_id,race_time_ms,position,is_classified,status,riders(id,uci_id,first_name,last_name)")
+                .Select(
+                    "id,rider_id,race_time_ms,position,is_classified,status,riders(id,uci_id,first_name,last_name)"
+                )
                 .Filter("session_id", "eq", sessionId)
                 .Limit(500),
             role: SupabaseRole.Service,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
 
         if (existingRows.Data.Count == 0)
         {
             throw new ApiException(
                 StatusCodes.Status409Conflict,
                 "SESSION_RESULTS_REQUIRED",
-                "The session has no existing results to supplement. Import the ChronoRace session first.");
+                "The session has no existing results to supplement. Import the ChronoRace session first."
+            );
         }
 
         var warnings = new List<string>();
         var sourceResults = ParseSourceResults(sourceArray, warnings);
         if (sourceResults.Count == 0)
         {
-            throw Invalid("NO_VALID_UCI_RESULTS", "The JSON body does not contain any valid results with cumulative times.");
+            throw Invalid(
+                "NO_VALID_UCI_RESULTS",
+                "The JSON body does not contain any valid results with cumulative times."
+            );
         }
 
-        var existingResults = existingRows.Data
-            .Select(ParseExistingResult)
+        var existingResults = existingRows
+            .Data.Select(ParseExistingResult)
             .Where(result => result is not null)
             .Cast<ExistingResult>()
             .ToArray();
@@ -100,7 +125,7 @@ public sealed class UciMtbWorldSeriesSupplementService
                 ["position"] = source.IsClassified ? source.Position : null,
                 ["race_time_ms"] = source.FinishTimeMs,
                 ["status"] = source.Status,
-                ["is_classified"] = source.IsClassified
+                ["is_classified"] = source.IsClassified,
             };
 
             var saved = await _supabase.PatchAsync(
@@ -108,41 +133,50 @@ public sealed class UciMtbWorldSeriesSupplementService
                 values,
                 new SupabaseQuery("results").Filter("id", "eq", match.Existing.Id),
                 SupabaseRole.Service,
-                cancellationToken);
+                cancellationToken
+            );
             if (saved.Count == 0)
             {
                 throw new ApiException(
                     StatusCodes.Status409Conflict,
                     "SUPPLEMENT_RESULT_NOT_UPDATED",
-                    $"Result '{match.Existing.Id}' disappeared before it could be updated.");
+                    $"Result '{match.Existing.Id}' disappeared before it could be updated."
+                );
             }
 
-            var splitRows = new JsonArray(source.Splits
-                .Select(split => (JsonNode)new JsonObject
-                {
-                    ["result_id"] = match.Existing.Id,
-                    ["split_index"] = split.Index,
-                    ["race_time"] = split.RaceTimeMs
-                })
-                .ToArray());
+            var splitRows = new JsonArray(
+                source
+                    .Splits.Select(split =>
+                        (JsonNode)
+                            new JsonObject
+                            {
+                                ["result_id"] = match.Existing.Id,
+                                ["split_index"] = split.Index,
+                                ["race_time"] = split.RaceTimeMs,
+                            }
+                    )
+                    .ToArray()
+            );
 
             await _supabase.DeleteAsync(
                 "time_splits",
                 new SupabaseQuery("time_splits").Filter("result_id", "eq", match.Existing.Id),
                 SupabaseRole.Service,
-                cancellationToken);
+                cancellationToken
+            );
             await _supabase.PostAsync(
                 "time_splits",
                 splitRows,
                 SupabaseRole.Service,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken
+            );
 
             updated++;
             splitsUpserted += source.Splits.Count;
         }
 
-        var pointsRecalculated = updated > 0 &&
-            await TryRecalculatePointsAsync(sessionId, warnings, cancellationToken);
+        var pointsRecalculated =
+            updated > 0 && await TryRecalculatePointsAsync(sessionId, warnings, cancellationToken);
         if (updated > 0)
         {
             await TryRefreshRankingPreaggregateAsync(sessionId, warnings, cancellationToken);
@@ -156,7 +190,8 @@ public sealed class UciMtbWorldSeriesSupplementService
             splitsUpserted,
             sourceArray.Count - matches.Count,
             pointsRecalculated,
-            warnings);
+            warnings
+        );
     }
 
     internal static bool TryParseDurationMilliseconds(string? value, out int milliseconds)
@@ -169,19 +204,47 @@ public sealed class UciMtbWorldSeriesSupplementService
 
         var match = DurationPattern.Match(value.Trim());
         var hours = 0;
-        if (!match.Success ||
-            (match.Groups["hours"].Success &&
-                !int.TryParse(match.Groups["hours"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out hours)) ||
-            !int.TryParse(match.Groups["minutes"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var minutes) ||
-            !int.TryParse(match.Groups["seconds"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds) ||
-            !int.TryParse(match.Groups["milliseconds"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var fraction) ||
-            seconds >= 60 ||
-            (hours > 0 && minutes >= 60))
+        if (
+            !match.Success
+            || (
+                match.Groups["hours"].Success
+                && !int.TryParse(
+                    match.Groups["hours"].Value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out hours
+                )
+            )
+            || !int.TryParse(
+                match.Groups["minutes"].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var minutes
+            )
+            || !int.TryParse(
+                match.Groups["seconds"].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var seconds
+            )
+            || !int.TryParse(
+                match.Groups["milliseconds"].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var fraction
+            )
+            || seconds >= 60
+            || (hours > 0 && minutes >= 60)
+        )
         {
             return false;
         }
 
-        var total = ((long)hours * 60 * 60 * 1000) + ((long)minutes * 60 * 1000) + (seconds * 1000L) + fraction;
+        var total =
+            ((long)hours * 60 * 60 * 1000)
+            + ((long)minutes * 60 * 1000)
+            + (seconds * 1000L)
+            + fraction;
         if (total <= 0 || total > int.MaxValue)
         {
             return false;
@@ -194,46 +257,64 @@ public sealed class UciMtbWorldSeriesSupplementService
     private async Task TryRefreshRankingPreaggregateAsync(
         string sessionId,
         List<string> warnings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
-            if (!await new RankingPreaggregationService(_supabase).RefreshAsync(sessionId, cancellationToken))
-                warnings.Add("Prepared metrics were not saved because the source session changed. Reads will use the compatibility path.");
+            if (
+                !await new RankingPreaggregationService(_supabase).RefreshAsync(
+                    sessionId,
+                    cancellationToken
+                )
+            )
+                warnings.Add(
+                    "Prepared metrics were not saved because the source session changed. Reads will use the compatibility path."
+                );
         }
         catch (SupabaseApiException)
         {
             warnings.Add(
-                "Could not refresh ranking preaggregation for this session. " +
-                "Supplement finished successfully and ranking will use the compatibility path.");
+                "Could not refresh ranking preaggregation for this session. "
+                    + "Supplement finished successfully and ranking will use the compatibility path."
+            );
         }
     }
 
     private static List<SourceResult> ParseSourceResults(
         JsonArray sourceArray,
-        List<string> warnings)
+        List<string> warnings
+    )
     {
         var results = new List<SourceResult>();
         for (var index = 0; index < sourceArray.Count; index++)
         {
             if (sourceArray[index] is not JsonObject source)
             {
-                warnings.Add($"Source result at index {index} was skipped because it is not an object.");
+                warnings.Add(
+                    $"Source result at index {index} was skipped because it is not an object."
+                );
                 continue;
             }
 
-            var sourceKey = FirstNonBlank(source.String("resultId"), source.String("riderName")) ?? $"index {index}";
+            var sourceKey =
+                FirstNonBlank(source.String("resultId"), source.String("riderName"))
+                ?? $"index {index}";
             var rider = source.Object("rider");
             var riderName = FirstNonBlank(rider?.String("fullName"), source.String("riderName"));
             if (string.IsNullOrWhiteSpace(riderName))
             {
-                warnings.Add($"Source result '{sourceKey}' was skipped because riderName is missing.");
+                warnings.Add(
+                    $"Source result '{sourceKey}' was skipped because riderName is missing."
+                );
                 continue;
             }
 
             if (!TryParseDurationMilliseconds(source.String("resultTime"), out var finishTimeMs))
             {
-                warnings.Add($"Source result '{sourceKey}' was skipped because resultTime is missing or invalid.");
+                warnings.Add(
+                    $"Source result '{sourceKey}' was skipped because resultTime is missing or invalid."
+                );
                 continue;
             }
 
@@ -246,17 +327,26 @@ public sealed class UciMtbWorldSeriesSupplementService
             var invalidCode = source.String("resultInvalidCode")?.Trim();
             var position = source.Int("resultPosition");
             var isClassified = string.IsNullOrWhiteSpace(invalidCode) && position is > 0;
-            results.Add(new SourceResult(
-                sourceKey,
-                riderName.Trim(),
-                NormalizeName(riderName),
-                NormalizeNameParts(riderName),
-                NormalizeUciId(FirstNonBlank(rider?.String("uciid"), rider?.String("uciId"), source.String("riderUciId"))),
-                finishTimeMs,
-                position is > 0 ? position : null,
-                isClassified,
-                isClassified ? "Finished" : invalidCode?.ToUpperInvariant() ?? "Unclassified",
-                splits));
+            results.Add(
+                new SourceResult(
+                    sourceKey,
+                    riderName.Trim(),
+                    NormalizeName(riderName),
+                    NormalizeNameParts(riderName),
+                    NormalizeUciId(
+                        FirstNonBlank(
+                            rider?.String("uciid"),
+                            rider?.String("uciId"),
+                            source.String("riderUciId")
+                        )
+                    ),
+                    finishTimeMs,
+                    position is > 0 ? position : null,
+                    isClassified,
+                    isClassified ? "Finished" : invalidCode?.ToUpperInvariant() ?? "Unclassified",
+                    splits
+                )
+            );
         }
 
         return results;
@@ -266,7 +356,8 @@ public sealed class UciMtbWorldSeriesSupplementService
         JsonObject source,
         string sourceKey,
         int finishTimeMs,
-        List<string> warnings)
+        List<string> warnings
+    )
     {
         var stages = source.Array("apiRaceStageResults") ?? new JsonArray();
         var splits = new Dictionary<int, SourceSplit>();
@@ -276,10 +367,14 @@ public sealed class UciMtbWorldSeriesSupplementService
             var stageName = stage.String("SplitStage")?.Trim();
             if (string.Equals(stageName, "Finish", StringComparison.OrdinalIgnoreCase))
             {
-                if (!TryParseDurationMilliseconds(stage.String("Time"), out var finishStageTimeMs) ||
-                    finishStageTimeMs != finishTimeMs)
+                if (
+                    !TryParseDurationMilliseconds(stage.String("Time"), out var finishStageTimeMs)
+                    || finishStageTimeMs != finishTimeMs
+                )
                 {
-                    warnings.Add($"Source result '{sourceKey}' was skipped because Finish time differs from resultTime.");
+                    warnings.Add(
+                        $"Source result '{sourceKey}' was skipped because Finish time differs from resultTime."
+                    );
                     return null;
                 }
 
@@ -289,19 +384,25 @@ public sealed class UciMtbWorldSeriesSupplementService
             var splitIndex = ParseSplitIndex(stageName);
             if (splitIndex is null or <= 0)
             {
-                warnings.Add($"Source result '{sourceKey}' contains unsupported stage '{stageName ?? "<missing>"}', which was ignored.");
+                warnings.Add(
+                    $"Source result '{sourceKey}' contains unsupported stage '{stageName ?? "<missing>"}', which was ignored."
+                );
                 continue;
             }
 
             if (!TryParseDurationMilliseconds(stage.String("Time"), out var raceTimeMs))
             {
-                warnings.Add($"Source result '{sourceKey}' contains an invalid time for stage '{stageName}', which was ignored.");
+                warnings.Add(
+                    $"Source result '{sourceKey}' contains an invalid time for stage '{stageName}', which was ignored."
+                );
                 continue;
             }
 
             if (!splits.TryAdd(splitIndex.Value, new SourceSplit(splitIndex.Value, raceTimeMs)))
             {
-                warnings.Add($"Source result '{sourceKey}' was skipped because stage '{stageName}' is duplicated.");
+                warnings.Add(
+                    $"Source result '{sourceKey}' was skipped because stage '{stageName}' is duplicated."
+                );
                 return null;
             }
         }
@@ -311,7 +412,9 @@ public sealed class UciMtbWorldSeriesSupplementService
         {
             if (ordered[index].RaceTimeMs <= ordered[index - 1].RaceTimeMs)
             {
-                warnings.Add($"Source result '{sourceKey}' was skipped because cumulative stage times are not increasing.");
+                warnings.Add(
+                    $"Source result '{sourceKey}' was skipped because cumulative stage times are not increasing."
+                );
                 return null;
             }
         }
@@ -328,20 +431,26 @@ public sealed class UciMtbWorldSeriesSupplementService
             return null;
         }
 
-        var name = string.Join(" ", new[] { rider.String("first_name"), rider.String("last_name") }
-            .Where(value => !string.IsNullOrWhiteSpace(value)));
+        var name = string.Join(
+            " ",
+            new[] { rider.String("first_name"), rider.String("last_name") }.Where(value =>
+                !string.IsNullOrWhiteSpace(value)
+            )
+        );
         return new ExistingResult(
             id,
             NormalizeName(name),
             NormalizeNameParts(name),
             NormalizeUciId(rider.String("uci_id")),
-            row.Int("race_time_ms"));
+            row.Int("race_time_ms")
+        );
     }
 
     private static List<ResultMatch> MatchResults(
         IReadOnlyList<SourceResult> sourceResults,
         IReadOnlyList<ExistingResult> existingResults,
-        List<string> warnings)
+        List<string> warnings
+    )
     {
         var matches = new List<ResultMatch>();
         var usedExistingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -352,59 +461,93 @@ public sealed class UciMtbWorldSeriesSupplementService
             if (!string.IsNullOrWhiteSpace(source.UciId))
             {
                 var uciMatches = existingResults
-                    .Where(candidate => string.Equals(candidate.UciId, source.UciId, StringComparison.OrdinalIgnoreCase))
+                    .Where(candidate =>
+                        string.Equals(
+                            candidate.UciId,
+                            source.UciId,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
                     .ToArray();
                 if (uciMatches.Length != 1)
                 {
-                    warnings.Add($"Source result '{source.SourceKey}' was skipped because UCI ID '{source.UciId}' matched {uciMatches.Length} session results.");
+                    warnings.Add(
+                        $"Source result '{source.SourceKey}' was skipped because UCI ID '{source.UciId}' matched {uciMatches.Length} session results."
+                    );
                     continue;
                 }
 
                 existing = uciMatches[0];
-                if (!string.Equals(existing.NormalizedName, source.NormalizedName, StringComparison.Ordinal))
+                if (
+                    !string.Equals(
+                        existing.NormalizedName,
+                        source.NormalizedName,
+                        StringComparison.Ordinal
+                    )
+                )
                 {
-                    warnings.Add($"Source result '{source.SourceKey}' was matched by UCI ID although its rider name differs from the database.");
+                    warnings.Add(
+                        $"Source result '{source.SourceKey}' was matched by UCI ID although its rider name differs from the database."
+                    );
                 }
             }
             else
             {
                 var nameMatches = existingResults
-                    .Where(candidate => string.Equals(candidate.NormalizedName, source.NormalizedName, StringComparison.Ordinal))
+                    .Where(candidate =>
+                        string.Equals(
+                            candidate.NormalizedName,
+                            source.NormalizedName,
+                            StringComparison.Ordinal
+                        )
+                    )
                     .ToArray();
                 if (nameMatches.Length == 1)
                 {
                     existing = nameMatches[0];
                     if (existing.RaceTimeMs is > 0 && existing.RaceTimeMs != source.FinishTimeMs)
                     {
-                        warnings.Add($"Source result '{source.SourceKey}' was skipped because its finish time does not match the existing result for that rider.");
+                        warnings.Add(
+                            $"Source result '{source.SourceKey}' was skipped because its finish time does not match the existing result for that rider."
+                        );
                         continue;
                     }
                 }
                 else if (nameMatches.Length == 0)
                 {
                     var preferredNameMatches = existingResults
-                        .Where(candidate => candidate.RaceTimeMs == source.FinishTimeMs &&
-                            AreNamePartsCompatible(source.NameParts, candidate.NameParts))
+                        .Where(candidate =>
+                            candidate.RaceTimeMs == source.FinishTimeMs
+                            && AreNamePartsCompatible(source.NameParts, candidate.NameParts)
+                        )
                         .ToArray();
                     if (preferredNameMatches.Length != 1)
                     {
-                        warnings.Add($"Source result '{source.SourceKey}' was skipped because its full rider name and finish time matched {preferredNameMatches.Length} session results.");
+                        warnings.Add(
+                            $"Source result '{source.SourceKey}' was skipped because its full rider name and finish time matched {preferredNameMatches.Length} session results."
+                        );
                         continue;
                     }
 
                     existing = preferredNameMatches[0];
-                    warnings.Add($"Source result '{source.SourceKey}' was matched by unique finish time and a compatible preferred rider name.");
+                    warnings.Add(
+                        $"Source result '{source.SourceKey}' was matched by unique finish time and a compatible preferred rider name."
+                    );
                 }
                 else
                 {
-                    warnings.Add($"Source result '{source.SourceKey}' was skipped because the exact full rider name matched {nameMatches.Length} session results.");
+                    warnings.Add(
+                        $"Source result '{source.SourceKey}' was skipped because the exact full rider name matched {nameMatches.Length} session results."
+                    );
                     continue;
                 }
             }
 
             if (!usedExistingIds.Add(existing.Id))
             {
-                warnings.Add($"Source result '{source.SourceKey}' was skipped because another source row already matched result '{existing.Id}'.");
+                warnings.Add(
+                    $"Source result '{source.SourceKey}' was skipped because another source row already matched result '{existing.Id}'."
+                );
                 continue;
             }
 
@@ -417,7 +560,8 @@ public sealed class UciMtbWorldSeriesSupplementService
     private async Task<bool> TryRecalculatePointsAsync(
         string sessionId,
         List<string> warnings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -431,7 +575,9 @@ public sealed class UciMtbWorldSeriesSupplementService
         }
         catch (SupabaseApiException)
         {
-            warnings.Add("Could not recalculate session points. Results were supplemented without recalculating points.");
+            warnings.Add(
+                "Could not recalculate session points. Results were supplemented without recalculating points."
+            );
             return false;
         }
     }
@@ -444,10 +590,16 @@ public sealed class UciMtbWorldSeriesSupplementService
         }
 
         var match = SplitPattern.Match(stageName.Trim());
-        return match.Success &&
-            int.TryParse(match.Groups["index"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var index)
-                ? index
-                : null;
+        return
+            match.Success
+            && int.TryParse(
+                match.Groups["index"].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var index
+            )
+            ? index
+            : null;
     }
 
     private static string NormalizeName(string value)
@@ -470,7 +622,10 @@ public sealed class UciMtbWorldSeriesSupplementService
     private static string[] NormalizeNameParts(string value)
     {
         return value
-            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(
+                (char[]?)null,
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            )
             .Select(NormalizeName)
             .Where(part => part.Length > 0)
             .ToArray();
@@ -478,7 +633,8 @@ public sealed class UciMtbWorldSeriesSupplementService
 
     private static bool AreNamePartsCompatible(
         IReadOnlyList<string> sourceParts,
-        IReadOnlyList<string> existingParts)
+        IReadOnlyList<string> existingParts
+    )
     {
         if (sourceParts.Count < 2 || existingParts.Count < sourceParts.Count)
         {
@@ -490,7 +646,13 @@ public sealed class UciMtbWorldSeriesSupplementService
             var matches = true;
             for (var index = 0; index < sourceParts.Count; index++)
             {
-                if (!string.Equals(sourceParts[index], existingParts[offset + index], StringComparison.Ordinal))
+                if (
+                    !string.Equals(
+                        sourceParts[index],
+                        existingParts[offset + index],
+                        StringComparison.Ordinal
+                    )
+                )
                 {
                     matches = false;
                     break;
@@ -518,7 +680,10 @@ public sealed class UciMtbWorldSeriesSupplementService
 
     private static void EnsurePositiveId(string id)
     {
-        if (!long.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var value) || value <= 0)
+        if (
+            !long.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
+            || value <= 0
+        )
         {
             throw Invalid("INVALID_ADMIN_ID", "session_id must be a positive integer.");
         }
@@ -539,7 +704,8 @@ public sealed class UciMtbWorldSeriesSupplementService
         int? Position,
         bool IsClassified,
         string Status,
-        IReadOnlyList<SourceSplit> Splits);
+        IReadOnlyList<SourceSplit> Splits
+    );
 
     private sealed record SourceSplit(int Index, int RaceTimeMs);
 
@@ -548,7 +714,8 @@ public sealed class UciMtbWorldSeriesSupplementService
         string NormalizedName,
         IReadOnlyList<string> NameParts,
         string? UciId,
-        int? RaceTimeMs);
+        int? RaceTimeMs
+    );
 
     private sealed record ResultMatch(SourceResult Source, ExistingResult Existing);
 }

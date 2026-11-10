@@ -8,5 +8,11 @@ public sealed record FilterOptionsDto
     public required IReadOnlyList<ContextNamedOptionDto> CompetitionClasses { get; init; }
 }
 
-public sealed record ContextTrackOptionDto(long Id, string? Name, string? Venue, string? CountryCode);
+public sealed record ContextTrackOptionDto(
+    long Id,
+    string? Name,
+    string? Venue,
+    string? CountryCode
+);
+
 public sealed record ContextNamedOptionDto(long Id, string Name);

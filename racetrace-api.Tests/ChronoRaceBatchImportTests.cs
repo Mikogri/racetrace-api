@@ -15,9 +15,7 @@ public sealed class ChronoRaceBatchImportTests
     [InlineData("JW", "female")]
     [InlineData("WJ", "female")]
     [InlineData("mixed", null)]
-    public void GenderIsDerivedOnlyFromKnownCategory(
-        string category,
-        string? expected)
+    public void GenderIsDerivedOnlyFromKnownCategory(string category, string? expected)
     {
         Assert.Equal(expected, ChronoRaceImportService.GenderFromCategory(category));
     }
@@ -29,19 +27,21 @@ public sealed class ChronoRaceBatchImportTests
         var service = new ChronoRaceImportService(
             supabase,
             new DomainQueryService(supabase),
-            new TestPointAwardService());
+            new TestPointAwardService()
+        );
 
-        var response = await service.ImportSessionAsync(
-            Request(),
-            CancellationToken.None);
+        var response = await service.ImportSessionAsync(Request(), CancellationToken.None);
 
         Assert.Equal(1, response.RidersCreated);
         Assert.Equal(1, response.RidersUpdated);
         Assert.Equal(2, response.ResultsUpserted);
         Assert.Equal(2, response.SplitsUpserted);
         Assert.True(response.PointsRecalculated);
-        Assert.Contains(response.Warnings, warning =>
-            warning.Contains("Existing time splits were preserved", StringComparison.Ordinal));
+        Assert.Contains(
+            response.Warnings,
+            warning =>
+                warning.Contains("Existing time splits were preserved", StringComparison.Ordinal)
+        );
 
         Assert.Equal(1, supabase.GetCounts["riders"]);
         Assert.Equal(1, supabase.GetCounts["teams"]);
@@ -62,9 +62,12 @@ public sealed class ChronoRaceBatchImportTests
         Assert.Equal(2, supabase.PostedRows["time_splits"].Count);
         Assert.Equal(
             ["refresh_rider_team_history", "refresh_ranking_session_preaggregate"],
-            supabase.RpcCalls);
-        Assert.All(supabase.PostedRows["time_splits"], row =>
-            Assert.Equal("401", row.String("result_id")));
+            supabase.RpcCalls
+        );
+        Assert.All(
+            supabase.PostedRows["time_splits"],
+            row => Assert.Equal("401", row.String("result_id"))
+        );
     }
 
     [Fact]
@@ -74,23 +77,39 @@ public sealed class ChronoRaceBatchImportTests
         var service = new ChronoRaceImportService(
             supabase,
             new DomainQueryService(supabase),
-            new TestPointAwardService());
+            new TestPointAwardService()
+        );
 
         var response = await service.ImportSessionAsync(
             WorldChampionshipRequest(),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(2, response.ResultsUpserted);
         Assert.Equal(3, response.SplitsUpserted);
-        Assert.Contains(response.Warnings, warning =>
-            warning.Contains("World Championship result JSON was normalized", StringComparison.Ordinal));
+        Assert.Contains(
+            response.Warnings,
+            warning =>
+                warning.Contains(
+                    "World Championship result JSON was normalized",
+                    StringComparison.Ordinal
+                )
+        );
         Assert.Equal(2, supabase.PostedRows["results"].Count);
-        Assert.Equal(240_870, supabase.PostedRows["results"]
-            .Single(row => row.String("rider_id") == "102")
-            .Int("race_time_ms"));
-        Assert.Equal([1, 2], supabase.PostedRows["time_splits"]
-            .Where(row => row.String("result_id") == "401")
-            .Select(row => row.Int("split_index")));
+        Assert.Equal(
+            240_870,
+            supabase
+                .PostedRows["results"]
+                .Single(row => row.String("rider_id") == "102")
+                .Int("race_time_ms")
+        );
+        Assert.Equal(
+            [1, 2],
+            supabase
+                .PostedRows["time_splits"]
+                .Where(row => row.String("result_id") == "401")
+                .Select(row => row.Int("split_index"))
+        );
         Assert.Equal(["refresh_ranking_session_preaggregate"], supabase.RpcCalls);
     }
 
@@ -101,18 +120,17 @@ public sealed class ChronoRaceBatchImportTests
         var service = new ChronoRaceImportService(
             supabase,
             new DomainQueryService(supabase),
-            new TestPointAwardService());
+            new TestPointAwardService()
+        );
         var source = Request();
         var request = source with
         {
-            Round = source.Round with
-            {
-                CompetitionClassCode = "world_championship"
-            }
+            Round = source.Round with { CompetitionClassCode = "world_championship" },
         };
 
         var exception = await Assert.ThrowsAsync<ApiException>(() =>
-            service.ImportSessionAsync(request, CancellationToken.None));
+            service.ImportSessionAsync(request, CancellationToken.None)
+        );
 
         Assert.Equal("COMPETITION_CLASS_MISMATCH", exception.Code);
     }
@@ -122,16 +140,21 @@ public sealed class ChronoRaceBatchImportTests
         var riders = new JsonObject
         {
             ["11"] = Rider(11, "1001", "ALRAN", "Max"),
-            ["22"] = Rider(22, "1002", "ALRAN", "Till")
+            ["22"] = Rider(22, "1002", "ALRAN", "Till"),
         };
         var results = new JsonArray
         {
-            Result(11, 1, 240_000, new JsonArray
-            {
-                new JsonObject { ["RaceTime"] = 45_000, ["Speed"] = 40.5m },
-                new JsonObject { ["RaceTime"] = 65_000, ["Speed"] = 42.0m }
-            }),
-            Result(22, 2, 241_000, new JsonArray())
+            Result(
+                11,
+                1,
+                240_000,
+                new JsonArray
+                {
+                    new JsonObject { ["RaceTime"] = 45_000, ["Speed"] = 40.5m },
+                    new JsonObject { ["RaceTime"] = 65_000, ["Speed"] = 42.0m },
+                }
+            ),
+            Result(22, 2, 241_000, new JsonArray()),
         };
 
         return new ChronoRaceImportRequest(
@@ -141,11 +164,8 @@ public sealed class ChronoRaceBatchImportTests
             new ImportConditionPayload(null, "Dry", true),
             "EM",
             new ImportSessionPayload("Final", "FINAL", new DateOnly(2024, 7, 1), "finished"),
-            new JsonObject
-            {
-                ["Riders"] = riders,
-                ["Results"] = results
-            });
+            new JsonObject { ["Riders"] = riders, ["Results"] = results }
+        );
     }
 
     private static ChronoRaceImportRequest WorldChampionshipRequest()
@@ -157,7 +177,8 @@ public sealed class ChronoRaceBatchImportTests
                 1,
                 null,
                 null,
-                CompetitionClassCode: "world_championship"),
+                CompetitionClassCode: "world_championship"
+            ),
             new ImportTrackPayload("Speedster", "Leogang", "AUT", 2400, 18.5m),
             new ImportCompetitionClassPayload("world_championship", "World Championship", 1),
             new ImportConditionPayload(null, "Dry", true),
@@ -169,17 +190,32 @@ public sealed class ChronoRaceBatchImportTests
                 {
                     ["number"] = 1,
                     ["name"] = "Elite Men Downhill",
-                    ["discipline"] = "DOWNHILL"
+                    ["discipline"] = "DOWNHILL",
                 },
                 ["results"] = new JsonArray
                 {
-                    WorldResult("1001", 11, "ALRAN Max", 1, "4:00.000", "50.0",
+                    WorldResult(
+                        "1001",
+                        11,
+                        "ALRAN Max",
+                        1,
+                        "4:00.000",
+                        "50.0",
                         new JsonObject { ["resultType"] = "Time", ["value"] = "0:45.000" },
-                        new JsonObject { ["resultType"] = "Time", ["value"] = "1:05.000" }),
-                    WorldResult("1002", 22, "ALRAN Till", 2, "+0.870", "49.0",
-                        new JsonObject { ["resultType"] = "Time", ["value"] = "0:45.500" })
-                }
-            });
+                        new JsonObject { ["resultType"] = "Time", ["value"] = "1:05.000" }
+                    ),
+                    WorldResult(
+                        "1002",
+                        22,
+                        "ALRAN Till",
+                        2,
+                        "+0.870",
+                        "49.0",
+                        new JsonObject { ["resultType"] = "Time", ["value"] = "0:45.500" }
+                    ),
+                },
+            }
+        );
     }
 
     private static JsonObject WorldResult(
@@ -189,7 +225,8 @@ public sealed class ChronoRaceBatchImportTests
         int rank,
         string time,
         string speed,
-        params JsonObject[] splits)
+        params JsonObject[] splits
+    )
     {
         return new JsonObject
         {
@@ -201,14 +238,14 @@ public sealed class ChronoRaceBatchImportTests
                 ["bib"] = bib,
                 ["name"] = name,
                 ["nation"] = "FRA",
-                ["uciRiderId"] = uciId
+                ["uciRiderId"] = uciId,
             },
             ["splits"] = new JsonArray(splits),
             ["rank"] = rank,
             ["value"] = time,
             ["time"] = time,
             ["gap"] = string.Empty,
-            ["speed"] = speed
+            ["speed"] = speed,
         };
     }
 
@@ -223,7 +260,7 @@ public sealed class ChronoRaceBatchImportTests
             ["GivenName"] = givenName,
             ["Nation"] = "FRA",
             ["UciTeamCode"] = "AON",
-            ["UciTeamName"] = "AON Racing"
+            ["UciTeamName"] = "AON Racing",
         };
     }
 
@@ -237,7 +274,7 @@ public sealed class ChronoRaceBatchImportTests
             ["CompletedDistance"] = 2400,
             ["Status"] = "Finished",
             ["InResult"] = true,
-            ["Times"] = times
+            ["Times"] = times,
         };
     }
 
@@ -256,7 +293,8 @@ public sealed class ChronoRaceBatchImportTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Increment(GetCounts, query.Table);
             IReadOnlyList<JsonObject> rows = query.Table switch
@@ -269,8 +307,8 @@ public sealed class ChronoRaceBatchImportTests
                         ["uci_id"] = "1001",
                         ["uci_code"] = "FRA1001",
                         ["first_name"] = "Max",
-                        ["last_name"] = "ALRAN"
-                    }
+                        ["last_name"] = "ALRAN",
+                    },
                 ],
                 "teams" => [],
                 "rider_team_history" => [],
@@ -278,9 +316,9 @@ public sealed class ChronoRaceBatchImportTests
                 "competition_ranks" =>
                 [
                     new JsonObject { ["id"] = "2", ["code"] = "world_cup" },
-                    new JsonObject { ["id"] = "9", ["code"] = "world_championship" }
+                    new JsonObject { ["id"] = "9", ["code"] = "world_championship" },
                 ],
-                _ => throw new NotSupportedException($"Unexpected GET table '{query.Table}'.")
+                _ => throw new NotSupportedException($"Unexpected GET table '{query.Table}'."),
             };
             return Task.FromResult(new SupabaseQueryResult(rows, rows.Count));
         }
@@ -288,7 +326,8 @@ public sealed class ChronoRaceBatchImportTests
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Increment(SingleGetCounts, query.Table);
             JsonObject? row = query.Table switch
@@ -301,8 +340,14 @@ public sealed class ChronoRaceBatchImportTests
                 "rounds" => new JsonObject { ["id"] = "5" },
                 "round_categories" => new JsonObject { ["round_id"] = "5", ["category_id"] = "4" },
                 "sessions" => new JsonObject { ["id"] = "6" },
-                "ranking_session_preaggregates" => new JsonObject { ["source_revision"] = Guid.Empty.ToString(), ["payload"] = new JsonObject() },
-                _ => throw new NotSupportedException($"Unexpected single GET table '{query.Table}'.")
+                "ranking_session_preaggregates" => new JsonObject
+                {
+                    ["source_revision"] = Guid.Empty.ToString(),
+                    ["payload"] = new JsonObject(),
+                },
+                _ => throw new NotSupportedException(
+                    $"Unexpected single GET table '{query.Table}'."
+                ),
             };
             return Task.FromResult<JsonObject?>(row);
         }
@@ -312,11 +357,13 @@ public sealed class ChronoRaceBatchImportTests
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Increment(PostCounts, table);
             OnConflictByTable[table] = onConflict;
-            var rows = payload.AsArray()
+            var rows = payload
+                .AsArray()
                 .OfType<JsonObject>()
                 .Select(row => row.DeepClone().AsObject())
                 .ToList();
@@ -324,15 +371,17 @@ public sealed class ChronoRaceBatchImportTests
 
             IReadOnlyList<JsonObject> saved = table switch
             {
-                "riders" => rows.Select(row => WithId(
-                    row,
-                    row.String("uci_id") == "1001" ? "101" : "102")).ToArray(),
+                "riders" => rows.Select(row =>
+                        WithId(row, row.String("uci_id") == "1001" ? "101" : "102")
+                    )
+                    .ToArray(),
                 "teams" => rows.Select(row => WithId(row, "301")).ToArray(),
-                "results" => rows.Select(row => WithId(
-                    row,
-                    row.String("rider_id") == "101" ? "401" : "402")).ToArray(),
+                "results" => rows.Select(row =>
+                        WithId(row, row.String("rider_id") == "101" ? "401" : "402")
+                    )
+                    .ToArray(),
                 "time_splits" => [],
-                _ => throw new NotSupportedException($"Unexpected POST table '{table}'.")
+                _ => throw new NotSupportedException($"Unexpected POST table '{table}'."),
             };
             return Task.FromResult(saved);
         }
@@ -342,7 +391,8 @@ public sealed class ChronoRaceBatchImportTests
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             var ids = new Dictionary<string, string>
             {
@@ -350,7 +400,7 @@ public sealed class ChronoRaceBatchImportTests
                 ["competition_ranks"] = "2",
                 ["conditions"] = "3",
                 ["rounds"] = "5",
-                ["sessions"] = "6"
+                ["sessions"] = "6",
             };
             return Task.FromResult<IReadOnlyList<JsonObject>>([WithId(payload, ids[table])]);
         }
@@ -359,7 +409,8 @@ public sealed class ChronoRaceBatchImportTests
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Increment(DeleteCounts, table);
             return Task.CompletedTask;
@@ -369,7 +420,8 @@ public sealed class ChronoRaceBatchImportTests
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             RpcCalls.Add(functionName);
             Assert.Contains(
@@ -380,11 +432,14 @@ public sealed class ChronoRaceBatchImportTests
                     "refresh_ranking_session_preaggregate",
                     "get_ranking_input_packages",
                     "save_ranking_incident_annotations",
-                      "save_prepared_ranking_session",
-                    "recalculate_session_points"
-                });
+                    "save_prepared_ranking_session",
+                    "recalculate_session_points",
+                }
+            );
             Assert.Equal(SupabaseRole.Service, role);
-            return Task.FromResult<JsonNode?>(functionName == "save_prepared_ranking_session" ? JsonValue.Create(true) : null);
+            return Task.FromResult<JsonNode?>(
+                functionName == "save_prepared_ranking_session" ? JsonValue.Create(true) : null
+            );
         }
 
         private static JsonObject WithId(JsonObject payload, string id)

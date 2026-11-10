@@ -1,9 +1,9 @@
-using RaceTrace.Api.Services;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
-using System.Text.Json.Nodes;
 using RaceTrace.Api.Models;
+using RaceTrace.Api.Services;
 
 namespace RaceTrace.Api.Tests;
 
@@ -15,28 +15,42 @@ public sealed class RankingServiceTests
         var validator = new QueryValidationService();
         var domain = new DomainQueryService(null!);
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var query = Query(new()
-        {
-            ["search"] = "Asa",
-            ["sortBy"] = "points",
-            ["comparison"] = "previousFilters"
-        });
+        var query = Query(
+            new()
+            {
+                ["search"] = "Asa",
+                ["sortBy"] = "points",
+                ["comparison"] = "previousFilters",
+            }
+        );
         var context = await domain.ParseMetricsContextAsync(query, validator, default);
         var first = new JsonObject
         {
-            ["rider_id"] = "1", ["points"] = 100,
-            ["rider"] = new JsonObject { ["first_name"] = "Other", ["last_name"] = "Rider" }
+            ["rider_id"] = "1",
+            ["points"] = 100,
+            ["rider"] = new JsonObject { ["first_name"] = "Other", ["last_name"] = "Rider" },
         };
         var second = new JsonObject
         {
-            ["rider_id"] = "2", ["points"] = 50,
-            ["rider"] = new JsonObject { ["first_name"] = "Asa", ["last_name"] = "Vermette" }
+            ["rider_id"] = "2",
+            ["points"] = 50,
+            ["rider"] = new JsonObject { ["first_name"] = "Asa", ["last_name"] = "Vermette" },
         };
-        cache.Set(RankingService.BuildSingleFlightKey(context, null, null, null),
-            new RankingSnapshot([first, second], [], [], [], []));
-        cache.Set(RankingService.BuildSingleFlightKey(context, null, "Asa", null),
-            new RankingSnapshot([second], [], [], [], []));
-        var service = new RankingService(validator, domain, null!, new RankingSingleFlight(), cache);
+        cache.Set(
+            RankingService.BuildSingleFlightKey(context, null, null, null),
+            new RankingSnapshot([first, second], [], [], [], [])
+        );
+        cache.Set(
+            RankingService.BuildSingleFlightKey(context, null, "Asa", null),
+            new RankingSnapshot([second], [], [], [], [])
+        );
+        var service = new RankingService(
+            validator,
+            domain,
+            null!,
+            new RankingSingleFlight(),
+            cache
+        );
 
         var response = await service.ListRankingAsync(query, default);
 
@@ -55,29 +69,71 @@ public sealed class RankingServiceTests
             ["s"] = new JsonArray
             {
                 new JsonArray(
-                    10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025, "2025-05-30", 2,
-                    "EM", 7, 2, "WORLD_CUP", "World Cup", 5, "Dry", "Black Snake", "Val di Sole",
-                    "ITA", 2100, 12.5)
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2025-06-01",
+                    40,
+                    2025,
+                    "2025-05-30",
+                    2,
+                    "EM",
+                    7,
+                    2,
+                    "WORLD_CUP",
+                    "World Cup",
+                    5,
+                    "Dry",
+                    "Black Snake",
+                    "Val di Sole",
+                    "ITA",
+                    2100,
+                    12.5
+                ),
             },
             ["d"] = new JsonArray
             {
                 new JsonArray(
-                    50, 100050, "Max", "Rider", "FRA", "https://image.test/rider.png", 60, "Factory Team",
-                    "FRA20000102", "2000-01-02", false, "FW5", "male")
+                    50,
+                    100050,
+                    "Max",
+                    "Rider",
+                    "FRA",
+                    "https://image.test/rider.png",
+                    60,
+                    "Factory Team",
+                    "FRA20000102",
+                    "2000-01-02",
+                    false,
+                    "FW5",
+                    "male"
+                ),
             },
             ["r"] = new JsonArray
             {
-                new JsonArray(70, 50, 10, 200000, 65.5, 1, true, "Finished", 250, 60, "Factory Team", "FW5")
+                new JsonArray(
+                    70,
+                    50,
+                    10,
+                    200000,
+                    65.5,
+                    1,
+                    true,
+                    "Finished",
+                    250,
+                    60,
+                    "Factory Team",
+                    "FW5"
+                ),
             },
             ["f"] = new JsonArray
             {
                 new JsonArray(70, 50, 10, 200000, 65.5, 1, true, "Finished"),
-                new JsonArray(71, 51, 10, 202000, 64.5, 2, true, "Finished")
+                new JsonArray(71, 51, 10, 202000, 64.5, 2, true, "Finished"),
             },
-            ["x"] = new JsonArray
-            {
-                new JsonArray(70, 1, 45000, 54.3)
-            }
+            ["x"] = new JsonArray { new JsonArray(70, 1, 45000, 54.3) },
         };
 
         var bundle = DomainQueryService.ParseRankingDataBundle(response);
@@ -97,7 +153,10 @@ public sealed class RankingServiceTests
         Assert.Equal("2000-01-02", result.Object("riders")?.String("birth_date"));
         Assert.Equal("male", result.Object("riders")?.String("gender"));
         Assert.Equal("FINAL", result.Object("sessions")?.String("session_type"));
-        Assert.Equal(2, result.Object("sessions")?.Object("rounds")?.Int("competition_class_priority"));
+        Assert.Equal(
+            2,
+            result.Object("sessions")?.Object("rounds")?.Int("competition_class_priority")
+        );
         Assert.Equal(250m, bundle.PointsByResultId["70"]);
 
         var split = Assert.Single(bundle.Splits);
@@ -112,22 +171,44 @@ public sealed class RankingServiceTests
         {
             ["s"] = new JsonArray
             {
-                new JsonArray(10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025, "2025-05-30", 2, "EM")
+                new JsonArray(
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2025-06-01",
+                    40,
+                    2025,
+                    "2025-05-30",
+                    2,
+                    "EM"
+                ),
             },
             ["d"] = new JsonArray
             {
-                new JsonArray(50, 100050, "Max", "Rider", "FRA", null, 60, "Current Team", null, null, false, "CUR")
+                new JsonArray(
+                    50,
+                    100050,
+                    "Max",
+                    "Rider",
+                    "FRA",
+                    null,
+                    60,
+                    "Current Team",
+                    null,
+                    null,
+                    false,
+                    "CUR"
+                ),
             },
-            ["t"] = new JsonArray
-            {
-                new JsonArray(61, "Result Team", "RES")
-            },
+            ["t"] = new JsonArray { new JsonArray(61, "Result Team", "RES") },
             ["r"] = new JsonArray
             {
-                new JsonArray(70, 50, 10, 200000, 65.5, 1, true, "Finished", 250, 61)
+                new JsonArray(70, 50, 10, 200000, 65.5, 1, true, "Finished", 250, 61),
             },
             ["f"] = new JsonArray(),
-            ["x"] = new JsonArray()
+            ["x"] = new JsonArray(),
         };
 
         var bundle = DomainQueryService.ParseRankingDataBundle(response);
@@ -146,23 +227,61 @@ public sealed class RankingServiceTests
         {
             ["s"] = new JsonArray
             {
-                new JsonArray(10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025, "2025-05-30", 2, "EM")
+                new JsonArray(
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2025-06-01",
+                    40,
+                    2025,
+                    "2025-05-30",
+                    2,
+                    "EM"
+                ),
             },
             ["d"] = new JsonArray
             {
-                new JsonArray(50, 100050, "Max", "Rider", "FRA", null, 60, "Current Team", null, null, false, "CUR")
+                new JsonArray(
+                    50,
+                    100050,
+                    "Max",
+                    "Rider",
+                    "FRA",
+                    null,
+                    60,
+                    "Current Team",
+                    null,
+                    null,
+                    false,
+                    "CUR"
+                ),
             },
             ["t"] = new JsonArray(),
             ["r"] = new JsonArray
             {
-                new JsonArray(70, 50, 10, 200000, 65.5, 1, true, "Finished", 250, 61, "Historical Team", "HIS")
+                new JsonArray(
+                    70,
+                    50,
+                    10,
+                    200000,
+                    65.5,
+                    1,
+                    true,
+                    "Finished",
+                    250,
+                    61,
+                    "Historical Team",
+                    "HIS"
+                ),
             },
             ["f"] = new JsonArray(),
-            ["x"] = new JsonArray()
+            ["x"] = new JsonArray(),
         };
 
-        var team = Assert.Single(
-                DomainQueryService.ParseRankingDataBundle(response).Results)
+        var team = Assert
+            .Single(DomainQueryService.ParseRankingDataBundle(response).Results)
             .Object("teams");
 
         Assert.NotNull(team);
@@ -178,19 +297,44 @@ public sealed class RankingServiceTests
         {
             ["s"] = new JsonArray
             {
-                new JsonArray(10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025, "2025-05-30", 2, "EM")
+                new JsonArray(
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2025-06-01",
+                    40,
+                    2025,
+                    "2025-05-30",
+                    2,
+                    "EM"
+                ),
             },
             ["d"] = new JsonArray
             {
-                new JsonArray(50, 100050, "Max", "Rider", "FRA", null, 60, "Latest Team", null, null, false, "NEW")
+                new JsonArray(
+                    50,
+                    100050,
+                    "Max",
+                    "Rider",
+                    "FRA",
+                    null,
+                    60,
+                    "Latest Team",
+                    null,
+                    null,
+                    false,
+                    "NEW"
+                ),
             },
             ["t"] = new JsonArray(),
             ["r"] = new JsonArray
             {
-                new JsonArray(70, 50, 10, 200000, 65.5, 1, true, "Finished", 250, 44)
+                new JsonArray(70, 50, 10, 200000, 65.5, 1, true, "Finished", 250, 44),
             },
             ["f"] = new JsonArray(),
-            ["x"] = new JsonArray()
+            ["x"] = new JsonArray(),
         };
 
         var bundle = DomainQueryService.ParseRankingDataBundle(response);
@@ -208,26 +352,81 @@ public sealed class RankingServiceTests
         var log40 = Math.Log(40);
         var response = new JsonObject
         {
-            ["s"] = new JsonArray(new JsonArray(
-                10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025,
-                "2025-05-30", 2, "EM", 1, 2, "WORLD_CUP", "World Cup",
-                5, "Dry", "Track", "Venue", "FRA", 2000, 10)),
-            ["d"] = new JsonArray(new JsonArray(
-                50, 100050, "Test", "Rider", "FRA", null, null, null,
-                null, null, false, null)),
-            ["r"] = new JsonArray(new JsonArray(
-                70, 50, 10, null, null, null, false, "DNF", 0, null)),
+            ["s"] = new JsonArray(
+                new JsonArray(
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2025-06-01",
+                    40,
+                    2025,
+                    "2025-05-30",
+                    2,
+                    "EM",
+                    1,
+                    2,
+                    "WORLD_CUP",
+                    "World Cup",
+                    5,
+                    "Dry",
+                    "Track",
+                    "Venue",
+                    "FRA",
+                    2000,
+                    10
+                )
+            ),
+            ["d"] = new JsonArray(
+                new JsonArray(
+                    50,
+                    100050,
+                    "Test",
+                    "Rider",
+                    "FRA",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+                )
+            ),
+            ["r"] = new JsonArray(
+                new JsonArray(70, 50, 10, null, null, null, false, "DNF", 0, null)
+            ),
             ["f"] = new JsonArray(),
             ["x"] = new JsonArray(),
             ["t"] = new JsonArray(),
-            ["a"] = new JsonArray(new JsonArray(
-                70, 10, 20, null,
-                null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null)),
+            ["a"] = new JsonArray(
+                new JsonArray(
+                    70,
+                    10,
+                    20,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            ),
             ["q"] = new JsonArray(
                 SectorAggregate(70, 0, 40, 1, log40),
                 SectorAggregate(70, 1, null, null, log40),
-                SectorAggregate(70, 2, null, null, log40))
+                SectorAggregate(70, 2, null, null, log40)
+            ),
         };
 
         var bundle = DomainQueryService.ParseRiderDetailDataBundle(response);
@@ -243,27 +442,67 @@ public sealed class RankingServiceTests
         var log40 = Math.Log(40);
         var response = new JsonObject
         {
-            ["s"] = new JsonArray(new JsonArray(
-                10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025,
-                "2025-05-30", 2, "EM")),
-            ["d"] = new JsonArray(new JsonArray(
-                50, 100050, "Test", "Rider", "FRA", null, null, null,
-                null, null, false, null)),
-            ["r"] = new JsonArray(new JsonArray(
-                70, 50, 10, 40_000, 60, 1, true, "Finished", 0, null)),
+            ["s"] = new JsonArray(
+                new JsonArray(
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2025-06-01",
+                    40,
+                    2025,
+                    "2025-05-30",
+                    2,
+                    "EM"
+                )
+            ),
+            ["d"] = new JsonArray(
+                new JsonArray(
+                    50,
+                    100050,
+                    "Test",
+                    "Rider",
+                    "FRA",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+                )
+            ),
+            ["r"] = new JsonArray(
+                new JsonArray(70, 50, 10, 40_000, 60, 1, true, "Finished", 0, null)
+            ),
             ["f"] = new JsonArray(),
             ["x"] = new JsonArray(),
             ["t"] = new JsonArray(),
             ["a"] = new JsonArray(new JsonArray(70, 10, 20, 1)),
             ["q"] = new JsonArray(new JsonArray(70, 0, 40, 1)),
-            ["g"] = new JsonArray(new JsonArray(
-                10, 0,
-                20, 40, log40, 0.1, 1, 38, 39,
-                20, 40, log40, 0.1, 1, 38, 39)),
-            ["h"] = new JsonArray(new JsonArray(
-                10,
-                20, 58, Math.Log(58), 0.1, 1, 65, 64,
-                20, 42, Math.Log(42), 0.1, 1, 40, 41))
+            ["g"] = new JsonArray(
+                new JsonArray(10, 0, 20, 40, log40, 0.1, 1, 38, 39, 20, 40, log40, 0.1, 1, 38, 39)
+            ),
+            ["h"] = new JsonArray(
+                new JsonArray(
+                    10,
+                    20,
+                    58,
+                    Math.Log(58),
+                    0.1,
+                    1,
+                    65,
+                    64,
+                    20,
+                    42,
+                    Math.Log(42),
+                    0.1,
+                    1,
+                    40,
+                    41
+                )
+            ),
         };
 
         var parsed = DomainQueryService.ParseRiderDetailDataBundle(response);
@@ -281,25 +520,78 @@ public sealed class RankingServiceTests
     {
         var response = new JsonObject
         {
-            ["s"] = new JsonArray(new JsonArray(
-                10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025,
-                "2025-05-30", 2, "EM")),
+            ["s"] = new JsonArray(
+                new JsonArray(
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2025-06-01",
+                    40,
+                    2025,
+                    "2025-05-30",
+                    2,
+                    "EM"
+                )
+            ),
             ["d"] = new JsonArray(
-                new JsonArray(50, 100050, "First", "Rider", "FRA", null, null, null, null, null, false, null),
-                new JsonArray(51, 100051, "Second", "Rider", "GBR", null, null, null, null, null, false, null)),
+                new JsonArray(
+                    50,
+                    100050,
+                    "First",
+                    "Rider",
+                    "FRA",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+                ),
+                new JsonArray(
+                    51,
+                    100051,
+                    "Second",
+                    "Rider",
+                    "GBR",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+                )
+            ),
             ["r"] = new JsonArray(
                 new JsonArray(70, 50, 10, 40_000, 60, 1, true, "Finished", 0),
-                new JsonArray(71, 51, 10, 41_000, 59, 2, true, "Finished", 0)),
-            ["a"] = new JsonArray(
-                new JsonArray(70, 10, 20, 1),
-                new JsonArray(71, 10, 20, 2)),
-            ["q"] = new JsonArray(
-                new JsonArray(70, 0, 40, 1),
-                new JsonArray(71, 0, 41, 2)),
-            ["g"] = new JsonArray(new JsonArray(
-                10, 0, 20, 40.5, Math.Log(40.5), 0.1, 1, 40, 41,
-                20, 40.5, Math.Log(40.5), 0.1, 1, 40, 41)),
-            ["h"] = new JsonArray()
+                new JsonArray(71, 51, 10, 41_000, 59, 2, true, "Finished", 0)
+            ),
+            ["a"] = new JsonArray(new JsonArray(70, 10, 20, 1), new JsonArray(71, 10, 20, 2)),
+            ["q"] = new JsonArray(new JsonArray(70, 0, 40, 1), new JsonArray(71, 0, 41, 2)),
+            ["g"] = new JsonArray(
+                new JsonArray(
+                    10,
+                    0,
+                    20,
+                    40.5,
+                    Math.Log(40.5),
+                    0.1,
+                    1,
+                    40,
+                    41,
+                    20,
+                    40.5,
+                    Math.Log(40.5),
+                    0.1,
+                    1,
+                    40,
+                    41
+                )
+            ),
+            ["h"] = new JsonArray(),
         };
 
         var parsed = DomainQueryService.ParseRiderDetailDataBundle(response);
@@ -307,7 +599,8 @@ public sealed class RankingServiceTests
         Assert.Equal(2, parsed.PaceSessions.Count);
         Assert.Equal(
             ["50", "51"],
-            parsed.PaceSessions.Select(session => session.Run.RiderId).Order().ToArray());
+            parsed.PaceSessions.Select(session => session.Run.RiderId).Order().ToArray()
+        );
     }
 
     [Fact]
@@ -315,31 +608,56 @@ public sealed class RankingServiceTests
     {
         var response = new JsonObject
         {
-            ["s"] = new JsonArray(
-                SessionRow(10, 2026, "EM"),
-                SessionRow(20, 2025, "JM")),
-            ["d"] = new JsonArray(new JsonArray(
-                50, 100050, "Test", "Rider", "USA", null, null, null,
-                null, null, false, null)),
+            ["s"] = new JsonArray(SessionRow(10, 2026, "EM"), SessionRow(20, 2025, "JM")),
+            ["d"] = new JsonArray(
+                new JsonArray(
+                    50,
+                    100050,
+                    "Test",
+                    "Rider",
+                    "USA",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+                )
+            ),
             ["r"] = new JsonArray(
                 new JsonArray(70, 50, 10, 40_000, 60, 1, true, "Finished", 100),
-                new JsonArray(80, 50, 20, 39_000, 61, 1, true, "Finished", 200)),
+                new JsonArray(80, 50, 20, 39_000, 61, 1, true, "Finished", 200)
+            ),
             ["f"] = new JsonArray(
                 new JsonArray(70, 50, 10, 40_000, 60, 1, true, "Finished"),
-                new JsonArray(80, 50, 20, 39_000, 61, 1, true, "Finished")),
+                new JsonArray(80, 50, 20, 39_000, 61, 1, true, "Finished")
+            ),
             ["x"] = new JsonArray(
                 new JsonArray(70, 0, 40_000, 60, 1, 1),
-                new JsonArray(80, 0, 39_000, 61, 1, 1)),
+                new JsonArray(80, 0, 39_000, 61, 1, 1)
+            ),
             ["t"] = new JsonArray(),
             ["a"] = new JsonArray(),
-            ["q"] = new JsonArray()
+            ["q"] = new JsonArray(),
         };
         var parsed = DomainQueryService.ParseRiderDetailDataBundle(response);
         var context = new RiderMetricsContext(
-            null, "EM", null, null, null, null, null, null, null, null, null)
+            null,
+            "EM",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        )
         {
             SeasonYears = [2022, 2023, 2024, 2025, 2026],
-            CategoryCodes = ["EM"]
+            CategoryCodes = ["EM"],
         };
 
         var filtered = DomainQueryService.RestrictToCategories(parsed, context);
@@ -349,14 +667,26 @@ public sealed class RankingServiceTests
         Assert.Equal("70", Assert.Single(filtered.Data.FieldResults).String("id"));
         Assert.Equal("70", Assert.Single(filtered.Data.Splits).String("result_id"));
         Assert.Equal(["70"], filtered.Data.PointsByResultId.Keys);
-        Assert.DoesNotContain(filtered.Data.Results, result =>
-            result.Object("sessions")?.Object("categories")?.String("code") == "JM");
+        Assert.DoesNotContain(
+            filtered.Data.Results,
+            result => result.Object("sessions")?.Object("categories")?.String("code") == "JM"
+        );
     }
 
     private static JsonArray SessionRow(int id, int season, string category) =>
         new(
-            id, id + 100, id + 200, "Final", "FINAL", $"{season}-06-01", id + 300,
-            season, $"{season}-05-30", 2, category);
+            id,
+            id + 100,
+            id + 200,
+            "Final",
+            "FINAL",
+            $"{season}-06-01",
+            id + 300,
+            season,
+            $"{season}-05-30",
+            2,
+            category
+        );
 
     [Fact]
     public void RiderDetailRunPreservesMiddleSectorGap()
@@ -364,26 +694,81 @@ public sealed class RankingServiceTests
         var log40 = Math.Log(40);
         var response = new JsonObject
         {
-            ["s"] = new JsonArray(new JsonArray(
-                10, 20, 30, "Final", "FINAL", "2025-06-01", 40, 2025,
-                "2025-05-30", 2, "EM", 1, 2, "WORLD_CUP", "World Cup",
-                5, "Dry", "Track", "Venue", "FRA", 2000, 10)),
-            ["d"] = new JsonArray(new JsonArray(
-                50, 100050, "Test", "Rider", "FRA", null, null, null,
-                null, null, false, null)),
-            ["r"] = new JsonArray(new JsonArray(
-                70, 50, 10, 130000, null, 1, true, "Finished", 0, null)),
+            ["s"] = new JsonArray(
+                new JsonArray(
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2025-06-01",
+                    40,
+                    2025,
+                    "2025-05-30",
+                    2,
+                    "EM",
+                    1,
+                    2,
+                    "WORLD_CUP",
+                    "World Cup",
+                    5,
+                    "Dry",
+                    "Track",
+                    "Venue",
+                    "FRA",
+                    2000,
+                    10
+                )
+            ),
+            ["d"] = new JsonArray(
+                new JsonArray(
+                    50,
+                    100050,
+                    "Test",
+                    "Rider",
+                    "FRA",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+                )
+            ),
+            ["r"] = new JsonArray(
+                new JsonArray(70, 50, 10, 130000, null, 1, true, "Finished", 0, null)
+            ),
             ["f"] = new JsonArray(),
             ["x"] = new JsonArray(),
             ["t"] = new JsonArray(),
-            ["a"] = new JsonArray(new JsonArray(
-                70, 10, 20, null,
-                null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null)),
+            ["a"] = new JsonArray(
+                new JsonArray(
+                    70,
+                    10,
+                    20,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            ),
             ["q"] = new JsonArray(
                 SectorAggregate(70, 0, 40, 1, log40),
                 SectorAggregate(70, 1, null, null, log40),
-                SectorAggregate(70, 2, 50, 1, log40))
+                SectorAggregate(70, 2, 50, 1, log40)
+            ),
         };
 
         var bundle = DomainQueryService.ParseRiderDetailDataBundle(response);
@@ -397,10 +782,7 @@ public sealed class RankingServiceTests
     [InlineData(1, 3, 33.33)]
     [InlineData(2, 3, 66.67)]
     [InlineData(3, 3, 100)]
-    public void PercentageUsesTwoDecimalPlaces(
-        int numerator,
-        int denominator,
-        decimal expected)
+    public void PercentageUsesTwoDecimalPlaces(int numerator, int denominator, decimal expected)
     {
         Assert.Equal(expected, RankingService.Percentage(numerator, denominator));
     }
@@ -423,10 +805,38 @@ public sealed class RankingServiceTests
     {
         var results = new[]
         {
-            Result("10", "2024-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "Finished"),
-            Result("10", "2024-06-01", sessionId: "102", roundId: "1", sessionType: "FINAL", status: "DNS"),
-            Result("10", "2024-07-01", sessionId: "150", roundId: "2", sessionType: "Q1", status: "Finished"),
-            Result("10", "2024-08-01", sessionId: "250", roundId: "3", sessionType: "Q1", status: "DNS")
+            Result(
+                "10",
+                "2024-06-01",
+                sessionId: "101",
+                roundId: "1",
+                sessionType: "FINAL",
+                status: "Finished"
+            ),
+            Result(
+                "10",
+                "2024-06-01",
+                sessionId: "102",
+                roundId: "1",
+                sessionType: "FINAL",
+                status: "DNS"
+            ),
+            Result(
+                "10",
+                "2024-07-01",
+                sessionId: "150",
+                roundId: "2",
+                sessionType: "Q1",
+                status: "Finished"
+            ),
+            Result(
+                "10",
+                "2024-08-01",
+                sessionId: "250",
+                roundId: "3",
+                sessionType: "Q1",
+                status: "DNS"
+            ),
         };
 
         var rates = RankingService.CalculateParticipationRates(results);
@@ -440,10 +850,38 @@ public sealed class RankingServiceTests
     {
         var results = new[]
         {
-            Result("10", "2024-05-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "Finished"),
-            Result("10", "2024-06-01", sessionId: "102", roundId: "2", sessionType: "FINAL", status: "DNF"),
-            Result("10", "2024-07-01", sessionId: "103", roundId: "3", sessionType: "FINAL", status: "DNS"),
-            Result("10", "2024-08-01", sessionId: "104", roundId: "4", sessionType: "FINAL", status: "DSQ")
+            Result(
+                "10",
+                "2024-05-01",
+                sessionId: "101",
+                roundId: "1",
+                sessionType: "FINAL",
+                status: "Finished"
+            ),
+            Result(
+                "10",
+                "2024-06-01",
+                sessionId: "102",
+                roundId: "2",
+                sessionType: "FINAL",
+                status: "DNF"
+            ),
+            Result(
+                "10",
+                "2024-07-01",
+                sessionId: "103",
+                roundId: "3",
+                sessionType: "FINAL",
+                status: "DNS"
+            ),
+            Result(
+                "10",
+                "2024-08-01",
+                sessionId: "104",
+                roundId: "4",
+                sessionType: "FINAL",
+                status: "DSQ"
+            ),
         };
 
         var rates = RankingService.CalculateParticipationRates(results);
@@ -459,9 +897,19 @@ public sealed class RankingServiceTests
     [InlineData("DNF", 1)]
     [InlineData("DSQ", 1)]
     [InlineData("Finished", 1)]
-    public void FinalStartCountAndQualificationUseSeparateStatusRules(string status, int expectedStarts)
+    public void FinalStartCountAndQualificationUseSeparateStatusRules(
+        string status,
+        int expectedStarts
+    )
     {
-        var final = Result("10", "2026-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: status);
+        var final = Result(
+            "10",
+            "2026-06-01",
+            sessionId: "101",
+            roundId: "1",
+            sessionType: "FINAL",
+            status: status
+        );
 
         var rates = RankingService.CalculateParticipationRates([final]);
 
@@ -474,9 +922,30 @@ public sealed class RankingServiceTests
     {
         JsonObject[] results =
         [
-            Result("10", "2026-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "DNS"),
-            Result("10", "2026-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "DNF"),
-            Result("10", "2026-06-01", sessionId: "101", roundId: "1", sessionType: "FINAL", status: "DNF")
+            Result(
+                "10",
+                "2026-06-01",
+                sessionId: "101",
+                roundId: "1",
+                sessionType: "FINAL",
+                status: "DNS"
+            ),
+            Result(
+                "10",
+                "2026-06-01",
+                sessionId: "101",
+                roundId: "1",
+                sessionType: "FINAL",
+                status: "DNF"
+            ),
+            Result(
+                "10",
+                "2026-06-01",
+                sessionId: "101",
+                roundId: "1",
+                sessionType: "FINAL",
+                status: "DNF"
+            ),
         ];
 
         var rates = RankingService.CalculateParticipationRates(results);
@@ -488,15 +957,12 @@ public sealed class RankingServiceTests
     [Fact]
     public void TeamFallbackUsesLatestHistoricalTeamNotLaterThanSelectedResult()
     {
-        var selected = new[]
-        {
-            Result("10", "2024-09-01")
-        };
+        var selected = new[] { Result("10", "2024-09-01") };
         var historical = new[]
         {
             Result("10", "2024-06-01", "1", "OLD", "Old Team"),
             Result("10", "2024-08-01", "2", "CUR", "Current Team"),
-            Result("10", "2025-01-01", "3", "NEW", "Future Team")
+            Result("10", "2025-01-01", "3", "NEW", "Future Team"),
         };
 
         var histories = RankingService.BuildFallbackTeamHistories(selected, historical);
@@ -513,16 +979,20 @@ public sealed class RankingServiceTests
         {
             ComparisonSession("101", "1", "2025-05-10"),
             ComparisonSession("102", "2", "2025-06-14"),
-            ComparisonSession("103", "2", "2025-06-15")
+            ComparisonSession("103", "2", "2025-06-15"),
         };
         var results = new[]
         {
             Result("10", "2025-05-10", sessionId: "101", roundId: "1"),
             Result("10", "2025-06-14", sessionId: "102", roundId: "2"),
-            Result("11", "2025-06-15", sessionId: "103", roundId: "2")
+            Result("11", "2025-06-15", sessionId: "103", roundId: "2"),
         };
 
-        var hasComparison = RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions);
+        var hasComparison = RankingService.TryWithoutLatestRound(
+            sessions,
+            results,
+            out var previousSessions
+        );
 
         Assert.True(hasComparison);
         Assert.Single(previousSessions);
@@ -535,15 +1005,17 @@ public sealed class RankingServiceTests
         var sessions = new[]
         {
             ComparisonSession("101", "1", "2025-05-10"),
-            ComparisonSession("102", "1", "2025-05-11")
+            ComparisonSession("102", "1", "2025-05-11"),
         };
         var results = new[]
         {
             Result("10", "2025-05-10", sessionId: "101", roundId: "1"),
-            Result("11", "2025-05-11", sessionId: "102", roundId: "1")
+            Result("11", "2025-05-11", sessionId: "102", roundId: "1"),
         };
 
-        Assert.False(RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions));
+        Assert.False(
+            RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions)
+        );
         Assert.Empty(previousSessions);
     }
 
@@ -554,15 +1026,17 @@ public sealed class RankingServiceTests
         {
             ComparisonSession("101", "9", "2025-05-10"),
             ComparisonSession("102", "10", "2025-06-14"),
-            ComparisonSession("103", "11", "2025-07-20")
+            ComparisonSession("103", "11", "2025-07-20"),
         };
         var results = new[]
         {
             Result("10", "2025-05-10", sessionId: "101", roundId: "9"),
-            Result("10", "2025-06-14", sessionId: "102", roundId: "10")
+            Result("10", "2025-06-14", sessionId: "102", roundId: "10"),
         };
 
-        Assert.True(RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions));
+        Assert.True(
+            RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions)
+        );
         Assert.Single(previousSessions);
         Assert.Equal("101", previousSessions[0].String("id"));
     }
@@ -573,15 +1047,17 @@ public sealed class RankingServiceTests
         var sessions = new[]
         {
             ComparisonSession("101", "9", "2025-06-14"),
-            ComparisonSession("102", "10", "2025-06-14")
+            ComparisonSession("102", "10", "2025-06-14"),
         };
         var results = new[]
         {
             Result("10", "2025-06-14", sessionId: "101", roundId: "9"),
-            Result("11", "2025-06-14", sessionId: "102", roundId: "10")
+            Result("11", "2025-06-14", sessionId: "102", roundId: "10"),
         };
 
-        Assert.True(RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions));
+        Assert.True(
+            RankingService.TryWithoutLatestRound(sessions, results, out var previousSessions)
+        );
         Assert.Single(previousSessions);
         Assert.Equal("101", previousSessions[0].String("id"));
     }
@@ -589,13 +1065,15 @@ public sealed class RankingServiceTests
     [Fact]
     public void PreviousFilterQueryMapsComparisonParameters()
     {
-        var query = Query(new()
-        {
-            ["comparisonSeason"] = "2026",
-            ["comparisonCategory"] = "elite_women",
-            ["comparisonTrackId"] = "4,7",
-            ["comparisonSearch"] = "rider"
-        });
+        var query = Query(
+            new()
+            {
+                ["comparisonSeason"] = "2026",
+                ["comparisonCategory"] = "elite_women",
+                ["comparisonTrackId"] = "4,7",
+                ["comparisonSearch"] = "rider",
+            }
+        );
 
         var previous = RankingService.PreviousFilterQuery(query);
 
@@ -619,13 +1097,14 @@ public sealed class RankingServiceTests
             2,
             "world_cup",
             "FINAL",
-            "completed")
+            "completed"
+        )
         {
             SeasonYears = [2025, 2026],
             CategoryCodes = ["EM"],
             TrackIds = ["4", "7"],
             ConditionIds = [2],
-            CompetitionClassIds = [1, 2]
+            CompetitionClassIds = [1, 2],
         };
 
         var baseline = RankingService.DefaultRankingContext(context);
@@ -645,10 +1124,7 @@ public sealed class RankingServiceTests
     {
         var service = ParserOnlyService();
 
-        var filters = service.ReadMetricFilters(Query(new()
-        {
-            ["confidence"] = "81"
-        }));
+        var filters = service.ReadMetricFilters(Query(new() { ["confidence"] = "81" }));
 
         Assert.Equal(81m, filters.MinConfidence);
         Assert.Null(filters.MaxConfidence);
@@ -659,11 +1135,9 @@ public sealed class RankingServiceTests
     {
         var service = ParserOnlyService();
 
-        var filters = service.ReadMetricFilters(Query(new()
-        {
-            ["minConfidence"] = "81",
-            ["maxConfidence"] = "92"
-        }));
+        var filters = service.ReadMetricFilters(
+            Query(new() { ["minConfidence"] = "81", ["maxConfidence"] = "92" })
+        );
 
         Assert.Equal(81m, filters.MinConfidence);
         Assert.Equal(92m, filters.MaxConfidence);
@@ -676,10 +1150,9 @@ public sealed class RankingServiceTests
     {
         var service = ParserOnlyService();
 
-        Assert.ThrowsAny<Exception>(() => service.ReadMetricFilters(Query(new()
-        {
-            ["confidence"] = confidence
-        })));
+        Assert.ThrowsAny<Exception>(() =>
+            service.ReadMetricFilters(Query(new() { ["confidence"] = confidence }))
+        );
     }
 
     private static RankingService ParserOnlyService() =>
@@ -688,18 +1161,36 @@ public sealed class RankingServiceTests
             null!,
             null!,
             new RankingSingleFlight(),
-            new MemoryCache(new MemoryCacheOptions()));
+            new MemoryCache(new MemoryCacheOptions())
+        );
 
     private static JsonArray SectorAggregate(
         long resultId,
         int sectorIndex,
         double? time,
         int? rank,
-        double logMedian) =>
+        double logMedian
+    ) =>
         new(
-            resultId, sectorIndex, time, rank,
-            20, 40, logMedian, 0.01, 1, 39, 40,
-            20, 40, logMedian, 0.01, 1, 39, 40);
+            resultId,
+            sectorIndex,
+            time,
+            rank,
+            20,
+            40,
+            logMedian,
+            0.01,
+            1,
+            39,
+            40,
+            20,
+            40,
+            logMedian,
+            0.01,
+            1,
+            39,
+            40
+        );
 
     private static JsonObject Result(
         string riderId,
@@ -710,7 +1201,8 @@ public sealed class RankingServiceTests
         string? sessionId = null,
         string? roundId = null,
         string? sessionType = null,
-        string? status = null)
+        string? status = null
+    )
     {
         var result = new JsonObject
         {
@@ -720,10 +1212,10 @@ public sealed class RankingServiceTests
                 ["id"] = sessionId,
                 ["round_id"] = roundId,
                 ["session_type"] = sessionType,
-                ["session_date"] = date
+                ["session_date"] = date,
             },
             ["session_id"] = sessionId,
-            ["status"] = status
+            ["status"] = status,
         };
 
         if (teamId is not null)
@@ -732,7 +1224,7 @@ public sealed class RankingServiceTests
             {
                 ["id"] = teamId,
                 ["code"] = teamCode,
-                ["name"] = teamName
+                ["name"] = teamName,
             };
         }
 
@@ -740,20 +1232,15 @@ public sealed class RankingServiceTests
     }
 
     private static JsonObject Session(string id, string sessionType) =>
-        new()
-        {
-            ["id"] = id,
-            ["session_type"] = sessionType
-        };
+        new() { ["id"] = id, ["session_type"] = sessionType };
 
     private static JsonObject ComparisonSession(string id, string roundId, string date) =>
         new()
         {
             ["id"] = id,
             ["round_id"] = roundId,
-            ["session_date"] = date
+            ["session_date"] = date,
         };
 
-    private static QueryCollection Query(Dictionary<string, StringValues> values) =>
-        new(values);
+    private static QueryCollection Query(Dictionary<string, StringValues> values) => new(values);
 }

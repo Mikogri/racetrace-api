@@ -6,6 +6,8 @@ API odpowiada za obliczenia sportowe, analitykę i predykcje. Frontend zarządza
 
 ## Backend
 
+`Features/Results/ResultEmbedMapping` owns normalization of database/provider result, session and round embeds. `Features/Riders/RiderTeamHistoryMapper` owns team-history projections and their result-date fallback. Callers use these mapping helpers directly rather than routing pure transformations through `DomainQueryService`; the latter retains query orchestration. Optional nested metrics in dynamic responses keep their DTO until serialization via `JsonValue`, preserving the existing camelCase/null/nested-field contract without building a second JSON tree.
+
 `Program.cs` składa aplikację przez metody z `Infrastructure/ServiceCollectionExtensions.cs`. Rejestruje konfigurację, klienta HTTP, cache i usługi. Pipeline obejmuje kompresję odpowiedzi, telemetrię, obsługę błędów, kontrolę dostępu i Output Cache przed kontrolerami. Większość usług aplikacyjnych ma zakres pojedynczego żądania; cache, kontrola rewizji i SingleFlight są współdzielone w procesie.
 
 Kontrolery w `Controllers/` określają adresy HTTP, typy odpowiedzi i wymagane uprawnienia. `QueryValidationService` oraz `Features/Metrics/MetricsQueryParser.cs` interpretują zapytanie. Usługi w `Services/` organizują odczyty, a pomocnicze moduły w `Features/` przygotowują dane lub odpowiedź. Nie każda klasa w `Services/` jest samodzielną warstwą domenową.
@@ -29,6 +31,8 @@ Importy oddzielają pobranie i mapowanie danych od zapisu: przykładowo `ChronoR
 Migracje znajdują się w `supabase/migrations/`, a starsze skrypty również pod `racetrace-api/Database/` i innymi historycznymi lokalizacjami SQL. Ich obecność w repozytorium nie dowodzi wdrożenia do konkretnej bazy. API nie stosuje migracji podczas startu.
 
 ## Frontend
+
+Home sections live in separate `features/home/components/*-section.tsx` modules, with their existing import entry retained in `home-sections.tsx`. Shared table skeletons and rider cells remain in `home-section-shared.tsx`. Compare and Live share only rider-name abbreviation; normalization of name casing and view-specific fallbacks remain with their callers. The frontend uses npm and one `package-lock.json` for local development, CI and Cloudflare.
 
 The public interface is branded **Race Trace MTB** (repository names and technical identifiers stay unchanged). SEO without SSR or prerendering: `index.html` carries the home title, description, canonical URL, Open Graph and Twitter Card tags, `WebSite` JSON-LD (site name Race Trace MTB) and the web manifest; dark-background icons and `og-image.png` live in `public/`. `usePageMeta` with entries from `src/config/seo.ts` updates the title, description, canonical URL (path without query) and social tags per page; rider, round and live-session pages get generic entries and stay out of `sitemap.xml`, which together with `robots.txt` points to `https://racetracemtb.com`. Home uses a 46 px main heading (`--font-size-hero`), scaled down on narrow screens. Next Round shows “// Season over, see you {nextSeason} //” after a successful overview with no next round. Text stays secondary grey; only slashes use primary. Header metadata retains three entries: season, Season over, and See you {nextSeason}. The year follows the latest completed season; if the selected year has no rounds, the existing seasons dictionary supplies the latest known season rather than incrementing the calendar year. Loading and request errors remain separate states.
 

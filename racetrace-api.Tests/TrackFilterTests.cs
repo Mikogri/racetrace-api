@@ -14,13 +14,16 @@ public sealed class TrackFilterTests
         var supabase = new TrackFilterSupabaseClient();
         var service = new DomainQueryService(supabase);
         var context = DomainQueryService.MetricsContextFromQuery(
-            new QueryCollection(new Dictionary<string, StringValues>
-            {
-                ["country_code"] = "AUT",
-                ["venue"] = "Leogang",
-                ["track_name"] = "Speedster DH"
-            }),
-            new QueryValidationService());
+            new QueryCollection(
+                new Dictionary<string, StringValues>
+                {
+                    ["country_code"] = "AUT",
+                    ["venue"] = "Leogang",
+                    ["track_name"] = "Speedster DH",
+                }
+            ),
+            new QueryValidationService()
+        );
 
         var roundIds = await service.ResolveRoundIdsAsync(context);
 
@@ -33,14 +36,14 @@ public sealed class TrackFilterTests
         AssertQueryParameter(supabase.RoundQuery!, "track_id", "track-1");
     }
 
-    private static void AssertQueryParameter(
-        SupabaseQuery query,
-        string key,
-        string expectedValue)
+    private static void AssertQueryParameter(SupabaseQuery query, string key, string expectedValue)
     {
-        Assert.Contains(query.Parameters, parameter =>
-            parameter.Key == key &&
-            parameter.Value.Contains(expectedValue, StringComparison.Ordinal));
+        Assert.Contains(
+            query.Parameters,
+            parameter =>
+                parameter.Key == key
+                && parameter.Value.Contains(expectedValue, StringComparison.Ordinal)
+        );
     }
 
     private sealed class TrackFilterSupabaseClient : ISupabaseRestClient
@@ -53,22 +56,23 @@ public sealed class TrackFilterTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             if (query.Table == "tracks")
             {
                 TrackQuery = query;
-                return Task.FromResult(new SupabaseQueryResult(
-                    [new JsonObject { ["id"] = "track-1" }],
-                    1));
+                return Task.FromResult(
+                    new SupabaseQueryResult([new JsonObject { ["id"] = "track-1" }], 1)
+                );
             }
 
             if (query.Table == "rounds")
             {
                 RoundQuery = query;
-                return Task.FromResult(new SupabaseQueryResult(
-                    [new JsonObject { ["id"] = "round-1" }],
-                    1));
+                return Task.FromResult(
+                    new SupabaseQueryResult([new JsonObject { ["id"] = "round-1" }], 1)
+                );
             }
 
             throw new NotSupportedException($"Unexpected table '{query.Table}'.");
@@ -77,7 +81,8 @@ public sealed class TrackFilterTests
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             throw new NotSupportedException();
         }
@@ -87,7 +92,8 @@ public sealed class TrackFilterTests
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             throw new NotSupportedException();
         }
@@ -97,7 +103,8 @@ public sealed class TrackFilterTests
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             throw new NotSupportedException();
         }
@@ -106,7 +113,8 @@ public sealed class TrackFilterTests
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             throw new NotSupportedException();
         }
@@ -115,7 +123,8 @@ public sealed class TrackFilterTests
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             throw new NotSupportedException();
         }

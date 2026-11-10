@@ -32,8 +32,7 @@ public sealed class ApiAccessGuardTests
         var guard = Guard("read-secret", "admin-secret");
         var request = new DefaultHttpContext().Request;
 
-        var exception = Assert.Throws<ApiException>(() =>
-            guard.EnsureAuthorized(request));
+        var exception = Assert.Throws<ApiException>(() => guard.EnsureAuthorized(request));
 
         Assert.Equal(StatusCodes.Status401Unauthorized, exception.StatusCode);
         Assert.Equal("UNAUTHORIZED", exception.Code);
@@ -49,8 +48,7 @@ public sealed class ApiAccessGuardTests
         var guard = Guard("read-secret", "admin-secret");
         var request = Request(header);
 
-        var exception = Assert.Throws<ApiException>(() =>
-            guard.EnsureAuthorized(request));
+        var exception = Assert.Throws<ApiException>(() => guard.EnsureAuthorized(request));
 
         Assert.Equal(StatusCodes.Status401Unauthorized, exception.StatusCode);
         Assert.Equal("UNAUTHORIZED", exception.Code);
@@ -62,22 +60,18 @@ public sealed class ApiAccessGuardTests
         var guard = Guard(readSecret: null, adminSecret: null);
         var request = Request("Bearer any-token");
 
-        var exception = Assert.Throws<ApiException>(() =>
-            guard.EnsureAuthorized(request));
+        var exception = Assert.Throws<ApiException>(() => guard.EnsureAuthorized(request));
 
-        Assert.Equal(
-            StatusCodes.Status503ServiceUnavailable,
-            exception.StatusCode);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, exception.StatusCode);
         Assert.Equal("API_ACCESS_SECRET_MISSING", exception.Code);
     }
 
-    private static ApiAccessGuard Guard(
-        string? readSecret,
-        string? adminSecret)
+    private static ApiAccessGuard Guard(string? readSecret, string? adminSecret)
     {
         return new ApiAccessGuard(
             Options.Create(new ApiAccessOptions { ReadSecret = readSecret }),
-            Options.Create(new AdminOptions { ApiSecret = adminSecret }));
+            Options.Create(new AdminOptions { ApiSecret = adminSecret })
+        );
     }
 
     private static HttpRequest Request(string authorization)

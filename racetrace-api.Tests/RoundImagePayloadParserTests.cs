@@ -17,12 +17,9 @@ public sealed class RoundImagePayloadParserTests
     [InlineData("data:image/png;base64," + OnePixelPng)]
     public void ParseAcceptsRawBase64AndPngDataUrl(string imageBase64)
     {
-        var result = RoundImagePayloadParser.Parse(new ImportRoundImagePayload(
-            imageBase64,
-            "route.png",
-            "World Cup route",
-            1,
-            1));
+        var result = RoundImagePayloadParser.Parse(
+            new ImportRoundImagePayload(imageBase64, "route.png", "World Cup route", 1, 1)
+        );
 
         Assert.NotNull(result);
         Assert.Equal("route.webp", result.FileName);
@@ -38,12 +35,10 @@ public sealed class RoundImagePayloadParserTests
     public void ParseRejectsInvalidBase64()
     {
         var exception = Assert.Throws<ApiException>(() =>
-            RoundImagePayloadParser.Parse(new ImportRoundImagePayload(
-                "not-base64",
-                null,
-                null,
-                null,
-                null)));
+            RoundImagePayloadParser.Parse(
+                new ImportRoundImagePayload("not-base64", null, null, null, null)
+            )
+        );
 
         Assert.Equal("ROUND_IMAGE_INVALID_BASE64", exception.Code);
         Assert.Equal(StatusCodes.Status400BadRequest, exception.StatusCode);
@@ -53,12 +48,16 @@ public sealed class RoundImagePayloadParserTests
     public void ParseRejectsNonPngData()
     {
         var exception = Assert.Throws<ApiException>(() =>
-            RoundImagePayloadParser.Parse(new ImportRoundImagePayload(
-                Convert.ToBase64String("not a png"u8.ToArray()),
-                null,
-                null,
-                null,
-                null)));
+            RoundImagePayloadParser.Parse(
+                new ImportRoundImagePayload(
+                    Convert.ToBase64String("not a png"u8.ToArray()),
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            )
+        );
 
         Assert.Equal("ROUND_IMAGE_NOT_PNG", exception.Code);
     }
@@ -67,12 +66,10 @@ public sealed class RoundImagePayloadParserTests
     public void ParseRejectsInvalidDimensionsBeforeImport()
     {
         var exception = Assert.Throws<ApiException>(() =>
-            RoundImagePayloadParser.Parse(new ImportRoundImagePayload(
-                OnePixelPng,
-                null,
-                null,
-                0,
-                1)));
+            RoundImagePayloadParser.Parse(
+                new ImportRoundImagePayload(OnePixelPng, null, null, 0, 1)
+            )
+        );
 
         Assert.Equal("ROUND_IMAGE_WIDTH_INVALID", exception.Code);
     }
@@ -80,14 +77,21 @@ public sealed class RoundImagePayloadParserTests
     [Fact]
     public async Task UploadStoresConvertedWebpWithMatchingContentType()
     {
-        var image = RoundImagePayloadParser.Parse(new ImportRoundImagePayload(OnePixelPng, "route.png", null, null, null))!;
+        var image = RoundImagePayloadParser.Parse(
+            new ImportRoundImagePayload(OnePixelPng, "route.png", null, null, null)
+        )!;
         using var handler = new UploadHandler();
         using var http = new HttpClient(handler);
-        var storage = new RoundImageStorageService(http, Options.Create(new SupabaseOptions
-        {
-            Url = "https://storage.example.test",
-            ServiceRoleKey = "test-key"
-        }));
+        var storage = new RoundImageStorageService(
+            http,
+            Options.Create(
+                new SupabaseOptions
+                {
+                    Url = "https://storage.example.test",
+                    ServiceRoleKey = "test-key",
+                }
+            )
+        );
 
         var path = await storage.UploadAsync(image, CancellationToken.None);
 
@@ -101,7 +105,10 @@ public sealed class RoundImagePayloadParserTests
         public string? ContentType { get; private set; }
         public byte[]? UploadedBytes { get; private set; }
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
         {
             ContentType = request.Content!.Headers.ContentType?.MediaType;
             UploadedBytes = await request.Content.ReadAsByteArrayAsync(cancellationToken);

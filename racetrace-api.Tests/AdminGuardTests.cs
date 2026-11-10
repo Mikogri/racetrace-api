@@ -56,12 +56,11 @@ public sealed class AdminGuardTests
         Assert.Equal("FORBIDDEN", exception.Code);
     }
 
-    private static AdminGuard Guard(
-        string secret,
-        string readSecret = "read-secret")
+    private static AdminGuard Guard(string secret, string readSecret = "read-secret")
     {
         return new AdminGuard(
             Options.Create(new AdminOptions { ApiSecret = secret }),
-            Options.Create(new ApiAccessOptions { ReadSecret = readSecret }));
+            Options.Create(new ApiAccessOptions { ReadSecret = readSecret })
+        );
     }
 }

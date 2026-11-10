@@ -1,0 +1,25 @@
+**/bin/
+**/obj/
+**/artifacts/
+**/.codex-*/
+**/.artifacts-*/
+**/graphify-out/
+**/TestResults/
+**/coverage/
+**/Migrations/
+**/migrations/
+**/Database/
+**/supabase/
+**/*.g.cs
+**/*.generated.cs
+**/*.Designer.cs
+# Only C# source is in scope; preserve project files and XML assets.
+**/*.xml
+**/*.csproj
+**/*.props
+**/*.targets
+**/*.slnx
+**/*.config
+**/*.xaml
+**/*.axaml
+**/*.csx

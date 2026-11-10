@@ -1,15 +1,16 @@
-using RaceTrace.Api.Features.Metrics;
-using RaceTrace.Api.Features.Ranking;
-using static RaceTrace.Api.Features.Ranking.RankingResponseProjection;
-using static RaceTrace.Api.Features.Ranking.RankingSnapshotBuilder;
-using RaceTrace.Api.Infrastructure.Calculations;
-using RaceTrace.Api.Infrastructure.Telemetry;
-using System.Text.Json.Nodes;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
+using RaceTrace.Api.Features.Metrics;
+using RaceTrace.Api.Features.Ranking;
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Infrastructure.Calculations;
+using RaceTrace.Api.Infrastructure.Telemetry;
 using RaceTrace.Api.Models;
+using static RaceTrace.Api.Features.Ranking.RankingResponseProjection;
+using static RaceTrace.Api.Features.Ranking.RankingSnapshotBuilder;
 
 namespace RaceTrace.Api.Services;
 
@@ -48,7 +49,7 @@ public sealed class RankingService
         ["finalsRate"] = "finals_count",
         ["finals_rate"] = "finals_count",
         ["qualifyingRate"] = "quali_rate",
-        ["quali_rate"] = "quali_rate"
+        ["quali_rate"] = "quali_rate",
     };
 
     private readonly QueryValidationService _validator;
@@ -64,7 +65,10 @@ public sealed class RankingService
         DomainQueryService domainQueries,
         MetricsService metrics,
         RankingSingleFlight singleFlight,
-        IMemoryCache cache, DataRevisionService? revisions = null, CalculationProvenance? provenance = null)
+        IMemoryCache cache,
+        DataRevisionService? revisions = null,
+        CalculationProvenance? provenance = null
+    )
     {
         _validator = validator;
         _domainQueries = domainQueries;
@@ -75,7 +79,10 @@ public sealed class RankingService
         _provenance = provenance;
     }
 
-    public async Task<RankingResponseDto> ListRankingAsync(IQueryCollection queryString, CancellationToken cancellationToken)
+    public async Task<RankingResponseDto> ListRankingAsync(
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         using var measurement = ApiTelemetry.Measure("ranking_total");
         var forceRefresh = queryString["refresh"] == "1";
@@ -84,21 +91,26 @@ public sealed class RankingService
         var sort = new SortRequest(Sorts[requestedSort.Sort], requestedSort.Order);
         var startFilters = ReadStartFilters(queryString);
         var metricFilters = ReadMetricFilters(queryString);
-        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
+        var context = await _domainQueries.ParseMetricsContextAsync(
+            queryString,
+            _validator,
+            cancellationToken
+        );
         var riderQuery = _validator.StringAny(queryString, "search", "q");
         var nation = _validator.String(queryString, "nation");
         var snapshot = await BuildSnapshotAsync(
             context,
             cancellationToken,
             nation: nation,
-            forceRefresh: forceRefresh);
-        var totalSessions = snapshot.Sessions
-            .Select(session => session.String("id"))
+            forceRefresh: forceRefresh
+        );
+        var totalSessions = snapshot
+            .Sessions.Select(session => session.String("id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count();
-        var totalFinalSessions = snapshot.Sessions
-            .Where(DomainQueryService.IsFinalSession)
+        var totalFinalSessions = snapshot
+            .Sessions.Where(ResultEmbedMapping.IsFinalSession)
             .Select(session => session.String("id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -114,9 +126,7 @@ public sealed class RankingService
                     .Where(row => StartFilters(row, startFilters));
             }
 
-            return sourceRows
-                .Select(row => row.DeepClone().AsObject())
-                .ToArray();
+            return sourceRows.Select(row => row.DeepClone().AsObject()).ToArray();
         }
 
         var rows = PrepareRows(snapshot, applyCurrentRowFilters: true);
@@ -128,35 +138,47 @@ public sealed class RankingService
         string? resolvedComparisonBasis = null;
         var requestedComparison = _validator.String(queryString, "comparison");
         JsonObject[]? comparisonRows = null;
-        if (string.Equals(requestedComparison, "previousRound", StringComparison.OrdinalIgnoreCase) &&
-            TryWithoutLatestRound(snapshot, out var previousSessions))
+        if (
+            string.Equals(requestedComparison, "previousRound", StringComparison.OrdinalIgnoreCase)
+            && TryWithoutLatestRound(snapshot, out var previousSessions)
+        )
         {
             var previousSnapshot = await BuildSnapshotAsync(
                 context,
                 cancellationToken,
                 resolvedSessions: previousSessions,
                 nation: nation,
-                forceRefresh: forceRefresh);
+                forceRefresh: forceRefresh
+            );
             comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: true);
             resolvedComparisonBasis = "previousRound";
         }
-        else if (string.Equals(requestedComparison, "defaultFilters", StringComparison.OrdinalIgnoreCase))
+        else if (
+            string.Equals(requestedComparison, "defaultFilters", StringComparison.OrdinalIgnoreCase)
+        )
         {
             var defaultContext = DefaultRankingContext(context);
-            var defaultSnapshot = await BuildSnapshotAsync(defaultContext, cancellationToken, forceRefresh: forceRefresh);
+            var defaultSnapshot = await BuildSnapshotAsync(
+                defaultContext,
+                cancellationToken,
+                forceRefresh: forceRefresh
+            );
             var defaultRows = PrepareRows(defaultSnapshot, applyCurrentRowFilters: false);
             AssignCanonicalPositions(defaultRows, sort.Sort);
 
-            if (SameSessionSet(snapshot.Sessions, defaultSnapshot.Sessions) &&
-                SameRiderSet(rows, defaultRows) &&
-                TryWithoutLatestRound(snapshot, out var defaultPreviousSessions))
+            if (
+                SameSessionSet(snapshot.Sessions, defaultSnapshot.Sessions)
+                && SameRiderSet(rows, defaultRows)
+                && TryWithoutLatestRound(snapshot, out var defaultPreviousSessions)
+            )
             {
                 var previousSnapshot = await BuildSnapshotAsync(
                     context,
                     cancellationToken,
                     resolvedSessions: defaultPreviousSessions,
                     nation: nation,
-                    forceRefresh: forceRefresh);
+                    forceRefresh: forceRefresh
+                );
                 comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: true);
                 resolvedComparisonBasis = "previousRound";
             }
@@ -166,14 +188,25 @@ public sealed class RankingService
                 resolvedComparisonBasis = "defaultFilters";
             }
         }
-        else if (string.Equals(requestedComparison, "previousFilters", StringComparison.OrdinalIgnoreCase))
+        else if (
+            string.Equals(
+                requestedComparison,
+                "previousFilters",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
             var previousFilterQuery = PreviousFilterQuery(queryString);
-            var previousContext = await _domainQueries.ParseMetricsContextAsync(previousFilterQuery, _validator, cancellationToken);
+            var previousContext = await _domainQueries.ParseMetricsContextAsync(
+                previousFilterQuery,
+                _validator,
+                cancellationToken
+            );
             var previousSnapshot = await BuildSnapshotAsync(
                 previousContext,
                 cancellationToken,
-                forceRefresh: forceRefresh);
+                forceRefresh: forceRefresh
+            );
             comparisonRows = PrepareRows(previousSnapshot, applyCurrentRowFilters: false);
             resolvedComparisonBasis = "previousFilters";
         }
@@ -187,14 +220,22 @@ public sealed class RankingService
         }
 
         // Search changes visibility, not the ranking positions used for comparison.
-        sorted = sorted.Where(row => DomainQueryService.MatchesRankingRider(
-            row.Object("rider"), riderQuery, null)).ToArray();
+        sorted = sorted
+            .Where(row =>
+                DomainQueryService.MatchesRankingRider(row.Object("rider"), riderQuery, null)
+            )
+            .ToArray();
         var data = sorted.Skip(page.Offset).Take(page.Limit).ToArray();
         using var projectionMeasurement = ApiTelemetry.Measure("ranking_projection");
-        var items = data.Select(row => ToPublicDto(
-            row,
-            previousRowsByRider?.GetValueOrDefault(row.String("rider_id") ?? string.Empty))).ToArray();
-        var totalPages = sorted.Length == 0 ? 0 : (int)Math.Ceiling(sorted.Length / (double)page.Limit);
+        var items = data.Select(row =>
+                ToPublicDto(
+                    row,
+                    previousRowsByRider?.GetValueOrDefault(row.String("rider_id") ?? string.Empty)
+                )
+            )
+            .ToArray();
+        var totalPages =
+            sorted.Length == 0 ? 0 : (int)Math.Ceiling(sorted.Length / (double)page.Limit);
         return new RankingResponseDto(
             items,
             page.Page,
@@ -204,7 +245,8 @@ public sealed class RankingService
             page.Page > 1,
             page.Page < totalPages,
             new RankingSummaryDto(totalSessions, totalFinalSessions, sorted.Length),
-            previousRowsByRider is null ? null : resolvedComparisonBasis);
+            previousRowsByRider is null ? null : resolvedComparisonBasis
+        );
     }
 
     internal async Task<RankingSnapshot> BuildSnapshotAsync(
@@ -215,11 +257,22 @@ public sealed class RankingService
         string? nation = null,
         string? riderId = null,
         bool forceRefresh = false,
-        Func<CancellationToken, Task<RiderDetailDataBundle>>? suppliedRiderBundleFactory = null)
+        Func<CancellationToken, Task<RiderDetailDataBundle>>? suppliedRiderBundleFactory = null
+    )
     {
-        var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken, forceRefresh) : null;
-        var key = BuildSingleFlightKey(context, resolvedSessions, riderQuery, nation, riderId) +
-            (revision is null ? "" : ":" + revision.ForContext(context) + ":" + AlgorithmCatalog.Current.Fingerprint("rating"));
+        var revision = _revisions is { Enabled: true }
+            ? await _revisions.GetAsync(cancellationToken, forceRefresh)
+            : null;
+        var key =
+            BuildSingleFlightKey(context, resolvedSessions, riderQuery, nation, riderId)
+            + (
+                revision is null
+                    ? ""
+                    : ":"
+                        + revision.ForContext(context)
+                        + ":"
+                        + AlgorithmCatalog.Current.Fingerprint("rating")
+            );
         if (!forceRefresh && _cache.TryGetValue<RankingSnapshot>(key, out var cached))
         {
             ApiTelemetry.Cache("memory", "hit");
@@ -239,7 +292,9 @@ public sealed class RankingService
 
                 // A shared calculation must not inherit the first waiter's disconnect token.
                 // Each waiter can still cancel its own WaitAsync in RankingSingleFlight.
-                using var computationTimeout = new CancellationTokenSource(SnapshotComputationTimeout);
+                using var computationTimeout = new CancellationTokenSource(
+                    SnapshotComputationTimeout
+                );
                 var snapshot = await _snapshotBuilder.BuildAsync(
                     context,
                     computationTimeout.Token,
@@ -247,17 +302,34 @@ public sealed class RankingService
                     riderQuery,
                     nation,
                     riderId,
-                    suppliedRiderBundleFactory);
-                if (revision is not null && revision.ForContext(context) !=
-                    (await _revisions!.GetAsync(computationTimeout.Token, forceRefresh: true)).ForContext(context))
-                    throw new ApiException(503, "DATA_REVISION_CHANGED", "Data changed during calculation. Please retry.");
-                snapshot = snapshot with { Metadata = new CalculationMetadata(
-                    AlgorithmCatalog.Current.VersionLabel("rating"), AlgorithmCatalog.Current.ConfigurationHash("rating"),
-                    revision?.ForContext(context), DateTimeOffset.UtcNow) };
+                    suppliedRiderBundleFactory
+                );
+                if (
+                    revision is not null
+                    && revision.ForContext(context)
+                        != (
+                            await _revisions!.GetAsync(computationTimeout.Token, forceRefresh: true)
+                        ).ForContext(context)
+                )
+                    throw new ApiException(
+                        503,
+                        "DATA_REVISION_CHANGED",
+                        "Data changed during calculation. Please retry."
+                    );
+                snapshot = snapshot with
+                {
+                    Metadata = new CalculationMetadata(
+                        AlgorithmCatalog.Current.VersionLabel("rating"),
+                        AlgorithmCatalog.Current.ConfigurationHash("rating"),
+                        revision?.ForContext(context),
+                        DateTimeOffset.UtcNow
+                    ),
+                };
                 _cache.Set(key, snapshot, SnapshotLifetime);
                 return snapshot;
             },
-            cancellationToken);
+            cancellationToken
+        );
         _provenance?.Include(result.Metadata);
         return result;
     }
@@ -267,56 +339,78 @@ public sealed class RankingService
         IReadOnlyList<JsonObject>? resolvedSessions,
         string? riderQuery,
         string? nation,
-        string? riderId = null)
+        string? riderId = null
+    )
     {
-        return JsonSerializer.Serialize(new
-        {
-            context.SeasonYear,
-            SeasonYears = context.SeasonYears.Distinct().Order().ToArray(),
-            CategoryCode = Normalize(context.CategoryCode),
-            CategoryCodes = Normalize(context.CategoryCodes),
-            context.FromDate,
-            context.ToDate,
-            RoundId = Normalize(context.RoundId),
-            TrackId = Normalize(context.TrackId),
-            TrackIds = Normalize(context.TrackIds),
-            CountryCode = Normalize(context.CountryCode),
-            CountryCodes = Normalize(context.CountryCodes),
-            context.ConditionId,
-            ConditionIds = context.ConditionIds.Distinct().Order().ToArray(),
-            ConditionNames = Normalize(context.ConditionNames),
-            CompetitionClassCode = Normalize(context.CompetitionClassCode),
-            CompetitionClassCodes = Normalize(context.CompetitionClassCodes),
-            CompetitionClassIds = context.CompetitionClassIds.Distinct().Order().ToArray(),
-            SessionType = Normalize(context.SessionType),
-            SessionTypes = Normalize(context.SessionTypes),
-            Status = Normalize(context.Status),
-            Venue = Normalize(context.Venue),
-            VenueNames = Normalize(context.VenueNames),
-            TrackName = Normalize(context.TrackName),
-            RiderQuery = Normalize(riderQuery),
-            RiderId = Normalize(riderId),
-            Nation = Normalize(nation),
-            ResolvedSessionIds = Normalize(resolvedSessions?
-                .Select(session => session.String("id") ?? string.Empty) ?? [])
-        });
+        return JsonSerializer.Serialize(
+            new
+            {
+                context.SeasonYear,
+                SeasonYears = context.SeasonYears.Distinct().Order().ToArray(),
+                CategoryCode = Normalize(context.CategoryCode),
+                CategoryCodes = Normalize(context.CategoryCodes),
+                context.FromDate,
+                context.ToDate,
+                RoundId = Normalize(context.RoundId),
+                TrackId = Normalize(context.TrackId),
+                TrackIds = Normalize(context.TrackIds),
+                CountryCode = Normalize(context.CountryCode),
+                CountryCodes = Normalize(context.CountryCodes),
+                context.ConditionId,
+                ConditionIds = context.ConditionIds.Distinct().Order().ToArray(),
+                ConditionNames = Normalize(context.ConditionNames),
+                CompetitionClassCode = Normalize(context.CompetitionClassCode),
+                CompetitionClassCodes = Normalize(context.CompetitionClassCodes),
+                CompetitionClassIds = context.CompetitionClassIds.Distinct().Order().ToArray(),
+                SessionType = Normalize(context.SessionType),
+                SessionTypes = Normalize(context.SessionTypes),
+                Status = Normalize(context.Status),
+                Venue = Normalize(context.Venue),
+                VenueNames = Normalize(context.VenueNames),
+                TrackName = Normalize(context.TrackName),
+                RiderQuery = Normalize(riderQuery),
+                RiderId = Normalize(riderId),
+                Nation = Normalize(nation),
+                ResolvedSessionIds = Normalize(
+                    resolvedSessions?.Select(session => session.String("id") ?? string.Empty) ?? []
+                ),
+            }
+        );
     }
 
     internal async Task<int?> GetPointsPositionAsync(
         RiderMetricsContext context,
         string riderId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var revision = _revisions is { Enabled: true } ? await _revisions.GetAsync(cancellationToken) : null;
-        var key = BuildSingleFlightKey(context, null, null, null) +
-            (revision is null ? "" : ":" + revision.ForContext(context) + ":" + AlgorithmCatalog.Current.Fingerprint("rating"));
+        var revision = _revisions is { Enabled: true }
+            ? await _revisions.GetAsync(cancellationToken)
+            : null;
+        var key =
+            BuildSingleFlightKey(context, null, null, null)
+            + (
+                revision is null
+                    ? ""
+                    : ":"
+                        + revision.ForContext(context)
+                        + ":"
+                        + AlgorithmCatalog.Current.Fingerprint("rating")
+            );
         if (!_cache.TryGetValue<RankingSnapshot>(key, out var snapshot) || snapshot is null)
         {
             var pointsKey = "points-position:" + key;
             if (!_cache.TryGetValue<JsonObject[]>(pointsKey, out var rows))
             {
-                var sessions = await _domainQueries.GetMatchingSessionsAsync(context, cancellationToken: cancellationToken);
-                rows = await _domainQueries.GetPointsSummaryAsync(context, sessions, cancellationToken);
+                var sessions = await _domainQueries.GetMatchingSessionsAsync(
+                    context,
+                    cancellationToken: cancellationToken
+                );
+                rows = await _domainQueries.GetPointsSummaryAsync(
+                    context,
+                    sessions,
+                    cancellationToken
+                );
                 _cache.Set(pointsKey, rows, SnapshotLifetime);
             }
             return PointsPosition(rows!, riderId);
@@ -328,8 +422,10 @@ public sealed class RankingService
     internal static int? PointsPosition(IReadOnlyList<JsonObject> rows, string riderId) =>
         SortRows(rows, "points", descending: true)
             .Select((row, index) => new { RiderId = row.String("rider_id"), Position = index + 1 })
-            .FirstOrDefault(item => string.Equals(item.RiderId, riderId, StringComparison.OrdinalIgnoreCase))?
-            .Position;
+            .FirstOrDefault(item =>
+                string.Equals(item.RiderId, riderId, StringComparison.OrdinalIgnoreCase)
+            )
+            ?.Position;
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
@@ -342,25 +438,30 @@ public sealed class RankingService
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-
     internal static decimal Percentage(int numerator, int denominator) =>
         RankingSnapshotBuilder.Percentage(numerator, denominator);
 
-    internal static bool HasStarted(JsonObject result) =>
-        RankingSnapshotBuilder.HasStarted(result);
+    internal static bool HasStarted(JsonObject result) => RankingSnapshotBuilder.HasStarted(result);
 
-    internal static RankingParticipationRates CalculateParticipationRates(IReadOnlyList<JsonObject> results) =>
-        RankingSnapshotBuilder.CalculateParticipationRates(results);
+    internal static RankingParticipationRates CalculateParticipationRates(
+        IReadOnlyList<JsonObject> results
+    ) => RankingSnapshotBuilder.CalculateParticipationRates(results);
 
     internal static IReadOnlyDictionary<string, JsonArray> BuildFallbackTeamHistories(
-        IReadOnlyList<JsonObject> selectedResults, IReadOnlyList<JsonObject> historicalTeamResults) =>
-        RankingSnapshotBuilder.BuildFallbackTeamHistories(selectedResults, historicalTeamResults);
+        IReadOnlyList<JsonObject> selectedResults,
+        IReadOnlyList<JsonObject> historicalTeamResults
+    ) => RankingSnapshotBuilder.BuildFallbackTeamHistories(selectedResults, historicalTeamResults);
 
-    internal static JsonObject[] SortRows(IReadOnlyList<JsonObject> rows, string sort, bool descending) =>
-        RankingResponseProjection.SortRows(rows, sort, descending);
+    internal static JsonObject[] SortRows(
+        IReadOnlyList<JsonObject> rows,
+        string sort,
+        bool descending
+    ) => RankingResponseProjection.SortRows(rows, sort, descending);
 
-    internal static void AssignCanonicalPositions(IReadOnlyList<JsonObject> rows, string requestedSort) =>
-        RankingResponseProjection.AssignCanonicalPositions(rows, requestedSort);
+    internal static void AssignCanonicalPositions(
+        IReadOnlyList<JsonObject> rows,
+        string requestedSort
+    ) => RankingResponseProjection.AssignCanonicalPositions(rows, requestedSort);
 
     internal MetricFilterValues ReadMetricFilters(IQueryCollection queryString)
     {
@@ -372,10 +473,10 @@ public sealed class RankingService
             _validator.DecimalAny(queryString, "minConsistency", "min_consistency"),
             _validator.DecimalAny(queryString, "maxConsistency", "max_consistency"),
             _validator.DecimalAny(queryString, "confidence", "minConfidence", "min_confidence"),
-            _validator.DecimalAny(queryString, "maxConfidence", "max_confidence"));
+            _validator.DecimalAny(queryString, "maxConfidence", "max_confidence")
+        );
 
-        if (filters.MinConfidence is < 0m or > 100m ||
-            filters.MaxConfidence is < 0m or > 100m)
+        if (filters.MinConfidence is < 0m or > 100m || filters.MaxConfidence is < 0m or > 100m)
         {
             throw _validator.BadQuery("confidence filters must be between 0 and 100.");
         }
@@ -390,15 +491,27 @@ public sealed class RankingService
 
     private static bool MetricFilters(JsonObject row, MetricFilterValues filters)
     {
-        return WithinNullable(row.Decimal("rating"), filters.MinRating, filters.MaxRating) &&
-            WithinNullable(row.Decimal("pace"), filters.MinPace, filters.MaxPace) &&
-            WithinNullable(row.Decimal("consistency"), filters.MinConsistency, filters.MaxConsistency) &&
-            WithinNullable(row.Decimal("confidence"), filters.MinConfidence, filters.MaxConfidence);
+        return WithinNullable(row.Decimal("rating"), filters.MinRating, filters.MaxRating)
+            && WithinNullable(row.Decimal("pace"), filters.MinPace, filters.MaxPace)
+            && WithinNullable(
+                row.Decimal("consistency"),
+                filters.MinConsistency,
+                filters.MaxConsistency
+            )
+            && WithinNullable(
+                row.Decimal("confidence"),
+                filters.MinConfidence,
+                filters.MaxConfidence
+            );
     }
 
     private bool PointFilters(JsonObject row, IQueryCollection queryString)
     {
-        return Within(row.Decimal("points") ?? 0m, _validator.DecimalAny(queryString, "minPoints", "min_points"), _validator.DecimalAny(queryString, "maxPoints", "max_points"));
+        return Within(
+            row.Decimal("points") ?? 0m,
+            _validator.DecimalAny(queryString, "minPoints", "min_points"),
+            _validator.DecimalAny(queryString, "maxPoints", "max_points")
+        );
     }
 
     private StartFilterValues ReadStartFilters(IQueryCollection queryString)
@@ -407,7 +520,8 @@ public sealed class RankingService
             _validator.IntAny(queryString, "minStarts", "min_starts"),
             _validator.IntAny(queryString, "maxStarts", "max_starts"),
             _validator.IntAny(queryString, "minFinalStarts", "min_final_starts"),
-            _validator.IntAny(queryString, "maxFinalStarts", "max_final_starts"));
+            _validator.IntAny(queryString, "maxFinalStarts", "max_final_starts")
+        );
 
         if (filters.Values().Any(value => value < 0))
         {
@@ -429,14 +543,8 @@ public sealed class RankingService
 
     private static bool StartFilters(JsonObject row, StartFilterValues filters)
     {
-        return Within(
-                row.Int("starts") ?? 0,
-                filters.MinStarts,
-                filters.MaxStarts) &&
-            Within(
-                row.Int("final_starts") ?? 0,
-                filters.MinFinalStarts,
-                filters.MaxFinalStarts);
+        return Within(row.Int("starts") ?? 0, filters.MinStarts, filters.MaxStarts)
+            && Within(row.Int("final_starts") ?? 0, filters.MinFinalStarts, filters.MaxFinalStarts);
     }
 
     private static bool Within(decimal value, decimal? min, decimal? max)
@@ -448,7 +556,8 @@ public sealed class RankingService
         int? MinStarts,
         int? MaxStarts,
         int? MinFinalStarts,
-        int? MaxFinalStarts)
+        int? MaxFinalStarts
+    )
     {
         public IEnumerable<int> Values()
         {
@@ -482,7 +591,8 @@ public sealed class RankingService
         decimal? MinConsistency,
         decimal? MaxConsistency,
         decimal? MinConfidence,
-        decimal? MaxConfidence);
+        decimal? MaxConfidence
+    );
 
     private static bool WithinNullable(decimal? value, decimal? min, decimal? max)
     {
@@ -497,18 +607,27 @@ public sealed class RankingService
     internal static bool TryWithoutLatestRound(
         IReadOnlyList<JsonObject> sessions,
         IReadOnlyList<JsonObject> results,
-        out IReadOnlyList<JsonObject> previousSessions)
-        => TryWithoutLatestRound(sessions,results.Select(RankingReadResult.FromLegacy).ToArray(),out previousSessions);
+        out IReadOnlyList<JsonObject> previousSessions
+    ) =>
+        TryWithoutLatestRound(
+            sessions,
+            results.Select(RankingReadResult.FromLegacy).ToArray(),
+            out previousSessions
+        );
 
-    private static bool TryWithoutLatestRound(RankingSnapshot snapshot, out IReadOnlyList<JsonObject> previousSessions)
-        => snapshot.ReadData is { } data
-            ? TryWithoutLatestRound(snapshot.Sessions,data.FieldResults,out previousSessions)
-            : TryWithoutLatestRound(snapshot.Sessions,snapshot.FieldResults,out previousSessions);
+    private static bool TryWithoutLatestRound(
+        RankingSnapshot snapshot,
+        out IReadOnlyList<JsonObject> previousSessions
+    ) =>
+        snapshot.ReadData is { } data
+            ? TryWithoutLatestRound(snapshot.Sessions, data.FieldResults, out previousSessions)
+            : TryWithoutLatestRound(snapshot.Sessions, snapshot.FieldResults, out previousSessions);
 
     private static bool TryWithoutLatestRound(
         IReadOnlyList<JsonObject> sessions,
         IReadOnlyList<RankingReadResult> results,
-        out IReadOnlyList<JsonObject> previousSessions)
+        out IReadOnlyList<JsonObject> previousSessions
+    )
     {
         var resultSessionIds = results
             .Select(ResultSessionId)
@@ -522,12 +641,13 @@ public sealed class RankingService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var sessionRounds = sessions
             .Where(session =>
-                resultSessionIds.Contains(session.String("id") ?? string.Empty) ||
-                resultRoundIds.Contains(SessionRoundId(session) ?? string.Empty))
+                resultSessionIds.Contains(session.String("id") ?? string.Empty)
+                || resultRoundIds.Contains(SessionRoundId(session) ?? string.Empty)
+            )
             .Select(session => new
             {
                 RoundId = SessionRoundId(session),
-                Date = SessionRoundDate(session)
+                Date = SessionRoundDate(session),
             })
             .Where(item => !string.IsNullOrWhiteSpace(item.RoundId) && item.Date is not null)
             .ToArray();
@@ -543,15 +663,13 @@ public sealed class RankingService
         }
 
         var previousRoundIds = sessionRounds
-            .Where(item => !string.Equals(
-                item.RoundId,
-                latest.RoundId,
-                StringComparison.OrdinalIgnoreCase))
+            .Where(item =>
+                !string.Equals(item.RoundId, latest.RoundId, StringComparison.OrdinalIgnoreCase)
+            )
             .Select(item => item.RoundId!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         previousSessions = sessions
-            .Where(session => previousRoundIds.Contains(
-                SessionRoundId(session) ?? string.Empty))
+            .Where(session => previousRoundIds.Contains(SessionRoundId(session) ?? string.Empty))
             .ToArray();
         return previousRoundIds.Count > 0 && previousSessions.Count > 0;
     }
@@ -571,7 +689,8 @@ public sealed class RankingService
         IQueryCollection source,
         Dictionary<string, StringValues> destination,
         string sourceKey,
-        string destinationKey)
+        string destinationKey
+    )
     {
         if (source.TryGetValue(sourceKey, out var value) && !StringValues.IsNullOrEmpty(value))
         {
@@ -594,51 +713,48 @@ public sealed class RankingService
             null,
             null,
             null,
-            null)
+            null
+        )
         {
             SeasonYears = context.SeasonYears,
-            CategoryCodes = context.CategoryCodes
+            CategoryCodes = context.CategoryCodes,
         };
 
     internal static bool SameSessionSet(
         IReadOnlyList<JsonObject> left,
-        IReadOnlyList<JsonObject> right) =>
-        IdSet(left).SetEquals(IdSet(right));
+        IReadOnlyList<JsonObject> right
+    ) => IdSet(left).SetEquals(IdSet(right));
 
     internal static bool SameRiderSet(
         IReadOnlyList<JsonObject> left,
-        IReadOnlyList<JsonObject> right) =>
-        RiderIdSet(left).SetEquals(RiderIdSet(right));
+        IReadOnlyList<JsonObject> right
+    ) => RiderIdSet(left).SetEquals(RiderIdSet(right));
 
     private static HashSet<string> IdSet(IEnumerable<JsonObject> rows) =>
-        rows
-            .Select(row => row.String("id"))
+        rows.Select(row => row.String("id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static HashSet<string> RiderIdSet(IEnumerable<JsonObject> rows) =>
-        rows
-            .Select(row => row.String("rider_id"))
+        rows.Select(row => row.String("rider_id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static string? SessionRoundId(JsonObject session)
     {
-        var round = session.Object("rounds") ??
-            session.Object("round_categories")?.Object("rounds");
+        var round =
+            session.Object("rounds") ?? session.Object("round_categories")?.Object("rounds");
         return session.String("round_id") ?? round?.String("id");
     }
 
     private static DateOnly? SessionRoundDate(JsonObject session)
     {
-        var round = session.Object("rounds") ??
-            session.Object("round_categories")?.Object("rounds");
-        return PublicDtoMapping.Date(
-            round?.String("start_date") ?? session.String("session_date"));
+        var round =
+            session.Object("rounds") ?? session.Object("round_categories")?.Object("rounds");
+        return PublicDtoMapping.Date(round?.String("start_date") ?? session.String("session_date"));
     }
-
 }
 
 internal sealed record RankingSnapshot(
@@ -649,8 +765,7 @@ internal sealed record RankingSnapshot(
     IReadOnlyList<JsonObject> Sessions,
     IReadOnlyList<PacePrecomputedSessionData>? PrecomputedSessions = null,
     RankingReadData? ReadData = null,
-    CalculationMetadata? Metadata = null);
+    CalculationMetadata? Metadata = null
+);
 
-internal sealed record RankingParticipationRates(
-    int FinalsCount,
-    decimal QualifyingRate);
+internal sealed record RankingParticipationRates(int FinalsCount, decimal QualifyingRate);

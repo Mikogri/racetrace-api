@@ -11,14 +11,16 @@ public sealed record PressurePerformancePointDto(
     decimal? PreFinalPace,
     decimal? QualifyingPace,
     decimal? FinalPace,
-    decimal? Delta);
+    decimal? Delta
+);
 
 public sealed record PressurePerformanceSummaryDto(
     decimal? QualifyingPace,
     decimal? FinalPace,
     decimal? Delta,
     string Tendency,
-    int PairedRounds);
+    int PairedRounds
+);
 
 public sealed record PressurePerformanceResponseDto(
     long RiderId,
@@ -27,4 +29,5 @@ public sealed record PressurePerformanceResponseDto(
     int SampleCount,
     string Evidence,
     PressurePerformanceSummaryDto Summary,
-    IReadOnlyList<PressurePerformancePointDto> Points);
+    IReadOnlyList<PressurePerformancePointDto> Points
+);

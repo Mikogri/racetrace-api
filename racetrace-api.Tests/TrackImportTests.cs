@@ -19,17 +19,24 @@ public sealed class TrackImportTests
             Venue: "Leogang",
             CountryCode: "AUT",
             LengthM: 2400,
-            AvgSlope: 18.5m);
+            AvgSlope: 18.5m
+        );
 
         await service.FindOrCreateTrackAsync(payload, CancellationToken.None);
 
         Assert.NotNull(supabase.WrittenTrack);
         Assert.Equal("Speedster DH", supabase.WrittenTrack!["name"]!.GetValue<string>());
         Assert.Equal("Leogang", supabase.WrittenTrack["venue"]!.GetValue<string>());
-        Assert.Contains(supabase.LookupQuery!.Parameters, parameter =>
-            parameter.Key == "name" && parameter.Value.Contains("Speedster DH", StringComparison.Ordinal));
-        Assert.DoesNotContain(supabase.LookupQuery.Parameters, parameter =>
-            parameter.Key is "venue" or "country_code");
+        Assert.Contains(
+            supabase.LookupQuery!.Parameters,
+            parameter =>
+                parameter.Key == "name"
+                && parameter.Value.Contains("Speedster DH", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            supabase.LookupQuery.Parameters,
+            parameter => parameter.Key is "venue" or "country_code"
+        );
     }
 
     [Fact]
@@ -42,10 +49,12 @@ public sealed class TrackImportTests
             Venue: "Leogang",
             CountryCode: "AUT",
             LengthM: null,
-            AvgSlope: null);
+            AvgSlope: null
+        );
 
         var exception = await Assert.ThrowsAsync<ApiException>(() =>
-            service.FindOrCreateTrackAsync(payload, CancellationToken.None));
+            service.FindOrCreateTrackAsync(payload, CancellationToken.None)
+        );
 
         Assert.Equal("TRACK_NAME_REQUIRED", exception.Code);
         Assert.Equal(0, supabase.RequestCount);
@@ -61,7 +70,8 @@ public sealed class TrackImportTests
             Venue: "Leogang",
             CountryCode: null,
             LengthM: null,
-            AvgSlope: null);
+            AvgSlope: null
+        );
 
         await service.FindOrCreateTrackAsync(payload, CancellationToken.None);
 
@@ -83,7 +93,8 @@ public sealed class TrackImportTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             throw new NotSupportedException();
         }
@@ -91,14 +102,15 @@ public sealed class TrackImportTests
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             RequestCount++;
             Assert.Equal("tracks", query.Table);
             LookupQuery = query;
-            return Task.FromResult<JsonObject?>(trackExists
-                ? new JsonObject { ["id"] = "track-1" }
-                : null);
+            return Task.FromResult<JsonObject?>(
+                trackExists ? new JsonObject { ["id"] = "track-1" } : null
+            );
         }
 
         public Task<IReadOnlyList<JsonObject>> PostAsync(
@@ -106,13 +118,13 @@ public sealed class TrackImportTests
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             RequestCount++;
             Assert.Equal("tracks", table);
             WrittenTrack = payload.DeepClone().AsObject();
-            return Task.FromResult<IReadOnlyList<JsonObject>>(
-                [TrackResponse(WrittenTrack)]);
+            return Task.FromResult<IReadOnlyList<JsonObject>>([TrackResponse(WrittenTrack)]);
         }
 
         public Task<IReadOnlyList<JsonObject>> PatchAsync(
@@ -120,20 +132,21 @@ public sealed class TrackImportTests
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             RequestCount++;
             Assert.Equal("tracks", table);
             WrittenTrack = payload.DeepClone().AsObject();
-            return Task.FromResult<IReadOnlyList<JsonObject>>(
-                [TrackResponse(WrittenTrack)]);
+            return Task.FromResult<IReadOnlyList<JsonObject>>([TrackResponse(WrittenTrack)]);
         }
 
         public Task DeleteAsync(
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             throw new NotSupportedException();
         }
@@ -142,7 +155,8 @@ public sealed class TrackImportTests
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             throw new NotSupportedException();
         }
@@ -153,7 +167,7 @@ public sealed class TrackImportTests
             {
                 ["id"] = "track-1",
                 ["name"] = payload["name"]!.GetValue<string>(),
-                ["venue"] = payload["venue"]!.GetValue<string>()
+                ["venue"] = payload["venue"]!.GetValue<string>(),
             };
         }
     }

@@ -9,27 +9,39 @@ namespace RaceTrace.Api.Features.Compare;
 internal static class CompareSessionSelection
 {
     internal static IEnumerable<string> SessionIds(IReadOnlyList<CompareRiderSource> sources) =>
-        sources.SelectMany(SourceResults)
+        sources
+            .SelectMany(SourceResults)
             .Select(ResultSessionId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
     internal static SelectedSessionResult[] SelectSessionResults(
-        IReadOnlyList<CompareRiderSource> sources, string sessionId) =>
-        sources.Select(source => new
+        IReadOnlyList<CompareRiderSource> sources,
+        string sessionId
+    ) =>
+        sources
+            .Select(source => new
             {
                 Source = source,
                 Result = SourceResults(source)
-                    .Where(result => string.Equals(ResultSessionId(result), sessionId, StringComparison.OrdinalIgnoreCase))
+                    .Where(result =>
+                        string.Equals(
+                            ResultSessionId(result),
+                            sessionId,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
                     .OrderByDescending(result => PublicDtoMapping.Long(result.String("id")))
-                    .FirstOrDefault()
+                    .FirstOrDefault(),
             })
             .Where(item => item.Result is not null)
             .Select(item => new SelectedSessionResult(item.Source, item.Result!))
             .ToArray();
 
-    internal static IReadOnlyList<string> FindCommonSessionIds(IReadOnlyList<CompareRiderSource> sources)
+    internal static IReadOnlyList<string> FindCommonSessionIds(
+        IReadOnlyList<CompareRiderSource> sources
+    )
     {
         HashSet<string>? common = null;
         foreach (var source in sources)
@@ -54,8 +66,14 @@ internal static class CompareSessionSelection
     }
 
     internal static IReadOnlyList<JsonObject> SourceResults(CompareRiderSource source) =>
-        source.Snapshot.Results
-            .Where(result => string.Equals(result.String("rider_id"), source.RiderId, StringComparison.OrdinalIgnoreCase))
+        source
+            .Snapshot.Results.Where(result =>
+                string.Equals(
+                    result.String("rider_id"),
+                    source.RiderId,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             .ToArray();
 
     internal static string? ResultSessionId(JsonObject result) =>
@@ -64,15 +82,15 @@ internal static class CompareSessionSelection
     internal static string ResultRoundId(JsonObject result)
     {
         var session = result.Object("sessions");
-        return session?.String("round_id") ??
-            session?.Object("rounds")?.String("id") ??
-            string.Empty;
+        return session?.String("round_id")
+            ?? session?.Object("rounds")?.String("id")
+            ?? string.Empty;
     }
 
     internal static string ResultDate(JsonObject result) =>
-        result.Object("sessions")?.String("session_date") ??
-        result.Object("sessions")?.Object("rounds")?.String("start_date") ??
-        string.Empty;
+        result.Object("sessions")?.String("session_date")
+        ?? result.Object("sessions")?.Object("rounds")?.String("start_date")
+        ?? string.Empty;
 
     internal sealed record SelectedSessionResult(CompareRiderSource Source, JsonObject Result);
 }

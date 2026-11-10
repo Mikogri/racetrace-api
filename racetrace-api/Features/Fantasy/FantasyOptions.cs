@@ -10,6 +10,7 @@ public sealed class FantasyOptions
     public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(30);
     public TimeSpan SyncInterval { get; set; } = TimeSpan.FromHours(6);
     public TimeSpan LiveSyncInterval { get; set; } = TimeSpan.FromMinutes(15);
+
     // An entry list is event data, never inferred from Fantasy prices or the eventual final.
     public Dictionary<string, FantasyEventOptions> Events { get; set; } = new();
 }

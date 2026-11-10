@@ -11,21 +11,22 @@ public sealed class SupabaseRestClientTests
     [Fact]
     public async Task RpcAsyncAcceptsNoContentResponse()
     {
-        using var http = new HttpClient(new StubHandler(
-            new HttpResponseMessage(HttpStatusCode.NoContent)));
+        using var http = new HttpClient(
+            new StubHandler(new HttpResponseMessage(HttpStatusCode.NoContent))
+        );
         var client = new SupabaseRestClient(
             http,
-            Options.Create(new SupabaseOptions
-            {
-                Url = "https://example.supabase.co",
-                AnonKey = "anon",
-                ServiceRoleKey = "service"
-            }));
+            Options.Create(
+                new SupabaseOptions
+                {
+                    Url = "https://example.supabase.co",
+                    AnonKey = "anon",
+                    ServiceRoleKey = "service",
+                }
+            )
+        );
 
-        var result = await client.RpcAsync(
-            "refresh_data",
-            new JsonObject(),
-            SupabaseRole.Service);
+        var result = await client.RpcAsync("refresh_data", new JsonObject(), SupabaseRole.Service);
 
         Assert.Null(result);
     }
@@ -34,6 +35,7 @@ public sealed class SupabaseRestClientTests
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
-            CancellationToken cancellationToken) => Task.FromResult(response);
+            CancellationToken cancellationToken
+        ) => Task.FromResult(response);
     }
 }

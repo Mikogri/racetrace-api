@@ -9,9 +9,7 @@ public sealed class AdminGuard
     private readonly AdminOptions _options;
     private readonly ApiAccessOptions _apiAccess;
 
-    public AdminGuard(
-        IOptions<AdminOptions> options,
-        IOptions<ApiAccessOptions> apiAccess)
+    public AdminGuard(IOptions<AdminOptions> options, IOptions<ApiAccessOptions> apiAccess)
     {
         _options = options.Value;
         _apiAccess = apiAccess.Value;
@@ -21,12 +19,17 @@ public sealed class AdminGuard
     {
         if (string.IsNullOrWhiteSpace(_options.ApiSecret))
         {
-            throw new ApiException(StatusCodes.Status503ServiceUnavailable, "ADMIN_SECRET_MISSING", "Admin API secret is not configured.");
+            throw new ApiException(
+                StatusCodes.Status503ServiceUnavailable,
+                "ADMIN_SECRET_MISSING",
+                "Admin API secret is not configured."
+            );
         }
 
         var token = BearerTokenValidator.ReadToken(
             request,
-            "Missing admin authorization bearer token.");
+            "Missing admin authorization bearer token."
+        );
         if (BearerTokenValidator.Matches(token, _options.ApiSecret))
         {
             return;
@@ -37,12 +40,14 @@ public sealed class AdminGuard
             throw new ApiException(
                 StatusCodes.Status403Forbidden,
                 "FORBIDDEN",
-                "Administrator authorization is required.");
+                "Administrator authorization is required."
+            );
         }
 
         throw new ApiException(
             StatusCodes.Status401Unauthorized,
             "UNAUTHORIZED",
-            "Invalid admin authorization bearer token.");
+            "Invalid admin authorization bearer token."
+        );
     }
 }

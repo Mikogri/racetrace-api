@@ -15,7 +15,8 @@ internal static class BearerTokenValidator
             throw new ApiException(
                 StatusCodes.Status401Unauthorized,
                 "UNAUTHORIZED",
-                missingTokenMessage);
+                missingTokenMessage
+            );
         }
 
         var token = header[prefix.Length..].Trim();
@@ -24,7 +25,8 @@ internal static class BearerTokenValidator
             throw new ApiException(
                 StatusCodes.Status401Unauthorized,
                 "UNAUTHORIZED",
-                missingTokenMessage);
+                missingTokenMessage
+            );
         }
 
         return token;
@@ -39,7 +41,7 @@ internal static class BearerTokenValidator
 
         var expected = Encoding.UTF8.GetBytes(expectedSecret);
         var actual = Encoding.UTF8.GetBytes(token);
-        return expected.Length == actual.Length &&
-            CryptographicOperations.FixedTimeEquals(expected, actual);
+        return expected.Length == actual.Length
+            && CryptographicOperations.FixedTimeEquals(expected, actual);
     }
 }

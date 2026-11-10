@@ -10,21 +10,25 @@ public sealed class TissotTimingJsonFetcherTests
     [Fact]
     public async Task ConvertsPublicResultsPageToApiAndReturnsWorldChampionshipJson()
     {
-        var handler = new CapturingHandler("""
+        var handler = new CapturingHandler(
+            """
             {
               "event": { "number": 4, "name": "Women Junior", "discipline": "DOWNHILL" },
               "results": []
             }
-            """);
+            """
+        );
         var fetcher = new TissotTimingJsonFetcher(new HttpClient(handler));
 
         var result = await fetcher.FetchAsync(
             "https://www.tissottiming.com/2023/mtbdhiwch/event-4/phase-2/results",
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(
             "https://prod.server.tissottiming.com/competitions/mtbdhiwch2023/events/4/phases/2/results",
-            handler.RequestUri?.AbsoluteUri);
+            handler.RequestUri?.AbsoluteUri
+        );
         Assert.Equal(handler.RequestUri?.AbsoluteUri, result.ResolvedUrl);
         Assert.Equal("Women Junior", result.Json["event"]?["name"]?.GetValue<string>());
     }
@@ -34,7 +38,9 @@ public sealed class TissotTimingJsonFetcherTests
     {
         var exception = Assert.Throws<ApiException>(() =>
             TissotTimingJsonFetcher.ResolveApiUrl(
-                "https://example.com/2023/mtbdhiwch/event-4/phase-2/results"));
+                "https://example.com/2023/mtbdhiwch/event-4/phase-2/results"
+            )
+        );
 
         Assert.Equal("TISSOT_RESULT_URL_INVALID", exception.Code);
     }
@@ -54,13 +60,16 @@ public sealed class TissotTimingJsonFetcherTests
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             RequestUri = request.RequestUri;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
+                }
+            );
         }
     }
 }

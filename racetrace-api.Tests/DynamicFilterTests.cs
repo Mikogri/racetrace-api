@@ -15,17 +15,30 @@ public sealed class DynamicFilterTests
     [InlineData("u23_open", "super_final")]
     [InlineData("U23_OPEN", "SUPER_FINAL")]
     [InlineData("Open U23", "Last Run")]
-    public async Task RegisteredCodesAndAliasesReachSessionQueries(string category, string sessionType)
+    public async Task RegisteredCodesAndAliasesReachSessionQueries(
+        string category,
+        string sessionType
+    )
     {
         using var handler = new FilterHandler();
         using var http = new HttpClient(handler);
         var client = Client(http);
-        var service = new SessionsService(client, new QueryValidationService(), new DomainQueryService(client));
+        var service = new SessionsService(
+            client,
+            new QueryValidationService(),
+            new DomainQueryService(client)
+        );
 
         await service.ListCommonSessionsAsync(Query(category, sessionType), default);
 
-        Assert.Contains(handler.Queries, query => query.Contains("code=in.(U23_OPEN)", StringComparison.Ordinal));
-        Assert.Contains(handler.Queries, query => query.Contains("session_type=in.(SUPER_FINAL)", StringComparison.Ordinal));
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("code=in.(U23_OPEN)", StringComparison.Ordinal)
+        );
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("session_type=in.(SUPER_FINAL)", StringComparison.Ordinal)
+        );
         Assert.Equal(1, handler.MetadataCalls);
     }
 
@@ -35,12 +48,22 @@ public sealed class DynamicFilterTests
         using var handler = new FilterHandler();
         using var http = new HttpClient(handler);
         var client = Client(http);
-        var service = new SessionsService(client, new QueryValidationService(), new DomainQueryService(client));
+        var service = new SessionsService(
+            client,
+            new QueryValidationService(),
+            new DomainQueryService(client)
+        );
 
         await service.ListCommonSessionsAsync(Query("Men Elite", "qualifying_1"), default);
 
-        Assert.Contains(handler.Queries, query => query.Contains("code=in.(EM)", StringComparison.Ordinal));
-        Assert.Contains(handler.Queries, query => query.Contains("session_type=in.(Q1)", StringComparison.Ordinal));
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("code=in.(EM)", StringComparison.Ordinal)
+        );
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("session_type=in.(Q1)", StringComparison.Ordinal)
+        );
         Assert.Equal(0, handler.MetadataCalls);
     }
 
@@ -52,14 +75,22 @@ public sealed class DynamicFilterTests
         using var handler = new FilterHandler();
         using var http = new HttpClient(handler);
         var client = Client(http);
-        var service = new SessionsService(client, new QueryValidationService(), new DomainQueryService(client));
+        var service = new SessionsService(
+            client,
+            new QueryValidationService(),
+            new DomainQueryService(client)
+        );
 
         var error = await Assert.ThrowsAsync<ApiException>(() =>
-            service.ListCommonSessionsAsync(Query(category, sessionType), default));
+            service.ListCommonSessionsAsync(Query(category, sessionType), default)
+        );
 
         Assert.Equal(400, error.StatusCode);
         Assert.Contains("Unsupported", error.Message);
-        Assert.DoesNotContain(handler.Queries, query => query.StartsWith("/rest/v1/sessions?", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            handler.Queries,
+            query => query.StartsWith("/rest/v1/sessions?", StringComparison.Ordinal)
+        );
     }
 
     [Fact]
@@ -68,12 +99,25 @@ public sealed class DynamicFilterTests
         using var handler = new FilterHandler();
         using var http = new HttpClient(handler);
         var client = Client(http);
-        var service = new SessionsService(client, new QueryValidationService(), new DomainQueryService(client));
+        var service = new SessionsService(
+            client,
+            new QueryValidationService(),
+            new DomainQueryService(client)
+        );
 
-        await service.ListCommonSessionsAsync(Query("u23_open,elite_men,Open U23", "super_final,final,Last Run"), default);
+        await service.ListCommonSessionsAsync(
+            Query("u23_open,elite_men,Open U23", "super_final,final,Last Run"),
+            default
+        );
 
-        Assert.Contains(handler.Queries, query => query.Contains("code=in.(U23_OPEN,EM)", StringComparison.Ordinal));
-        Assert.Contains(handler.Queries, query => query.Contains("session_type=in.(SUPER_FINAL,FINAL)", StringComparison.Ordinal));
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("code=in.(U23_OPEN,EM)", StringComparison.Ordinal)
+        );
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("session_type=in.(SUPER_FINAL,FINAL)", StringComparison.Ordinal)
+        );
         Assert.Equal(1, handler.MetadataCalls);
     }
 
@@ -83,12 +127,22 @@ public sealed class DynamicFilterTests
         using var handler = new FilterHandler();
         using var http = new HttpClient(handler);
         var client = Client(http);
-        var service = new RoundsService(client, new QueryValidationService(), new DomainQueryService(client));
+        var service = new RoundsService(
+            client,
+            new QueryValidationService(),
+            new DomainQueryService(client)
+        );
 
         await service.ListRoundSessionsAsync("4", Query("u23_open", "super_final"), default);
 
-        Assert.Contains(handler.Queries, query => query.Contains("code=eq.U23_OPEN", StringComparison.Ordinal));
-        Assert.Contains(handler.Queries, query => query.Contains("session_type=eq.SUPER_FINAL", StringComparison.Ordinal));
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("code=eq.U23_OPEN", StringComparison.Ordinal)
+        );
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("session_type=eq.SUPER_FINAL", StringComparison.Ordinal)
+        );
     }
 
     [Fact]
@@ -101,14 +155,29 @@ public sealed class DynamicFilterTests
         var validator = new QueryValidationService();
         var domain = new DomainQueryService(client);
         var metrics = new MetricsService(domain, new PaceService(client));
-        var ranking = new RankingService(validator, domain, metrics, new RankingSingleFlight(), cache);
-        var service = new SeasonSummaryService(client, validator, domain, ranking, TimeProvider.System);
+        var ranking = new RankingService(
+            validator,
+            domain,
+            metrics,
+            new RankingSingleFlight(),
+            cache
+        );
+        var service = new SeasonSummaryService(
+            client,
+            validator,
+            domain,
+            ranking,
+            TimeProvider.System
+        );
 
         var result = await service.GetAsync(Query("Open U23", "final"), default);
 
         Assert.Equal("u23_open", result.Category);
         Assert.Empty(result.CurrentStandings);
-        Assert.Contains(handler.Queries, query => query.Contains("code=eq.U23_OPEN", StringComparison.Ordinal));
+        Assert.Contains(
+            handler.Queries,
+            query => query.Contains("code=eq.U23_OPEN", StringComparison.Ordinal)
+        );
     }
 
     [Theory]
@@ -120,12 +189,20 @@ public sealed class DynamicFilterTests
         using var http = new HttpClient(handler);
         var client = Client(http);
         var domain = new DomainQueryService(client);
-        var service = new ResultsService(client, new QueryValidationService(), domain,
-            new MetricsService(domain, new PaceService(client)));
+        var service = new ResultsService(
+            client,
+            new QueryValidationService(),
+            domain,
+            new MetricsService(domain, new PaceService(client))
+        );
 
         var result = byRound
             ? await service.ListPublicRoundResultsAsync("4", Query("Open U23", "Last Run"), default)
-            : await service.ListPublicSessionResultsAsync("10", Query("Open U23", "Last Run"), default);
+            : await service.ListPublicSessionResultsAsync(
+                "10",
+                Query("Open U23", "Last Run"),
+                default
+            );
 
         Assert.Equal("u23_open", result.Session.Category);
         Assert.Equal("super_final", result.Session.SessionType);
@@ -133,8 +210,19 @@ public sealed class DynamicFilterTests
         Assert.Equal(1, handler.MetadataCalls);
         if (byRound)
         {
-            Assert.Contains(handler.Queries, query => query.Contains("sessions.session_type=eq.SUPER_FINAL", StringComparison.Ordinal));
-            Assert.Contains(handler.Queries, query => query.Contains("sessions.round_categories.categories.code=eq.U23_OPEN", StringComparison.Ordinal));
+            Assert.Contains(
+                handler.Queries,
+                query =>
+                    query.Contains("sessions.session_type=eq.SUPER_FINAL", StringComparison.Ordinal)
+            );
+            Assert.Contains(
+                handler.Queries,
+                query =>
+                    query.Contains(
+                        "sessions.round_categories.categories.code=eq.U23_OPEN",
+                        StringComparison.Ordinal
+                    )
+            );
         }
     }
 
@@ -145,12 +233,26 @@ public sealed class DynamicFilterTests
         using var http = new HttpClient(handler);
         var client = Client(http);
         var domain = new DomainQueryService(client);
-        var service = new ResultsService(client, new QueryValidationService(), domain,
-            new MetricsService(domain, new PaceService(client)));
-        var result = await service.ListPublicRoundResultsAsync("4", Query("Open U23", "all"), default);
+        var service = new ResultsService(
+            client,
+            new QueryValidationService(),
+            domain,
+            new MetricsService(domain, new PaceService(client))
+        );
+        var result = await service.ListPublicRoundResultsAsync(
+            "4",
+            Query("Open U23", "all"),
+            default
+        );
         Assert.Equal("all", result.Session.SessionType);
-        Assert.Equal("super_final", Assert.Single(result.Items.Where(item => !item.IsPerfectRun)).SessionType);
-        Assert.DoesNotContain(handler.Queries, query => query.Contains("sessions.session_type=", StringComparison.Ordinal));
+        Assert.Equal(
+            "super_final",
+            Assert.Single(result.Items.Where(item => !item.IsPerfectRun)).SessionType
+        );
+        Assert.DoesNotContain(
+            handler.Queries,
+            query => query.Contains("sessions.session_type=", StringComparison.Ordinal)
+        );
     }
 
     [Fact]
@@ -160,11 +262,16 @@ public sealed class DynamicFilterTests
         using var http = new HttpClient(handler);
         var client = Client(http);
         var domain = new DomainQueryService(client);
-        var service = new ResultsService(client, new QueryValidationService(), domain,
-            new MetricsService(domain, new PaceService(client)));
+        var service = new ResultsService(
+            client,
+            new QueryValidationService(),
+            domain,
+            new MetricsService(domain, new PaceService(client))
+        );
 
         var error = await Assert.ThrowsAsync<ApiException>(() =>
-            service.ListPublicSessionResultsAsync("10", Query("Open U23", "final"), default));
+            service.ListPublicSessionResultsAsync("10", Query("Open U23", "final"), default)
+        );
 
         Assert.Equal(400, error.StatusCode);
         Assert.Contains("does not match this session", error.Message);
@@ -173,26 +280,41 @@ public sealed class DynamicFilterTests
     [Fact]
     public async Task MetadataOutageIsNotReportedAsAnUnsupportedFilter()
     {
-        using var handler = new FilterHandler { MetadataStatus = HttpStatusCode.ServiceUnavailable };
+        using var handler = new FilterHandler
+        {
+            MetadataStatus = HttpStatusCode.ServiceUnavailable,
+        };
         using var http = new HttpClient(handler);
         var client = Client(http);
-        var service = new SessionsService(client, new QueryValidationService(), new DomainQueryService(client));
+        var service = new SessionsService(
+            client,
+            new QueryValidationService(),
+            new DomainQueryService(client)
+        );
 
         var error = await Assert.ThrowsAsync<SupabaseApiException>(() =>
-            service.ListCommonSessionsAsync(Query("u23_open", "final"), default));
+            service.ListCommonSessionsAsync(Query("u23_open", "final"), default)
+        );
 
         Assert.Equal(503, error.StatusCode);
     }
 
     private static IQueryCollection Query(string category, string sessionType) =>
-        new QueryCollection(new Dictionary<string, StringValues>
-        {
-            ["category"] = category,
-            ["sessionType"] = sessionType
-        });
+        new QueryCollection(
+            new Dictionary<string, StringValues>
+            {
+                ["category"] = category,
+                ["sessionType"] = sessionType,
+            }
+        );
 
-    private static SupabaseRestClient Client(HttpClient http) => new(http,
-        Options.Create(new SupabaseOptions { Url = "https://example.supabase.co", AnonKey = "anon" }));
+    private static SupabaseRestClient Client(HttpClient http) =>
+        new(
+            http,
+            Options.Create(
+                new SupabaseOptions { Url = "https://example.supabase.co", AnonKey = "anon" }
+            )
+        );
 
     private sealed class FilterHandler : HttpMessageHandler
     {
@@ -201,7 +323,10 @@ public sealed class DynamicFilterTests
         public bool ReturnResults { get; init; }
         public HttpStatusCode MetadataStatus { get; init; } = HttpStatusCode.OK;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
         {
             cancellationToken.ThrowIfCancellationRequested();
             var path = request.RequestUri!.AbsolutePath;
@@ -234,7 +359,9 @@ public sealed class DynamicFilterTests
                     """;
             }
 
-            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+            return Task.FromResult(
+                new HttpResponseMessage(status) { Content = new StringContent(body) }
+            );
         }
     }
 }

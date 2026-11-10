@@ -17,7 +17,9 @@ public sealed class ImportSourceSecurityTests
     {
         var handler = new SourceHandler();
         var fetcher = new ChronoRaceJsonFetcher(new HttpClient(handler));
-        var error = await Assert.ThrowsAsync<ApiException>(() => fetcher.FetchAsync(url, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<ApiException>(() =>
+            fetcher.FetchAsync(url, CancellationToken.None)
+        );
         Assert.Equal("CHRONORACE_URL_INVALID", error.Code);
         Assert.Equal(0, handler.Requests);
     }
@@ -26,15 +28,21 @@ public sealed class ImportSourceSecurityTests
     public async Task OfficialChronoRaceSourceStillWorks()
     {
         var handler = new SourceHandler();
-        var result = await new ChronoRaceJsonFetcher(new HttpClient(handler))
-            .FetchAsync("https://prod.chronorace.be/api/results/test", CancellationToken.None);
+        var result = await new ChronoRaceJsonFetcher(new HttpClient(handler)).FetchAsync(
+            "https://prod.chronorace.be/api/results/test",
+            CancellationToken.None
+        );
         Assert.NotNull(result.Json["Riders"]);
         Assert.Equal(1, handler.Requests);
     }
 
     [Theory]
-    [InlineData("https://user:password@www.tissottiming.com/2023/mtbdhiwch/event-4/phase-2/results")]
-    [InlineData("https://prod.server.tissottiming.com:8443/competitions/mtbdhiwch2023/events/1/phases/1/results")]
+    [InlineData(
+        "https://user:password@www.tissottiming.com/2023/mtbdhiwch/event-4/phase-2/results"
+    )]
+    [InlineData(
+        "https://prod.server.tissottiming.com:8443/competitions/mtbdhiwch2023/events/1/phases/1/results"
+    )]
     public void TissotRejectsCredentialsAndNonstandardPorts(string url)
     {
         Assert.Throws<ApiException>(() => TissotTimingJsonFetcher.ResolveApiUrl(url));
@@ -43,13 +51,19 @@ public sealed class ImportSourceSecurityTests
     private sealed class SourceHandler : HttpMessageHandler
     {
         public int Requests { get; private set; }
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
         {
             Requests++;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("""{"Riders":{},"Results":[]}""")
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"Riders":{},"Results":[]}"""),
+                }
+            );
         }
     }
 }

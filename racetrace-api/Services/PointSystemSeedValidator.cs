@@ -1,3 +1,4 @@
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Models;
 
 namespace RaceTrace.Api.Services;
@@ -33,32 +34,40 @@ public static class PointSystemSeedValidator
                 errors.Add($"{path}.code duplicates point system code '{code}'.");
             }
 
-            if (source.ValidFromSeason is < 1990 or > 2100 ||
-                source.ValidToSeason is < 1990 or > 2100 ||
-                source.ValidFromSeason > source.ValidToSeason)
+            if (
+                source.ValidFromSeason is < 1990 or > 2100
+                || source.ValidToSeason is < 1990 or > 2100
+                || source.ValidFromSeason > source.ValidToSeason
+            )
             {
                 errors.Add($"{path} has an invalid season range.");
             }
 
-            if (source.SourceUrl is not null &&
-                (!Uri.TryCreate(source.SourceUrl, UriKind.Absolute, out var sourceUri) ||
-                 sourceUri.Scheme is not ("http" or "https")))
+            if (
+                source.SourceUrl is not null
+                && (
+                    !Uri.TryCreate(source.SourceUrl, UriKind.Absolute, out var sourceUri)
+                    || sourceUri.Scheme is not ("http" or "https")
+                )
+            )
             {
                 errors.Add($"{path}.source_url must be an absolute HTTP or HTTPS URL.");
             }
 
             var stages = NormalizeStages(source.Stages, path, errors);
-            systems.Add(source with
-            {
-                Code = code,
-                Name = name,
-                CompetitionClassCode = competitionClassCode,
-                Discipline = discipline,
-                CategoryCode = categoryCode,
-                SourceUrl = source.SourceUrl?.Trim(),
-                Notes = NullIfWhiteSpace(source.Notes),
-                Stages = stages
-            });
+            systems.Add(
+                source with
+                {
+                    Code = code,
+                    Name = name,
+                    CompetitionClassCode = competitionClassCode,
+                    Discipline = discipline,
+                    CategoryCode = categoryCode,
+                    SourceUrl = source.SourceUrl?.Trim(),
+                    Notes = NullIfWhiteSpace(source.Notes),
+                    Stages = stages,
+                }
+            );
         }
 
         if (errors.Count > 0)
@@ -85,7 +94,8 @@ public static class PointSystemSeedValidator
     private static List<PointSystemStageSeedDefinition> NormalizeStages(
         IReadOnlyList<PointSystemStageSeedDefinition> sourceStages,
         string systemPath,
-        List<string> errors)
+        List<string> errors
+    )
     {
         var stages = new List<PointSystemStageSeedDefinition>(sourceStages.Count);
         var sessionTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -96,7 +106,7 @@ public static class PointSystemSeedValidator
             var path = $"{systemPath}.stages[{stageIndex}]";
             var sessionType = string.IsNullOrWhiteSpace(source.SessionType)
                 ? string.Empty
-                : DomainQueryService.NormalizeSessionType(source.SessionType);
+                : ResultEmbedMapping.NormalizeSessionType(source.SessionType);
 
             Required(sessionType, $"{path}.session_type", errors);
             if (!string.IsNullOrEmpty(sessionType) && !sessionTypes.Add(sessionType))
@@ -104,8 +114,8 @@ public static class PointSystemSeedValidator
                 errors.Add($"{path}.session_type duplicates stage '{sessionType}'.");
             }
 
-            var rules = source.Rules
-                .OrderBy(rule => rule.PositionFrom)
+            var rules = source
+                .Rules.OrderBy(rule => rule.PositionFrom)
                 .ThenBy(rule => rule.PositionTo ?? int.MaxValue)
                 .ToArray();
 
@@ -143,19 +153,17 @@ public static class PointSystemSeedValidator
                 }
             }
 
-            stages.Add(source with
-            {
-                SessionType = sessionType,
-                Rules = rules
-            });
+            stages.Add(source with { SessionType = sessionType, Rules = rules });
         }
 
         return stages;
     }
 
-    private static string NormalizeLowerCode(string? value) => value?.Trim().ToLowerInvariant() ?? string.Empty;
+    private static string NormalizeLowerCode(string? value) =>
+        value?.Trim().ToLowerInvariant() ?? string.Empty;
 
-    private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string? NullIfWhiteSpace(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static void Required(string value, string path, List<string> errors)
     {

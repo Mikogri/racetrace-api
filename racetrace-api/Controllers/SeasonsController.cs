@@ -17,10 +17,11 @@ public sealed class SeasonsController : ControllerBase
 
     [HttpGet("{season:int}/overview")]
     [OutputCache(PolicyName = "season-overview")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.SeasonOverviewResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Overview(
-        int season,
-        CancellationToken cancellationToken)
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.SeasonOverviewResponseDto),
+        StatusCodes.Status200OK
+    )]
+    public async Task<IActionResult> Overview(int season, CancellationToken cancellationToken)
     {
         return Ok(await _seasons.GetOverviewAsync(season, cancellationToken));
     }

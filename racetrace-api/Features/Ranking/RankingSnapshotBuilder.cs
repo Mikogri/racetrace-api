@@ -1,12 +1,17 @@
-using RaceTrace.Api.Features.Metrics;
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Metrics;
+using RaceTrace.Api.Features.Results;
+using RaceTrace.Api.Features.Riders;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 using RaceTrace.Api.Services;
 
 namespace RaceTrace.Api.Features.Ranking;
 
-internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, MetricsService metrics)
+internal sealed class RankingSnapshotBuilder(
+    DomainQueryService domainQueries,
+    MetricsService metrics
+)
 {
     private readonly DomainQueryService _domainQueries = domainQueries;
     private readonly MetricsService _metrics = metrics;
@@ -18,35 +23,43 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
         string? riderQuery,
         string? nation,
         string? riderId,
-        Func<CancellationToken, Task<RiderDetailDataBundle>>? suppliedRiderBundleFactory = null)
+        Func<CancellationToken, Task<RiderDetailDataBundle>>? suppliedRiderBundleFactory = null
+    )
     {
         if (!string.IsNullOrWhiteSpace(riderId))
         {
             var riderBundle = suppliedRiderBundleFactory is not null
                 ? await suppliedRiderBundleFactory(cancellationToken)
                 : await _domainQueries.GetRiderDetailDataAsync(
-                context,
-                riderId,
-                resolvedSessionIds: resolvedSessions?
-                    .Select(session => session.String("id") ?? string.Empty),
-                cancellationToken: cancellationToken);
+                    context,
+                    riderId,
+                    resolvedSessionIds: resolvedSessions?.Select(session =>
+                        session.String("id") ?? string.Empty
+                    ),
+                    cancellationToken: cancellationToken
+                );
             var riderData = riderBundle.Data;
             await _domainQueries.DecorateRankingRiderTeamsAsync(
                 riderData.Results,
-                cancellationToken);
+                cancellationToken
+            );
             var riderPerformance = _metrics.CalculatePrecomputedPerformanceByRider(
                 riderData.Results,
                 riderBundle.PaceSessions,
-                riderData.Sessions);
-            var riderRows = riderData.Results
-                .GroupBy(result => result.String("rider_id") ?? string.Empty)
+                riderData.Sessions
+            );
+            var riderRows = riderData
+                .Results.GroupBy(result => result.String("rider_id") ?? string.Empty)
                 .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-                .Select(group => BuildRow(
-                    group.Key,
-                    group.ToArray(),
-                    riderData.PointsByResultId,
-                    riderPerformance,
-                    fallbackTeamHistory: null))
+                .Select(group =>
+                    BuildRow(
+                        group.Key,
+                        group.ToArray(),
+                        riderData.PointsByResultId,
+                        riderPerformance,
+                        fallbackTeamHistory: null
+                    )
+                )
                 .ToArray();
 
             return new RankingSnapshot(
@@ -55,20 +68,27 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
                 riderData.Results,
                 riderData.Splits,
                 riderData.Sessions,
-                riderBundle.PaceSessions);
+                riderBundle.PaceSessions
+            );
         }
 
-        var matchingSessions = resolvedSessions ?? await _domainQueries.GetMatchingSessionsAsync(
-            context,
-            cancellationToken: cancellationToken);
+        var matchingSessions =
+            resolvedSessions
+            ?? await _domainQueries.GetMatchingSessionsAsync(
+                context,
+                cancellationToken: cancellationToken
+            );
         // Session packages contain all statuses. A status-filtered field must use
         // the corresponding source query, including its reference population.
-        var preaggregated = string.IsNullOrWhiteSpace(context.Status) ? await _domainQueries.GetRankingPreaggregatesAsync(
-            matchingSessions,
-            riderQuery,
-            nation,
-            cancellationToken: cancellationToken,
-            includeSplits: false) : null;
+        var preaggregated = string.IsNullOrWhiteSpace(context.Status)
+            ? await _domainQueries.GetRankingPreaggregatesAsync(
+                matchingSessions,
+                riderQuery,
+                nation,
+                cancellationToken: cancellationToken,
+                includeSplits: false
+            )
+            : null;
         if (preaggregated is not null)
         {
             preaggregated = DomainQueryService.RestrictToCategories(preaggregated, context);
@@ -77,12 +97,26 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
         RankingDataBundle bundle;
         if (preaggregated?.ReadData is { } read)
         {
-            var performance = _metrics.CalculatePrecomputedPerformanceByRider(read,preaggregated.PaceSessions,matchingSessions);
-            var typedRows = read.Results.GroupBy(r => r.String("rider_id") ?? string.Empty)
+            var performance = _metrics.CalculatePrecomputedPerformanceByRider(
+                read,
+                preaggregated.PaceSessions,
+                matchingSessions
+            );
+            var typedRows = read
+                .Results.GroupBy(r => r.String("rider_id") ?? string.Empty)
                 .Where(g => !string.IsNullOrWhiteSpace(g.Key))
-                .Select(g => BuildRow(g.Key,g.ToArray(),read.PointsByResultId,performance,null)).ToArray();
+                .Select(g => BuildRow(g.Key, g.ToArray(), read.PointsByResultId, performance, null))
+                .ToArray();
             var legacy = read.ToLegacy();
-            return new RankingSnapshot(typedRows,legacy.Results,legacy.FieldResults,legacy.Splits,matchingSessions,preaggregated.PaceSessions,read);
+            return new RankingSnapshot(
+                typedRows,
+                legacy.Results,
+                legacy.FieldResults,
+                legacy.Splits,
+                matchingSessions,
+                preaggregated.PaceSessions,
+                read
+            );
         }
         IReadOnlyList<PacePrecomputedSessionData>? precomputedSessions;
         IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId;
@@ -93,7 +127,8 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
             performanceByRiderId = _metrics.CalculatePrecomputedPerformanceByRider(
                 bundle.Results,
                 precomputedSessions,
-                matchingSessions);
+                matchingSessions
+            );
         }
         else
         {
@@ -102,8 +137,10 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
                 riderQuery: riderQuery,
                 nation: nation,
                 cancellationToken: cancellationToken,
-                resolvedSessionIds: matchingSessions
-                    .Select(session => session.String("id") ?? string.Empty));
+                resolvedSessionIds: matchingSessions.Select(session =>
+                    session.String("id") ?? string.Empty
+                )
+            );
             matchingSessions = bundle.Sessions;
             precomputedSessions = null;
             performanceByRiderId = await _metrics.CalculatePerformanceByRiderAsync(
@@ -113,18 +150,22 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
                 resultsContainFullField: true,
                 availableSessions: matchingSessions,
                 suppliedSplits: bundle.Splits,
-                suppliedFieldResults: bundle.FieldResults);
+                suppliedFieldResults: bundle.FieldResults
+            );
         }
         var results = bundle.Results;
         var rows = results
             .GroupBy(result => result.String("rider_id") ?? string.Empty)
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-            .Select(group => BuildRow(
-                group.Key,
-                group.ToArray(),
-                bundle.PointsByResultId,
-                performanceByRiderId,
-                fallbackTeamHistory: null))
+            .Select(group =>
+                BuildRow(
+                    group.Key,
+                    group.ToArray(),
+                    bundle.PointsByResultId,
+                    performanceByRiderId,
+                    fallbackTeamHistory: null
+                )
+            )
             .ToArray();
         return new RankingSnapshot(
             rows,
@@ -132,7 +173,8 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
             bundle.FieldResults,
             bundle.Splits,
             matchingSessions,
-            precomputedSessions);
+            precomputedSessions
+        );
     }
 
     private JsonObject BuildRow(
@@ -140,30 +182,37 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
         IReadOnlyList<JsonObject> results,
         IReadOnlyDictionary<string, decimal> pointsByResultId,
         IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId,
-        JsonArray? fallbackTeamHistory)
-        => BuildRow(riderId,results.Select(RankingReadResult.FromLegacy).ToArray(),pointsByResultId,performanceByRiderId,fallbackTeamHistory);
+        JsonArray? fallbackTeamHistory
+    ) =>
+        BuildRow(
+            riderId,
+            results.Select(RankingReadResult.FromLegacy).ToArray(),
+            pointsByResultId,
+            performanceByRiderId,
+            fallbackTeamHistory
+        );
 
     private JsonObject BuildRow(
         string riderId,
         RankingReadResult[] results,
         IReadOnlyDictionary<string, decimal> pointsByResultId,
         IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId,
-        JsonArray? fallbackTeamHistory)
+        JsonArray? fallbackTeamHistory
+    )
     {
         var rider = results
             .Select(result => result.Object("riders"))
-            .FirstOrDefault(row => row is not null)?
-            .DeepClone()
+            .FirstOrDefault(row => row is not null)
+            ?.DeepClone()
             .AsObject();
-        var resolvedTeam = rider?.Array("teams")?
-            .OfType<JsonObject>()
-            .FirstOrDefault();
-        var explicitTeams = results.Where(result => !string.IsNullOrWhiteSpace(result.String("team_id"))).ToArray();
-        var teamHistory = explicitTeams.Length > 0
-            ? DomainQueryService.BuildTeamHistory(explicitTeams)
-            : resolvedTeam is null
-                ? DomainQueryService.BuildTeamHistory(results)
-                : new JsonArray(resolvedTeam.DeepClone());
+        var resolvedTeam = rider?.Array("teams")?.OfType<JsonObject>().FirstOrDefault();
+        var explicitTeams = results
+            .Where(result => !string.IsNullOrWhiteSpace(result.String("team_id")))
+            .ToArray();
+        var teamHistory =
+            explicitTeams.Length > 0 ? RiderTeamHistoryMapper.BuildTeamHistory(explicitTeams)
+            : resolvedTeam is null ? RiderTeamHistoryMapper.BuildTeamHistory(results)
+            : new JsonArray(resolvedTeam.DeepClone());
         if (teamHistory.Count == 0 && fallbackTeamHistory is not null)
         {
             teamHistory = fallbackTeamHistory.DeepClone().AsArray();
@@ -171,12 +220,20 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
 
         rider?["teams"] = teamHistory;
         var finalResults = results
-            .Where(r => r.Session is not null && DomainQueryService.IsFinalSession(r.Session))
+            .Where(r => r.Session is not null && ResultEmbedMapping.IsFinalSession(r.Session))
             .Where(HasStarted)
             .ToArray();
         var participationRates = CalculateParticipationRates(results);
-        var finalPositions = finalResults.Select(result => result.Decimal("position")).Where(value => value is not null).Select(value => value!.Value).ToArray();
-        var allPositions = results.Select(result => result.Decimal("position")).Where(value => value is not null).Select(value => value!.Value).ToArray();
+        var finalPositions = finalResults
+            .Select(result => result.Decimal("position"))
+            .Where(value => value is not null)
+            .Select(value => value!.Value)
+            .ToArray();
+        var allPositions = results
+            .Select(result => result.Decimal("position"))
+            .Where(value => value is not null)
+            .Select(value => value!.Value)
+            .ToArray();
         var performance = performanceByRiderId.TryGetValue(riderId, out var riderPerformance)
             ? riderPerformance
             : new RiderPerformanceMetricValues(null, null, null, null, 0, 0, null, 0, 0, 0);
@@ -187,11 +244,12 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
             ["rider"] = rider,
             ["rider_name"] = rider?.DisplayName(),
             ["nation"] = rider?.String("nation"),
-            ["team_name"] = teamHistory
-                .OfType<JsonObject>()
-                .FirstOrDefault()?
-                .String("name"),
-            ["points"] = results.Sum(result => pointsByResultId.TryGetValue(result.String("id") ?? string.Empty, out var points) ? points : 0),
+            ["team_name"] = teamHistory.OfType<JsonObject>().FirstOrDefault()?.String("name"),
+            ["points"] = results.Sum(result =>
+                pointsByResultId.TryGetValue(result.String("id") ?? string.Empty, out var points)
+                    ? points
+                    : 0
+            ),
             ["wins"] = finalPositions.Count(value => value == 1),
             ["podiums"] = finalPositions.Count(value => value <= 3),
             ["top_10"] = finalPositions.Count(value => value <= 10),
@@ -219,7 +277,7 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
             ["consistency_used_sectors"] = performance.ConsistencyUsedSectors,
             ["result_score"] = performance.ResultScore,
             ["result_score_confidence"] = performance.ResultScoreConfidence,
-            ["result_score_used_sessions"] = performance.ResultScoreUsedSessions
+            ["result_score_used_sessions"] = performance.ResultScoreUsedSessions,
         };
     }
 
@@ -230,53 +288,52 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
             return 0m;
         }
 
-        return Math.Round(
-            100m * numerator / denominator,
-            2,
-            MidpointRounding.AwayFromZero);
+        return Math.Round(100m * numerator / denominator, 2, MidpointRounding.AwayFromZero);
     }
 
-    internal static string? ResultSessionId(JsonObject result)
-        => ResultSessionId(RankingReadResult.FromLegacy(result));
+    internal static string? ResultSessionId(JsonObject result) =>
+        ResultSessionId(RankingReadResult.FromLegacy(result));
 
     internal static string? ResultSessionId(RankingReadResult result)
     {
         return result.String("session_id") ?? result.Object("sessions")?.String("id");
     }
 
-    internal static string? ResultRoundId(JsonObject result)
-        => ResultRoundId(RankingReadResult.FromLegacy(result));
+    internal static string? ResultRoundId(JsonObject result) =>
+        ResultRoundId(RankingReadResult.FromLegacy(result));
 
     internal static string? ResultRoundId(RankingReadResult result)
     {
         var session = result.Object("sessions");
-        return session?.String("round_id") ??
-            session?.Object("rounds")?.String("id") ??
-            session?.Object("round_categories")?.String("round_id") ??
-            session?.Object("round_categories")?.Object("rounds")?.String("id");
+        return session?.String("round_id")
+            ?? session?.Object("rounds")?.String("id")
+            ?? session?.Object("round_categories")?.String("round_id")
+            ?? session?.Object("round_categories")?.Object("rounds")?.String("id");
     }
 
-    internal static bool HasStarted(JsonObject result)
-        => HasStarted(RankingReadResult.FromLegacy(result));
+    internal static bool HasStarted(JsonObject result) =>
+        HasStarted(RankingReadResult.FromLegacy(result));
 
     private static bool HasStarted(RankingReadResult result)
     {
         return !string.Equals(
             result.String("status")?.Trim(),
             "DNS",
-            StringComparison.OrdinalIgnoreCase);
+            StringComparison.OrdinalIgnoreCase
+        );
     }
 
     internal static RankingParticipationRates CalculateParticipationRates(
-        IReadOnlyList<JsonObject> results)
-        => CalculateParticipationRates(results.Select(RankingReadResult.FromLegacy).ToArray());
+        IReadOnlyList<JsonObject> results
+    ) => CalculateParticipationRates(results.Select(RankingReadResult.FromLegacy).ToArray());
 
     private static RankingParticipationRates CalculateParticipationRates(
-        IReadOnlyList<RankingReadResult> results)
+        IReadOnlyList<RankingReadResult> results
+    )
     {
         var startedResults = results.Where(HasStarted).ToArray();
         var qualifiedFinalResults = results
-            .Where(r => r.Session is not null && DomainQueryService.IsFinalSession(r.Session))
+            .Where(r => r.Session is not null && ResultEmbedMapping.IsFinalSession(r.Session))
             .ToArray();
         var startedFinalSessions = qualifiedFinalResults
             .Where(HasStarted)
@@ -298,28 +355,34 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
 
         return new RankingParticipationRates(
             startedFinalSessions,
-            Percentage(qualifiedRoundIds.Count, participatedRoundIds.Count));
+            Percentage(qualifiedRoundIds.Count, participatedRoundIds.Count)
+        );
     }
 
     internal static IReadOnlyDictionary<string, JsonArray> BuildFallbackTeamHistories(
         IReadOnlyList<JsonObject> selectedResults,
-        IReadOnlyList<JsonObject> historicalTeamResults)
+        IReadOnlyList<JsonObject> historicalTeamResults
+    )
     {
         var targetDates = selectedResults
             .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")))
             .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 group => group.Key,
-                group => group
-                    .Select(DomainQueryService.ResultDate)
-                    .Where(date => !string.IsNullOrWhiteSpace(date))
-                    .OrderByDescending(date => date, StringComparer.Ordinal)
-                    .FirstOrDefault(),
-                StringComparer.OrdinalIgnoreCase);
+                group =>
+                    group
+                        .Select(RiderTeamHistoryMapper.ResultDate)
+                        .Where(date => !string.IsNullOrWhiteSpace(date))
+                        .OrderByDescending(date => date, StringComparer.Ordinal)
+                        .FirstOrDefault(),
+                StringComparer.OrdinalIgnoreCase
+            );
 
         return historicalTeamResults
-            .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")) &&
-                result.Object("teams") is not null)
+            .Where(result =>
+                !string.IsNullOrWhiteSpace(result.String("rider_id"))
+                && result.Object("teams") is not null
+            )
             .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 group => group.Key,
@@ -329,19 +392,19 @@ internal sealed class RankingSnapshotBuilder(DomainQueryService domainQueries, M
                     targetDates.TryGetValue(group.Key, out var targetDate);
                     var historicalRows = string.IsNullOrWhiteSpace(targetDate)
                         ? rows
-                        : rows
-                            .Where(result =>
+                        : rows.Where(result =>
                             {
-                                var date = DomainQueryService.ResultDate(result);
-                                return !string.IsNullOrWhiteSpace(date) &&
-                                    string.CompareOrdinal(date, targetDate) <= 0;
+                                var date = RiderTeamHistoryMapper.ResultDate(result);
+                                return !string.IsNullOrWhiteSpace(date)
+                                    && string.CompareOrdinal(date, targetDate) <= 0;
                             })
                             .ToArray();
 
-                    return DomainQueryService.BuildTeamHistory(
-                        historicalRows.Length > 0 ? historicalRows : rows);
+                    return RiderTeamHistoryMapper.BuildTeamHistory(
+                        historicalRows.Length > 0 ? historicalRows : rows
+                    );
                 },
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase
+            );
     }
-
 }

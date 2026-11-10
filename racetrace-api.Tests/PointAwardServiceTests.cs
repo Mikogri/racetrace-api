@@ -10,8 +10,10 @@ public sealed class PointAwardServiceTests
     public async Task SelectsHistoricalSystemAndWritesPointsWithAuditReferences()
     {
         var supabase = new PointAwardSupabaseClient();
-        var result = await new PointAwardService(supabase)
-            .RecalculateSessionAsync("25", CancellationToken.None);
+        var result = await new PointAwardService(supabase).RecalculateSessionAsync(
+            "25",
+            CancellationToken.None
+        );
 
         Assert.True(result.PointSystemApplied);
         Assert.Equal("world-cup-me-2026", result.PointSystemCode);
@@ -26,22 +28,35 @@ public sealed class PointAwardServiceTests
         Assert.Equal("rule-1", rows[0]!["point_rule_id"]!.GetValue<string>());
         Assert.Equal(25, rows[1]!["points_awarded"]!.GetValue<int>());
         Assert.Equal("rule-2", rows[1]!["point_rule_id"]!.GetValue<string>());
-        Assert.All(rows, row =>
-        {
-            Assert.Equal("system-1", row!["points_system_id"]!.GetValue<string>());
-            Assert.Equal("stage-final", row["point_system_stage_id"]!.GetValue<string>());
-        });
+        Assert.All(
+            rows,
+            row =>
+            {
+                Assert.Equal("system-1", row!["points_system_id"]!.GetValue<string>());
+                Assert.Equal("stage-final", row["point_system_stage_id"]!.GetValue<string>());
+            }
+        );
 
-        Assert.Contains(supabase.SystemQuery!.Parameters, parameter =>
-            parameter.Key == "valid_from_season" && parameter.Value == "lte.2026");
-        Assert.Contains(supabase.SystemQuery.Parameters, parameter =>
-            parameter.Key == "valid_to_season" && parameter.Value == "gte.2026");
-        Assert.Contains(supabase.SystemQuery.Parameters, parameter =>
-            parameter.Key == "competition_level_id" && parameter.Value == "eq.2");
-        Assert.Contains(supabase.SystemQuery.Parameters, parameter =>
-            parameter.Key == "competition_rank_id" && parameter.Value == "eq.1");
-        Assert.Contains(supabase.SystemQuery.Parameters, parameter =>
-            parameter.Key == "category_id" && parameter.Value == "eq.4");
+        Assert.Contains(
+            supabase.SystemQuery!.Parameters,
+            parameter => parameter.Key == "valid_from_season" && parameter.Value == "lte.2026"
+        );
+        Assert.Contains(
+            supabase.SystemQuery.Parameters,
+            parameter => parameter.Key == "valid_to_season" && parameter.Value == "gte.2026"
+        );
+        Assert.Contains(
+            supabase.SystemQuery.Parameters,
+            parameter => parameter.Key == "competition_level_id" && parameter.Value == "eq.2"
+        );
+        Assert.Contains(
+            supabase.SystemQuery.Parameters,
+            parameter => parameter.Key == "competition_rank_id" && parameter.Value == "eq.1"
+        );
+        Assert.Contains(
+            supabase.SystemQuery.Parameters,
+            parameter => parameter.Key == "category_id" && parameter.Value == "eq.4"
+        );
     }
 
     [Fact]
@@ -49,19 +64,25 @@ public sealed class PointAwardServiceTests
     {
         var supabase = new PointAwardSupabaseClient(
             isSeasonFinalRound: true,
-            awardsPointsOnSeasonFinalRound: false);
+            awardsPointsOnSeasonFinalRound: false
+        );
 
-        var result = await new PointAwardService(supabase)
-            .RecalculateSessionAsync("25", CancellationToken.None);
+        var result = await new PointAwardService(supabase).RecalculateSessionAsync(
+            "25",
+            CancellationToken.None
+        );
 
         Assert.True(result.PointSystemApplied);
         Assert.Equal(0, result.TotalPoints);
         var rows = Assert.IsType<JsonArray>(supabase.PostedPoints);
-        Assert.All(rows, row =>
-        {
-            Assert.Equal(0, row!["points_awarded"]!.GetValue<int>());
-            Assert.Null(row["point_rule_id"]);
-        });
+        Assert.All(
+            rows,
+            row =>
+            {
+                Assert.Equal(0, row!["points_awarded"]!.GetValue<int>());
+                Assert.Null(row["point_rule_id"]);
+            }
+        );
     }
 
     [Fact]
@@ -69,10 +90,13 @@ public sealed class PointAwardServiceTests
     {
         var supabase = new PointAwardSupabaseClient(
             isSeasonFinalRound: true,
-            seasonFinalPoints: [250, 200]);
+            seasonFinalPoints: [250, 200]
+        );
 
-        var result = await new PointAwardService(supabase)
-            .RecalculateSessionAsync("25", CancellationToken.None);
+        var result = await new PointAwardService(supabase).RecalculateSessionAsync(
+            "25",
+            CancellationToken.None
+        );
 
         Assert.Equal(450, result.TotalPoints);
         var rows = Assert.IsType<JsonArray>(supabase.PostedPoints);
@@ -86,7 +110,8 @@ public sealed class PointAwardServiceTests
         var supabase = new PointAwardSupabaseClient(ambiguousSystems: true);
 
         var exception = await Assert.ThrowsAsync<ApiException>(() =>
-            new PointAwardService(supabase).RecalculateSessionAsync("25", CancellationToken.None));
+            new PointAwardService(supabase).RecalculateSessionAsync("25", CancellationToken.None)
+        );
 
         Assert.Equal("AMBIGUOUS_POINT_SYSTEM", exception.Code);
         Assert.Null(supabase.PostedPoints);
@@ -98,14 +123,19 @@ public sealed class PointAwardServiceTests
     {
         var supabase = new PointAwardSupabaseClient(
             sessionType: "QUALI",
-            pointsSessionTypeOverride: "FINAL");
+            pointsSessionTypeOverride: "FINAL"
+        );
 
-        var result = await new PointAwardService(supabase)
-            .RecalculateSessionAsync("25", CancellationToken.None);
+        var result = await new PointAwardService(supabase).RecalculateSessionAsync(
+            "25",
+            CancellationToken.None
+        );
 
         Assert.True(result.PointSystemApplied);
-        Assert.Contains(supabase.StageQuery!.Parameters, parameter =>
-            parameter.Key == "session_type" && parameter.Value == "eq.FINAL");
+        Assert.Contains(
+            supabase.StageQuery!.Parameters,
+            parameter => parameter.Key == "session_type" && parameter.Value == "eq.FINAL"
+        );
     }
 
     private sealed class PointAwardSupabaseClient(
@@ -114,7 +144,8 @@ public sealed class PointAwardServiceTests
         bool ambiguousSystems = false,
         string sessionType = "FINAL",
         string? pointsSessionTypeOverride = null,
-        int[]? seasonFinalPoints = null) : ISupabaseRestClient
+        int[]? seasonFinalPoints = null
+    ) : ISupabaseRestClient
     {
         public SupabaseQuery? SystemQuery { get; private set; }
         public SupabaseQuery? StageQuery { get; private set; }
@@ -126,23 +157,20 @@ public sealed class PointAwardServiceTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal(SupabaseRole.Service, role);
             IReadOnlyList<JsonObject> rows = query.Table switch
             {
-                "results" =>
-                [
-                    Result("result-1", 1),
-                    Result("result-2", 2)
-                ],
+                "results" => [Result("result-1", 1), Result("result-2", 2)],
                 "points_systems" => Systems(query),
                 "point_rules" =>
                 [
                     Rule("rule-1", 1, 1, 50, seasonFinalPoints?.ElementAtOrDefault(0)),
-                    Rule("rule-2", 2, 2, 25, seasonFinalPoints?.ElementAtOrDefault(1))
+                    Rule("rule-2", 2, 2, 25, seasonFinalPoints?.ElementAtOrDefault(1)),
                 ],
-                _ => throw new NotSupportedException($"Unexpected GET table '{query.Table}'.")
+                _ => throw new NotSupportedException($"Unexpected GET table '{query.Table}'."),
             };
 
             return Task.FromResult(new SupabaseQueryResult(rows, rows.Count));
@@ -151,14 +179,17 @@ public sealed class PointAwardServiceTests
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal(SupabaseRole.Service, role);
             JsonObject row = query.Table switch
             {
                 "sessions" => Session(),
                 "point_system_stages" => Stage(query),
-                _ => throw new NotSupportedException($"Unexpected single GET table '{query.Table}'.")
+                _ => throw new NotSupportedException(
+                    $"Unexpected single GET table '{query.Table}'."
+                ),
             };
 
             return Task.FromResult<JsonObject?>(row);
@@ -169,7 +200,8 @@ public sealed class PointAwardServiceTests
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal(SupabaseRole.Service, role);
             Assert.Equal("result_points", table);
@@ -182,7 +214,8 @@ public sealed class PointAwardServiceTests
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal(SupabaseRole.Service, role);
             Assert.Equal("result_points", table);
@@ -195,13 +228,15 @@ public sealed class PointAwardServiceTests
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<JsonNode?> RpcAsync(
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         private JsonObject Session()
         {
@@ -224,15 +259,11 @@ public sealed class PointAwardServiceTests
                         {
                             ["id"] = "2",
                             ["code"] = "world_cup",
-                            ["priority"] = 2
-                        }
+                            ["priority"] = 2,
+                        },
                     },
-                    ["categories"] = new JsonObject
-                    {
-                        ["id"] = "4",
-                        ["code"] = "EM"
-                    }
-                }
+                    ["categories"] = new JsonObject { ["id"] = "4", ["code"] = "EM" },
+                },
             };
         }
 
@@ -245,7 +276,7 @@ public sealed class PointAwardServiceTests
                 ["point_system_id"] = "system-1",
                 ["session_type"] = "FINAL",
                 ["awards_points"] = true,
-                ["awards_points_on_season_final_round"] = awardsPointsOnSeasonFinalRound
+                ["awards_points_on_season_final_round"] = awardsPointsOnSeasonFinalRound,
             };
         }
 
@@ -256,28 +287,36 @@ public sealed class PointAwardServiceTests
             {
                 ["id"] = "system-1",
                 ["code"] = "world-cup-me-2026",
-                ["name"] = "World Cup Elite Men 2026"
+                ["name"] = "World Cup Elite Men 2026",
             };
             return ambiguousSystems
                 ? [first, new JsonObject { ["id"] = "system-2", ["code"] = "duplicate" }]
                 : [first];
         }
 
-        private static JsonObject Result(string id, int position) => new()
-        {
-            ["id"] = id,
-            ["position"] = position,
-            ["is_classified"] = true,
-            ["status"] = "Finished"
-        };
+        private static JsonObject Result(string id, int position) =>
+            new()
+            {
+                ["id"] = id,
+                ["position"] = position,
+                ["is_classified"] = true,
+                ["status"] = "Finished",
+            };
 
-        private static JsonObject Rule(string id, int from, int? to, int points, int? seasonFinalPoints) => new()
-        {
-            ["id"] = id,
-            ["position_from"] = from,
-            ["position_to"] = to,
-            ["points"] = points,
-            ["season_final_points"] = seasonFinalPoints
-        };
+        private static JsonObject Rule(
+            string id,
+            int from,
+            int? to,
+            int points,
+            int? seasonFinalPoints
+        ) =>
+            new()
+            {
+                ["id"] = id,
+                ["position_from"] = from,
+                ["position_to"] = to,
+                ["points"] = points,
+                ["season_final_points"] = seasonFinalPoints,
+            };
     }
 }

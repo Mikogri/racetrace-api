@@ -12,6 +12,6 @@ public sealed class HomeRankingController(HomeRankingService ranking) : Controll
     [HttpGet]
     [OutputCache(PolicyName = "ranking")]
     [ProducesResponseType(typeof(HomeRankingResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Get(CancellationToken cancellationToken)
-        => Ok(await ranking.GetAsync(Request.Query, cancellationToken));
+    public async Task<IActionResult> Get(CancellationToken cancellationToken) =>
+        Ok(await ranking.GetAsync(Request.Query, cancellationToken));
 }

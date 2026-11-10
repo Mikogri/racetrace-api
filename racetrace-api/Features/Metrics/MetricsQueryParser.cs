@@ -10,25 +10,38 @@ namespace RaceTrace.Api.Features.Metrics;
 public static class MetricsQueryParser
 {
     private static readonly string[] CategoryKeys =
-        ["category", "categories", "categoryCode", "categoryCodes", "category_code", "category_codes"];
+    [
+        "category",
+        "categories",
+        "categoryCode",
+        "categoryCodes",
+        "category_code",
+        "category_codes",
+    ];
 
     public static async Task<RiderMetricsContext> ParseAsync(
         IQueryCollection query,
         QueryValidationService validator,
         DomainQueryService domainQueries,
         CancellationToken cancellationToken,
-        string? forcedStatus = null)
+        string? forcedStatus = null
+    )
     {
         var categories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var value in validator.CsvAny(query, CategoryKeys))
         {
             try
             {
-                categories[value] = await domainQueries.ResolveCategoryCodeAsync(value, cancellationToken);
+                categories[value] = await domainQueries.ResolveCategoryCodeAsync(
+                    value,
+                    cancellationToken
+                );
             }
             catch (ArgumentException)
             {
-                throw validator.BadQuery($"Unsupported category '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicCategories)}.");
+                throw validator.BadQuery(
+                    $"Unsupported category '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicCategories)}."
+                );
             }
         }
 
@@ -37,15 +50,26 @@ public static class MetricsQueryParser
         {
             try
             {
-                sessions[value] = await domainQueries.ResolveSessionTypeCodeAsync(value, cancellationToken);
+                sessions[value] = await domainQueries.ResolveSessionTypeCodeAsync(
+                    value,
+                    cancellationToken
+                );
             }
             catch (ArgumentException)
             {
-                throw validator.BadQuery($"Unsupported sessionType '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicSessionTypes)}.");
+                throw validator.BadQuery(
+                    $"Unsupported sessionType '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicSessionTypes)}."
+                );
             }
         }
 
-        return Parse(query, validator, forcedStatus, value => categories[value], value => sessions[value]);
+        return Parse(
+            query,
+            validator,
+            forcedStatus,
+            value => categories[value],
+            value => sessions[value]
+        );
     }
 
     public static RiderMetricsContext Parse(
@@ -53,46 +77,67 @@ public static class MetricsQueryParser
         QueryValidationService validator,
         string? forcedStatus = null,
         Func<string, string>? categoryResolver = null,
-        Func<string, string>? sessionResolver = null)
+        Func<string, string>? sessionResolver = null
+    )
     {
         var seasonYears = ParseSeasonYears(query, validator);
         var trackIds = validator.CsvAny(query, "trackId", "track_id", "tracks");
         var venueIds = validator.CsvAny(query, "venueId", "venue_id");
         trackIds = trackIds.Concat(venueIds).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var venueNames = validator.CsvAny(query, "venue", "venueName", "venue_name");
-        var countryCodes = validator.CsvAny(query, "countryCode", "country_code")
+        var countryCodes = validator
+            .CsvAny(query, "countryCode", "country_code")
             .Select(value => value.ToUpperInvariant())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var categoryValues = validator.CsvAny(query, CategoryKeys);
-        var categoryCodes = categoryValues.Select(value =>
-        {
-            try
+        var categoryCodes = categoryValues
+            .Select(value =>
             {
-                return (categoryResolver ?? PublicApiCodes.ToDatabaseCategory)(value);
-            }
-            catch (ArgumentException)
-            {
-                throw validator.BadQuery($"Unsupported category '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicCategories)}.");
-            }
-        }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                try
+                {
+                    return (categoryResolver ?? PublicApiCodes.ToDatabaseCategory)(value);
+                }
+                catch (ArgumentException)
+                {
+                    throw validator.BadQuery(
+                        $"Unsupported category '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicCategories)}."
+                    );
+                }
+            })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var sessionValues = validator.CsvAny(query, "sessionType", "session_type");
-        var sessionTypes = sessionValues.Select(value =>
-        {
-            try
+        var sessionTypes = sessionValues
+            .Select(value =>
             {
-                return (sessionResolver ?? PublicApiCodes.ToDatabaseSessionType)(value);
-            }
-            catch (ArgumentException)
-            {
-                throw validator.BadQuery($"Unsupported sessionType '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicSessionTypes)}.");
-            }
-        }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                try
+                {
+                    return (sessionResolver ?? PublicApiCodes.ToDatabaseSessionType)(value);
+                }
+                catch (ArgumentException)
+                {
+                    throw validator.BadQuery(
+                        $"Unsupported sessionType '{value}'. Allowed values: {string.Join(", ", PublicApiCodes.PublicSessionTypes)}."
+                    );
+                }
+            })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var dateFrom = validator.DateAny(query, "dateFrom", "date_from", "from_date");
         var dateTo = validator.DateAny(query, "dateTo", "date_to", "to_date");
         validator.ValidateDateRange(dateFrom, dateTo);
-        var competitionClassIds = validator.IntCsvAny(query, "competitionClassId", "competition_class_id");
-        var competitionClassCodes = validator.CsvAny(query, "competitionClassCode", "competition_class_code", "class");
+        var competitionClassIds = validator.IntCsvAny(
+            query,
+            "competitionClassId",
+            "competition_class_id"
+        );
+        var competitionClassCodes = validator.CsvAny(
+            query,
+            "competitionClassCode",
+            "competition_class_code",
+            "class"
+        );
         var conditionIds = validator.IntCsvAny(query, "conditionId", "condition_id", "conditions");
         var conditionNames = validator.CsvAny(query, "condition");
 
@@ -107,7 +152,8 @@ public static class MetricsQueryParser
             conditionIds.Length == 1 ? conditionIds[0] : null,
             competitionClassCodes.Length == 1 ? competitionClassCodes[0] : null,
             sessionTypes.Length == 1 ? sessionTypes[0] : null,
-            forcedStatus ?? validator.String(query, "status"))
+            forcedStatus ?? validator.String(query, "status")
+        )
         {
             ConditionIds = conditionIds,
             SeasonYears = seasonYears,
@@ -120,7 +166,7 @@ public static class MetricsQueryParser
             CompetitionClassCodes = competitionClassCodes,
             CategoryCodes = categoryCodes,
             SessionTypes = sessionTypes,
-            ConditionNames = conditionNames
+            ConditionNames = conditionNames,
         };
     }
 
@@ -145,5 +191,4 @@ public static class MetricsQueryParser
 
         return year is null ? [] : [year.Value];
     }
-
 }

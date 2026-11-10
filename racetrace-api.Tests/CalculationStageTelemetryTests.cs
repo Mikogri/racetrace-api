@@ -14,12 +14,17 @@ public sealed class CalculationStageTelemetryTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, meter) =>
         {
-            if (instrument.Name == "racetrace.operation.duration") meter.EnableMeasurementEvents(instrument);
+            if (instrument.Name == "racetrace.operation.duration")
+                meter.EnableMeasurementEvents(instrument);
         };
-        listener.SetMeasurementEventCallback<double>((instrument, value, tags, state) =>
-        {
-            foreach (var tag in tags) if (tag.Key == "operation" && tag.Value is string name) stages.Add(name);
-        });
+        listener.SetMeasurementEventCallback<double>(
+            (instrument, value, tags, state) =>
+            {
+                foreach (var tag in tags)
+                    if (tag.Key == "operation" && tag.Value is string name)
+                        stages.Add(name);
+            }
+        );
         listener.Start();
         CompactMetricsPackageParser.ParseRankingReadData([]);
         SectorIncidentDetector.Analyze([], new PaceOptions());

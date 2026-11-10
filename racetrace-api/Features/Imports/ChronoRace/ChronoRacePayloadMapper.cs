@@ -9,16 +9,37 @@ internal static class ChronoRacePayloadMapper
 {
     private static readonly HashSet<string> RiderFields = new(StringComparer.Ordinal)
     {
-        "RaceNr", "UciRiderId", "UciCode", "GivenName", "FamilyName", "FirstName", "LastName", "Name",
-        "Nation", "BirthDate", "YearOfBirth", "Gender", "Protected", "UciTeamName", "UciTeamCode", "UciTeamId", "StartTime"
+        "RaceNr",
+        "UciRiderId",
+        "UciCode",
+        "GivenName",
+        "FamilyName",
+        "FirstName",
+        "LastName",
+        "Name",
+        "Nation",
+        "BirthDate",
+        "YearOfBirth",
+        "Gender",
+        "Protected",
+        "UciTeamName",
+        "UciTeamCode",
+        "UciTeamId",
+        "StartTime",
     };
 
     internal static void KeepSportingRiderFields(JsonObject payload)
     {
-        if (payload.Object("Riders") is not { } riders) return;
+        if (payload.Object("Riders") is not { } riders)
+            return;
         foreach (var rider in riders.Select(pair => pair.Value).OfType<JsonObject>())
-            foreach (var key in rider.Select(pair => pair.Key).Where(key => !RiderFields.Contains(key)).ToArray())
-                rider.Remove(key);
+        foreach (
+            var key in rider
+                .Select(pair => pair.Key)
+                .Where(key => !RiderFields.Contains(key))
+                .ToArray()
+        )
+            rider.Remove(key);
     }
 
     internal static JsonObject BuildSessionPayload(
@@ -26,7 +47,8 @@ internal static class ChronoRacePayloadMapper
         string roundId,
         string categoryId,
         string? conditionId,
-        string sessionType)
+        string sessionType
+    )
     {
         var values = new JsonObject
         {
@@ -36,7 +58,7 @@ internal static class ChronoRacePayloadMapper
             ["session_type"] = sessionType,
             ["condition_id"] = conditionId,
             ["session_date"] = payload.SessionDate?.ToString("yyyy-MM-dd"),
-            ["status"] = string.IsNullOrWhiteSpace(payload.Status) ? "scheduled" : payload.Status
+            ["status"] = string.IsNullOrWhiteSpace(payload.Status) ? "scheduled" : payload.Status,
         };
 
         // The public ChronoRace JSON URL lets the frontend poll live timing
@@ -56,7 +78,8 @@ internal static class ChronoRacePayloadMapper
         JsonObject result,
         JsonObject chronoRider,
         int? position,
-        bool isClassified)
+        bool isClassified
+    )
     {
         return new JsonObject
         {
@@ -69,13 +92,11 @@ internal static class ChronoRacePayloadMapper
             ["completed_distance"] = result.Int("CompletedDistance"),
             ["status"] = result.String("Status"),
             ["top_speed"] = result.Decimal("Speed"),
-            ["is_classified"] = isClassified
+            ["is_classified"] = isClassified,
         };
     }
 
-    internal static JsonObject[] TimingSplitsWithoutFinish(
-        JsonArray times,
-        int? finishTimeMs)
+    internal static JsonObject[] TimingSplitsWithoutFinish(JsonArray times, int? finishTimeMs)
     {
         var timingRows = times.OfType<JsonObject>().ToArray();
         if (finishTimeMs is not > 0)
@@ -83,9 +104,7 @@ internal static class ChronoRacePayloadMapper
             return timingRows;
         }
 
-        return timingRows
-            .Where(time => time.Int("RaceTime") != finishTimeMs)
-            .ToArray();
+        return timingRows.Where(time => time.Int("RaceTime") != finishTimeMs).ToArray();
     }
 
     internal static string? GenderFromCategory(string? categoryCode)
@@ -109,25 +128,33 @@ internal static class ChronoRacePayloadMapper
         {
             "EM" or "JM" or "ME" or "MJ" => "male",
             "EW" or "JW" or "WE" or "WJ" => "female",
-            _ => null
+            _ => null,
         };
     }
 
     internal static JsonObject BuildRiderPayload(
         JsonObject riderNode,
         JsonObject? existing,
-        string? gender)
+        string? gender
+    )
     {
         return new JsonObject
         {
             ["uci_id"] = PreferNew(riderNode.String("UciRiderId"), existing?.String("uci_id")),
             ["uci_code"] = PreferNew(riderNode.String("UciCode"), existing?.String("uci_code")),
-            ["last_name"] = PreferNew(riderNode.String("FamilyName"), existing?.String("last_name")),
-            ["first_name"] = PreferNew(riderNode.String("GivenName"), existing?.String("first_name")),
+            ["last_name"] = PreferNew(
+                riderNode.String("FamilyName"),
+                existing?.String("last_name")
+            ),
+            ["first_name"] = PreferNew(
+                riderNode.String("GivenName"),
+                existing?.String("first_name")
+            ),
             ["nation"] = PreferNew(riderNode.String("Nation"), existing?.String("nation")),
             ["birth_date"] = ResolveBirthDate(riderNode, existing),
             ["gender"] = PreferNew(gender, existing?.String("gender")),
-            ["is_protected"] = riderNode.Bool("Protected") ?? existing?.Bool("is_protected") ?? false
+            ["is_protected"] =
+                riderNode.Bool("Protected") ?? existing?.Bool("is_protected") ?? false,
         };
     }
 
@@ -181,16 +208,22 @@ internal static class ChronoRacePayloadMapper
         var inResult = result.Bool("InResult") ?? false;
         var position = NormalizePosition(result.Int("Position"));
         var status = result.String("Status");
-        return inResult && position is not null && result.Decimal("RaceTime") is > 0 && !string.Equals(status, "DNF", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(status, "DNS", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(status, "DSQ", StringComparison.OrdinalIgnoreCase);
+        return inResult
+            && position is not null
+            && result.Decimal("RaceTime") is > 0
+            && !string.Equals(status, "DNF", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(status, "DNS", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(status, "DSQ", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static bool IsFinishedResultWithoutSplits(JsonObject result, JsonArray times)
     {
-        return times.OfType<JsonObject>().Any() is false &&
-            result.Decimal("RaceTime") is > 0 &&
-            string.Equals(result.String("Status"), "Finished", StringComparison.OrdinalIgnoreCase);
+        return times.OfType<JsonObject>().Any() is false
+            && result.Decimal("RaceTime") is > 0
+            && string.Equals(
+                result.String("Status"),
+                "Finished",
+                StringComparison.OrdinalIgnoreCase
+            );
     }
-
 }

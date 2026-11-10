@@ -12,9 +12,13 @@ public sealed class ExternalJsonResponseTests
     {
         using var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StreamContent(new RepeatingStream(ExternalJsonResponse.MaximumBytes + 1, lengthKnown))
+            Content = new StreamContent(
+                new RepeatingStream(ExternalJsonResponse.MaximumBytes + 1, lengthKnown)
+            ),
         };
-        var error = await Assert.ThrowsAsync<ApiException>(() => ExternalJsonResponse.ReadAsync(response, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<ApiException>(() =>
+            ExternalJsonResponse.ReadAsync(response, CancellationToken.None)
+        );
         Assert.Equal("UPSTREAM_RESPONSE_TOO_LARGE", error.Code);
     }
 
@@ -23,9 +27,12 @@ public sealed class ExternalJsonResponseTests
     {
         using var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("\uFEFF{\"name\":\"Żółć\"}")
+            Content = new StringContent("\uFEFF{\"name\":\"Żółć\"}"),
         };
-        Assert.Equal("{\"name\":\"Żółć\"}", await ExternalJsonResponse.ReadAsync(response, CancellationToken.None));
+        Assert.Equal(
+            "{\"name\":\"Żółć\"}",
+            await ExternalJsonResponse.ReadAsync(response, CancellationToken.None)
+        );
     }
 
     private sealed class RepeatingStream(int length, bool seekable) : Stream
@@ -35,7 +42,12 @@ public sealed class ExternalJsonResponseTests
         public override bool CanSeek => seekable;
         public override bool CanWrite => false;
         public override long Length => seekable ? length : throw new NotSupportedException();
-        public override long Position { get => _position; set => throw new NotSupportedException(); }
+        public override long Position
+        {
+            get => _position;
+            set => throw new NotSupportedException();
+        }
+
         public override int Read(byte[] buffer, int offset, int count)
         {
             var available = Math.Min(count, length - _position);
@@ -43,9 +55,15 @@ public sealed class ExternalJsonResponseTests
             _position += available;
             return available;
         }
+
         public override void Flush() { }
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+
         public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
     }
 }

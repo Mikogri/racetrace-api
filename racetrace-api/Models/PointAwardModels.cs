@@ -7,4 +7,5 @@ public sealed record PointAwardCalculationResult(
     int PointRowsWritten,
     int TotalPoints,
     string? PointSystemCode,
-    string? Warning);
+    string? Warning
+);

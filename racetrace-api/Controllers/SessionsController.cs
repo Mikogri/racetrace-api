@@ -15,7 +15,10 @@ public sealed class SessionsController : ControllerBase
     }
 
     [HttpGet("common")]
-    [ProducesResponseType(typeof(RaceTrace.Api.Models.PublicPagedResponse<RaceTrace.Api.Models.CommonSessionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(RaceTrace.Api.Models.PublicPagedResponse<RaceTrace.Api.Models.CommonSessionDto>),
+        StatusCodes.Status200OK
+    )]
     public async Task<IActionResult> Common(CancellationToken cancellationToken)
     {
         return Ok(await _sessions.ListCommonSessionsAsync(Request.Query, cancellationToken));

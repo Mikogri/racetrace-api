@@ -12,14 +12,16 @@ public sealed record SessionSummaryDto(
     int StartedRidersCount,
     int SplitCount,
     int SectorCount,
-    string TimeView);
+    string TimeView
+);
 
 public sealed record ResultTimeDto(
     int Index,
     string Name,
     decimal? Time,
     decimal? GapToLeader,
-    int? Position)
+    int? Position
+)
 {
     public decimal? GapToBest => GapToLeader;
 }
@@ -41,7 +43,8 @@ public sealed record SessionResultDto(
     decimal? FinalTime,
     decimal? FinalGapToLeader,
     decimal AwardedPoints,
-    IReadOnlyList<ResultTimeDto> Times)
+    IReadOnlyList<ResultTimeDto> Times
+)
 {
     public bool IsPerfectRun { get; init; }
 
@@ -58,7 +61,8 @@ public sealed record SessionResultsResponseDto(
     int TotalItems,
     int TotalPages,
     bool HasPreviousPage,
-    bool HasNextPage);
+    bool HasNextPage
+);
 
 public sealed record CommonSessionDto(
     long SessionId,
@@ -66,4 +70,5 @@ public sealed record CommonSessionDto(
     string? SessionType,
     string? Category,
     DateOnly? SessionDate,
-    IReadOnlyList<long> RiderIds);
+    IReadOnlyList<long> RiderIds
+);

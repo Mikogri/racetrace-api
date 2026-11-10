@@ -4,60 +4,107 @@ using RaceTrace.Api.Models;
 
 namespace RaceTrace.Api.Services;
 
-internal sealed class RoundImageQueries(ISupabaseRestClient supabase, RoundImageStorageService? imageStorage)
+internal sealed class RoundImageQueries(
+    ISupabaseRestClient supabase,
+    RoundImageStorageService? imageStorage
+)
 {
     internal void AttachEmbeddedImageMetadata(JsonObject round)
     {
-        var image = round.Object("round_images") ?? round.Array("round_images")?.OfType<JsonObject>().FirstOrDefault();
+        var image =
+            round.Object("round_images")
+            ?? round.Array("round_images")?.OfType<JsonObject>().FirstOrDefault();
         var track = round.Object("tracks");
-        var path = image?.String("storage_path") ?? track?.Object("venue_images")?.String("storage_path");
-        var exists = image is not null || !string.IsNullOrWhiteSpace(track?.String("venue_image_id"));
-        round["round_image_url"] = !string.IsNullOrWhiteSpace(path) && _imageStorage is not null
-            ? StoragePublicUrl(path)
-            : exists ? $"/api/v1/rounds/{round.String("id")}/image" : null;
+        var path =
+            image?.String("storage_path") ?? track?.Object("venue_images")?.String("storage_path");
+        var exists =
+            image is not null || !string.IsNullOrWhiteSpace(track?.String("venue_image_id"));
+        round["round_image_url"] =
+            !string.IsNullOrWhiteSpace(path) && _imageStorage is not null ? StoragePublicUrl(path)
+            : exists ? $"/api/v1/rounds/{round.String("id")}/image"
+            : null;
     }
 
     private readonly ISupabaseRestClient _supabase = supabase;
     private readonly RoundImageStorageService? _imageStorage = imageStorage;
 
-    internal async Task<JsonObject> GetReusableImageAsync(long sourceRoundId, CancellationToken cancellationToken)
+    internal async Task<JsonObject> GetReusableImageAsync(
+        long sourceRoundId,
+        CancellationToken cancellationToken
+    )
     {
         const string columns = "storage_path,content_type,file_name,alt_text";
-        var image = await _supabase.GetSingleAsync(new SupabaseQuery("round_images")
-            .Select($"{columns},image_data,width_px,height_px")
-            .Filter("round_id", "eq", sourceRoundId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            SupabaseRole.Service, cancellationToken);
-        if (image is null || string.IsNullOrWhiteSpace(image.String("storage_path")) && string.IsNullOrWhiteSpace(image.String("image_data")))
+        var image = await _supabase.GetSingleAsync(
+            new SupabaseQuery("round_images")
+                .Select($"{columns},image_data,width_px,height_px")
+                .Filter(
+                    "round_id",
+                    "eq",
+                    sourceRoundId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+            SupabaseRole.Service,
+            cancellationToken
+        );
+        if (
+            image is null
+            || string.IsNullOrWhiteSpace(image.String("storage_path"))
+                && string.IsNullOrWhiteSpace(image.String("image_data"))
+        )
         {
-            var round = await _supabase.GetSingleAsync(new SupabaseQuery("rounds")
-                .Select($"tracks(venue_images({columns}))")
-                .Filter("id", "eq", sourceRoundId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-                SupabaseRole.Service, cancellationToken);
+            var round = await _supabase.GetSingleAsync(
+                new SupabaseQuery("rounds")
+                    .Select($"tracks(venue_images({columns}))")
+                    .Filter(
+                        "id",
+                        "eq",
+                        sourceRoundId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    ),
+                SupabaseRole.Service,
+                cancellationToken
+            );
             image = round?.Object("tracks")?.Object("venue_images");
         }
-        if (image is null || string.IsNullOrWhiteSpace(image.String("storage_path")) && string.IsNullOrWhiteSpace(image.String("image_data")))
-            throw new ApiException(StatusCodes.Status400BadRequest, "ROUND_IMAGE_SOURCE_NOT_FOUND", "The selected round has no reusable image.");
+        if (
+            image is null
+            || string.IsNullOrWhiteSpace(image.String("storage_path"))
+                && string.IsNullOrWhiteSpace(image.String("image_data"))
+        )
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "ROUND_IMAGE_SOURCE_NOT_FOUND",
+                "The selected round has no reusable image."
+            );
         return (JsonObject)image.DeepClone();
     }
 
     public async Task<RoundImageFile?> GetRoundImageAsync(
         long roundId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var image = await _supabase.GetSingleAsync(
             new SupabaseQuery("round_images")
                 .Select("round_id,image_data,storage_path,content_type,file_name,alt_text")
-                .Filter("round_id", "eq", roundId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            cancellationToken: cancellationToken);
+                .Filter(
+                    "round_id",
+                    "eq",
+                    roundId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+            cancellationToken: cancellationToken
+        );
 
-        if (image?.String("storage_path") is { } roundStoragePath && !string.IsNullOrWhiteSpace(roundStoragePath))
+        if (
+            image?.String("storage_path") is { } roundStoragePath
+            && !string.IsNullOrWhiteSpace(roundStoragePath)
+        )
         {
             return new RoundImageFile(
                 null,
                 image.String("content_type") ?? "image/png",
                 image.String("file_name"),
                 image.String("alt_text"),
-                StoragePublicUrl(roundStoragePath));
+                StoragePublicUrl(roundStoragePath)
+            );
         }
 
         var rawImageData = image?.String("image_data");
@@ -67,14 +114,22 @@ internal sealed class RoundImageQueries(ISupabaseRestClient supabase, RoundImage
                 DecodeImageData(rawImageData),
                 image?.String("content_type") ?? "image/png",
                 image?.String("file_name"),
-                image?.String("alt_text"));
+                image?.String("alt_text")
+            );
         }
 
         var round = await _supabase.GetSingleAsync(
             new SupabaseQuery("rounds")
-                .Select("track_id,tracks(venue_image_id,venue_images(storage_path,content_type,file_name,alt_text))")
-                .Filter("id", "eq", roundId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            cancellationToken: cancellationToken);
+                .Select(
+                    "track_id,tracks(venue_image_id,venue_images(storage_path,content_type,file_name,alt_text))"
+                )
+                .Filter(
+                    "id",
+                    "eq",
+                    roundId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+            cancellationToken: cancellationToken
+        );
         var venueImage = round?.Object("tracks")?.Object("venue_images");
         var venueStoragePath = venueImage?.String("storage_path");
         return string.IsNullOrWhiteSpace(venueStoragePath)
@@ -84,16 +139,17 @@ internal sealed class RoundImageQueries(ISupabaseRestClient supabase, RoundImage
                 venueImage?.String("content_type") ?? "image/png",
                 venueImage?.String("file_name"),
                 venueImage?.String("alt_text"),
-                StoragePublicUrl(venueStoragePath));
+                StoragePublicUrl(venueStoragePath)
+            );
     }
 
-
     private string StoragePublicUrl(string storagePath) =>
-        _imageStorage?.PublicUrl(storagePath) ??
-        throw new ApiException(
+        _imageStorage?.PublicUrl(storagePath)
+        ?? throw new ApiException(
             StatusCodes.Status503ServiceUnavailable,
             "SUPABASE_STORAGE_NOT_CONFIGURED",
-            "Supabase Storage is not configured for round images.");
+            "Supabase Storage is not configured for round images."
+        );
 
     private static byte[] DecodeImageData(string rawImageData)
     {
@@ -108,7 +164,8 @@ internal sealed class RoundImageQueries(ISupabaseRestClient supabase, RoundImage
             throw new ApiException(
                 StatusCodes.Status500InternalServerError,
                 "ROUND_IMAGE_INVALID_DATA",
-                "Round image data returned by the database is invalid.");
+                "Round image data returned by the database is invalid."
+            );
         }
     }
 }

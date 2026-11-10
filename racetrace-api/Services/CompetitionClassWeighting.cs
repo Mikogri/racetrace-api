@@ -9,8 +9,7 @@ internal sealed class CompetitionClassWeighting
         _weights = weights;
     }
 
-    public static CompetitionClassWeighting FromPriorities(
-        IEnumerable<int?> priorities)
+    public static CompetitionClassWeighting FromPriorities(IEnumerable<int?> priorities)
     {
         var activePriorities = priorities
             .Where(priority => priority is > 0)
@@ -20,14 +19,16 @@ internal sealed class CompetitionClassWeighting
 
         if (activePriorities.Length == 0)
         {
-            return new CompetitionClassWeighting(
-                new Dictionary<int, double>());
+            return new CompetitionClassWeighting(new Dictionary<int, double>());
         }
 
         var lowestClassWeight = activePriorities.Max();
-        return new CompetitionClassWeighting(activePriorities.ToDictionary(
-            priority => priority,
-            priority => (double)lowestClassWeight / priority));
+        return new CompetitionClassWeighting(
+            activePriorities.ToDictionary(
+                priority => priority,
+                priority => (double)lowestClassWeight / priority
+            )
+        );
     }
 
     public double GetWeight(int? priority)

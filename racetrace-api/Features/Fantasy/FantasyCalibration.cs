@@ -1,53 +1,121 @@
 namespace RaceTrace.Api.Features.Fantasy;
 
-public sealed record FantasyCalibrationObservation(string EventId, DateTimeOffset CompletedAtUtc, IReadOnlyDictionary<int, decimal> RawProbabilities, int Outcome);
-public sealed record FantasyStageCalibration(decimal Blend, IReadOnlyDictionary<int, decimal> EmpiricalProbabilities, int Samples, int Events, DateTimeOffset TrainedThroughUtc);
+public sealed record FantasyCalibrationObservation(
+    string EventId,
+    DateTimeOffset CompletedAtUtc,
+    IReadOnlyDictionary<int, decimal> RawProbabilities,
+    int Outcome
+);
+
+public sealed record FantasyStageCalibration(
+    decimal Blend,
+    IReadOnlyDictionary<int, decimal> EmpiricalProbabilities,
+    int Samples,
+    int Events,
+    DateTimeOffset TrainedThroughUtc
+);
 
 /// <summary>One fitted parameter per category/stage, applied to the existing full Monte Carlo distribution.</summary>
 public static class FantasyCalibration
 {
     public const string Version = "fantasy-empirical-blend-v3";
 
-    public static FantasyStageCalibration? Fit(IReadOnlyList<FantasyCalibrationObservation> history, DateTimeOffset forecastAtUtc)
+    public static FantasyStageCalibration? Fit(
+        IReadOnlyList<FantasyCalibrationObservation> history,
+        DateTimeOffset forecastAtUtc
+    )
     {
         foreach (var observation in history)
         {
             ValidateRaw(observation.RawProbabilities);
             if (observation.Outcome < 0 || string.IsNullOrWhiteSpace(observation.EventId))
-                throw new ArgumentException("Calibration outcomes and event identifiers must be valid.", nameof(history));
+                throw new ArgumentException(
+                    "Calibration outcomes and event identifiers must be valid.",
+                    nameof(history)
+                );
         }
         if (history.Any(value => value.CompletedAtUtc >= forecastAtUtc))
-            throw new ArgumentException("Calibration cannot include the predicted round or later data.", nameof(history));
-        if (history.Select(value => value.EventId).Distinct().Count() < FantasyModelConfiguration.Current.MinimumCalibrationEvents) return null;
+            throw new ArgumentException(
+                "Calibration cannot include the predicted round or later data.",
+                nameof(history)
+            );
+        if (
+            history.Select(value => value.EventId).Distinct().Count()
+            < FantasyModelConfiguration.Current.MinimumCalibrationEvents
+        )
+            return null;
         // Outcome zero is explicitly non-scoring, not a fabricated last-place finish.
-        var prior = history.GroupBy(value => value.Outcome).ToDictionary(group => group.Key, group => group.Count() / (decimal)history.Count);
+        var prior = history
+            .GroupBy(value => value.Outcome)
+            .ToDictionary(group => group.Key, group => group.Count() / (decimal)history.Count);
         var nonScoring = prior.GetValueOrDefault(0);
-        var baselines = history.Select(value => value.RawProbabilities.Keys.Max()).Distinct()
-            .ToDictionary(fieldSize => fieldSize, fieldSize => ExchangeableBaseline(fieldSize, nonScoring));
-        var likelihoods = history.Select(value => (Raw: value.RawProbabilities.GetValueOrDefault(value.Outcome),
-            Baseline: value.Outcome == 0 ? nonScoring : baselines[value.RawProbabilities.Keys.Max()].GetValueOrDefault(value.Outcome))).ToArray();
+        var baselines = history
+            .Select(value => value.RawProbabilities.Keys.Max())
+            .Distinct()
+            .ToDictionary(
+                fieldSize => fieldSize,
+                fieldSize => ExchangeableBaseline(fieldSize, nonScoring)
+            );
+        var likelihoods = history
+            .Select(value =>
+                (
+                    Raw: value.RawProbabilities.GetValueOrDefault(value.Outcome),
+                    Baseline: value.Outcome == 0
+                        ? nonScoring
+                        : baselines[value.RawProbabilities.Keys.Max()]
+                            .GetValueOrDefault(value.Outcome)
+                )
+            )
+            .ToArray();
         decimal bestBlend = 0;
         var bestLoss = double.PositiveInfinity;
         for (var step = 0; step <= FantasyModelConfiguration.Current.BlendSteps; step++)
         {
             var blend = step / (decimal)FantasyModelConfiguration.Current.BlendSteps;
-            var loss = likelihoods.Sum(value => -Math.Log(Math.Max(FantasyModelConfiguration.Current.LikelihoodFloor,
-                (double)((1 - blend) * value.Raw + blend * value.Baseline))));
-            if (loss < bestLoss) { bestLoss = loss; bestBlend = blend; }
+            var loss = likelihoods.Sum(value =>
+                -Math.Log(
+                    Math.Max(
+                        FantasyModelConfiguration.Current.LikelihoodFloor,
+                        (double)((1 - blend) * value.Raw + blend * value.Baseline)
+                    )
+                )
+            );
+            if (loss < bestLoss)
+            {
+                bestLoss = loss;
+                bestBlend = blend;
+            }
         }
-        return new(bestBlend, prior, history.Count, history.Select(value => value.EventId).Distinct().Count(), history.Max(value => value.CompletedAtUtc));
+        return new(
+            bestBlend,
+            prior,
+            history.Count,
+            history.Select(value => value.EventId).Distinct().Count(),
+            history.Max(value => value.CompletedAtUtc)
+        );
     }
 
-    public static FantasyPositionDistribution Apply(IReadOnlyDictionary<int, decimal> raw, FantasyStageCalibration calibration)
+    public static FantasyPositionDistribution Apply(
+        IReadOnlyDictionary<int, decimal> raw,
+        FantasyStageCalibration calibration
+    )
     {
         ValidateRaw(raw);
-        if (calibration.Blend is < 0 or > 1 || calibration.EmpiricalProbabilities.Any(pair => pair.Key < 0 || pair.Value < 0) ||
-            Math.Abs(calibration.EmpiricalProbabilities.Values.Sum() - 1) > FantasyModelConfiguration.Current.ProbabilityTolerance)
+        if (
+            calibration.Blend is < 0 or > 1
+            || calibration.EmpiricalProbabilities.Any(pair => pair.Key < 0 || pair.Value < 0)
+            || Math.Abs(calibration.EmpiricalProbabilities.Values.Sum() - 1)
+                > FantasyModelConfiguration.Current.ProbabilityTolerance
+        )
             throw new ArgumentException("Invalid fitted calibration.", nameof(calibration));
         var nonScoring = calibration.EmpiricalProbabilities.GetValueOrDefault(0);
         var baseline = ExchangeableBaseline(raw.Keys.Max(), nonScoring);
-        var probabilities = baseline.ToDictionary(pair => pair.Key,
-            pair => (1 - calibration.Blend) * raw.GetValueOrDefault(pair.Key) + calibration.Blend * pair.Value);
+        var probabilities = baseline.ToDictionary(
+            pair => pair.Key,
+            pair =>
+                (1 - calibration.Blend) * raw.GetValueOrDefault(pair.Key)
+                + calibration.Blend * pair.Value
+        );
         return new(probabilities, calibration.Blend * nonScoring);
     }
 
@@ -63,7 +131,8 @@ public static class FantasyCalibration
         for (var riders = 1; riders <= fieldSize; riders++)
         {
             for (var finishers = riders; finishers >= 1; finishers--)
-                finishCounts[finishers] = finishCounts[finishers] * nonScoring
+                finishCounts[finishers] =
+                    finishCounts[finishers] * nonScoring
                     + finishCounts[finishers - 1] * (1 - nonScoring);
             finishCounts[0] *= nonScoring;
         }
@@ -79,7 +148,15 @@ public static class FantasyCalibration
 
     private static void ValidateRaw(IReadOnlyDictionary<int, decimal> raw)
     {
-        if (raw.Count == 0 || raw.Any(pair => pair.Key <= 0 || pair.Value < 0) || Math.Abs(raw.Values.Sum() - 1) > FantasyModelConfiguration.Current.ProbabilityTolerance)
-            throw new ArgumentException("A complete existing race probability distribution is required.", nameof(raw));
+        if (
+            raw.Count == 0
+            || raw.Any(pair => pair.Key <= 0 || pair.Value < 0)
+            || Math.Abs(raw.Values.Sum() - 1)
+                > FantasyModelConfiguration.Current.ProbabilityTolerance
+        )
+            throw new ArgumentException(
+                "A complete existing race probability distribution is required.",
+                nameof(raw)
+            );
     }
 }

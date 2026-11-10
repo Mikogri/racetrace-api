@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Infrastructure;
 
 namespace RaceTrace.Api.Services;
@@ -13,21 +14,28 @@ public sealed class SearchService
         "sessions",
         "results",
         "tracks",
-        "teams"
+        "teams",
     };
 
     private readonly ISupabaseRestClient _supabase;
     private readonly QueryValidationService _validator;
     private readonly DomainQueryService _domainQueries;
 
-    public SearchService(ISupabaseRestClient supabase, QueryValidationService validator, DomainQueryService domainQueries)
+    public SearchService(
+        ISupabaseRestClient supabase,
+        QueryValidationService validator,
+        DomainQueryService domainQueries
+    )
     {
         _supabase = supabase;
         _validator = validator;
         _domainQueries = domainQueries;
     }
 
-    public async Task<JsonObject> SearchAsync(IQueryCollection queryString, CancellationToken cancellationToken)
+    public async Task<JsonObject> SearchAsync(
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         var q = _validator.String(queryString, "q");
         var type = _validator.String(queryString, "type") ?? "all";
@@ -35,7 +43,9 @@ public sealed class SearchService
 
         if (!AllowedTypes.Contains(type))
         {
-            throw _validator.BadQuery($"Invalid type '{type}'. Allowed values: {string.Join(", ", AllowedTypes)}.");
+            throw _validator.BadQuery(
+                $"Invalid type '{type}'. Allowed values: {string.Join(", ", AllowedTypes)}."
+            );
         }
 
         if (string.IsNullOrWhiteSpace(q))
@@ -47,7 +57,7 @@ public sealed class SearchService
                 ["sessions"] = new JsonArray(),
                 ["results"] = new JsonArray(),
                 ["tracks"] = new JsonArray(),
-                ["teams"] = new JsonArray()
+                ["teams"] = new JsonArray(),
             };
         }
 
@@ -60,7 +70,7 @@ public sealed class SearchService
             {
                 $"first_name.ilike.*{safe}*",
                 $"last_name.ilike.*{safe}*",
-                $"uci_code.ilike.*{safe}*"
+                $"uci_code.ilike.*{safe}*",
             };
             if (long.TryParse(safe, out var riderNumericQuery))
             {
@@ -68,24 +78,34 @@ public sealed class SearchService
                 riderExpressions.Add($"uci_id.eq.{riderNumericQuery}");
             }
 
-            var riders = (await _supabase.GetAsync(new SupabaseQuery("riders")
-                .Select("*")
-                .Or(string.Join(",", riderExpressions))
-                .Limit(limit), cancellationToken: cancellationToken)).Data;
+            var riders = (
+                await _supabase.GetAsync(
+                    new SupabaseQuery("riders")
+                        .Select("*")
+                        .Or(string.Join(",", riderExpressions))
+                        .Limit(limit),
+                    cancellationToken: cancellationToken
+                )
+            ).Data;
             await DecorateRidersWithTeamsAsync(riders, cancellationToken);
             response["riders"] = ToArray(riders);
         }
 
         if (type is "all" or "rounds")
         {
-            var rounds = (await _supabase.GetAsync(new SupabaseQuery("rounds")
-                .Select("*,tracks(*),competition_levels(*),conditions(*)")
-                .Or($"context_name.ilike.*{safe}*")
-                .Add("order", "start_date.desc.nullslast,id.desc")
-                .Limit(limit), cancellationToken: cancellationToken)).Data;
+            var rounds = (
+                await _supabase.GetAsync(
+                    new SupabaseQuery("rounds")
+                        .Select("*,tracks(*),competition_levels(*),conditions(*)")
+                        .Or($"context_name.ilike.*{safe}*")
+                        .Add("order", "start_date.desc.nullslast,id.desc")
+                        .Limit(limit),
+                    cancellationToken: cancellationToken
+                )
+            ).Data;
             foreach (var round in rounds)
             {
-                DomainQueryService.NormalizeRoundEmbed(round);
+                ResultEmbedMapping.NormalizeRoundEmbed(round);
             }
 
             response["rounds"] = ToArray(rounds);
@@ -93,11 +113,14 @@ public sealed class SearchService
 
         if (type is "all" or "sessions")
         {
-            var sessions = await _supabase.GetAsync(new SupabaseQuery("sessions")
-                .Select(DomainQueryService.SessionSelect)
-                .Or($"name.ilike.*{safe}*,session_type.ilike.*{safe}*,status.ilike.*{safe}*")
-                .Limit(limit), cancellationToken: cancellationToken);
-            DomainQueryService.NormalizeSessionEmbeds(sessions.Data);
+            var sessions = await _supabase.GetAsync(
+                new SupabaseQuery("sessions")
+                    .Select(DomainQueryService.SessionSelect)
+                    .Or($"name.ilike.*{safe}*,session_type.ilike.*{safe}*,status.ilike.*{safe}*")
+                    .Limit(limit),
+                cancellationToken: cancellationToken
+            );
+            ResultEmbedMapping.NormalizeSessionEmbeds(sessions.Data);
             response["sessions"] = ToArray(sessions.Data);
         }
 
@@ -112,7 +135,11 @@ public sealed class SearchService
             }
             else
             {
-                var riderIds = await _domainQueries.FindRiderIdsAsync(safe, null, cancellationToken: cancellationToken);
+                var riderIds = await _domainQueries.FindRiderIdsAsync(
+                    safe,
+                    null,
+                    cancellationToken: cancellationToken
+                );
                 if (riderIds.Count == 0)
                 {
                     resultQuery.Filter("status", "ilike", $"*{safe}*");
@@ -123,34 +150,56 @@ public sealed class SearchService
                 }
             }
 
-            var results = (await _supabase.GetAsync(resultQuery, cancellationToken: cancellationToken)).Data;
-            DomainQueryService.NormalizeResultEmbeds(results);
+            var results = (
+                await _supabase.GetAsync(resultQuery, cancellationToken: cancellationToken)
+            ).Data;
+            ResultEmbedMapping.NormalizeResultEmbeds(results);
             await _domainQueries.DecorateMissingResultTeamsFromHistoryAsync(
                 results,
-                cancellationToken);
+                cancellationToken
+            );
             response["results"] = ToArray(results);
         }
 
         if (type is "all" or "tracks")
         {
-            response["tracks"] = ToArray((await _supabase.GetAsync(new SupabaseQuery("tracks")
-                .Select("*")
-                .Or($"name.ilike.*{safe}*,venue.ilike.*{safe}*,country_code.ilike.*{safe}*")
-                .Limit(limit), cancellationToken: cancellationToken)).Data);
+            response["tracks"] = ToArray(
+                (
+                    await _supabase.GetAsync(
+                        new SupabaseQuery("tracks")
+                            .Select("*")
+                            .Or(
+                                $"name.ilike.*{safe}*,venue.ilike.*{safe}*,country_code.ilike.*{safe}*"
+                            )
+                            .Limit(limit),
+                        cancellationToken: cancellationToken
+                    )
+                ).Data
+            );
         }
 
         if (type is "all" or "teams")
         {
-            response["teams"] = ToArray((await _supabase.GetAsync(new SupabaseQuery("teams")
-                .Select("*")
-                .Or($"name.ilike.*{safe}*,code.ilike.*{safe}*")
-                .Limit(limit), cancellationToken: cancellationToken)).Data);
+            response["teams"] = ToArray(
+                (
+                    await _supabase.GetAsync(
+                        new SupabaseQuery("teams")
+                            .Select("*")
+                            .Or($"name.ilike.*{safe}*,code.ilike.*{safe}*")
+                            .Limit(limit),
+                        cancellationToken: cancellationToken
+                    )
+                ).Data
+            );
         }
 
         return response;
     }
 
-    private async Task DecorateRidersWithTeamsAsync(IReadOnlyList<JsonObject> riders, CancellationToken cancellationToken)
+    private async Task DecorateRidersWithTeamsAsync(
+        IReadOnlyList<JsonObject> riders,
+        CancellationToken cancellationToken
+    )
     {
         var riderIds = riders
             .Select(rider => rider.String("id"))
@@ -166,15 +215,13 @@ public sealed class SearchService
         var history = await _domainQueries.GetRiderTeamHistoryAsync(
             riderIds,
             toDate: today,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         foreach (var rider in riders)
         {
             var riderId = rider.String("id") ?? string.Empty;
-            var team = DomainQueryService.FindTeamPeriod(history, riderId, today)?
-                .Object("teams");
-            rider["teams"] = team is null
-                ? []
-                : new JsonArray(team.DeepClone());
+            var team = DomainQueryService.FindTeamPeriod(history, riderId, today)?.Object("teams");
+            rider["teams"] = team is null ? [] : new JsonArray(team.DeepClone());
         }
     }
 

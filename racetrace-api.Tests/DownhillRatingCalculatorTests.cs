@@ -18,9 +18,7 @@ public sealed class DownhillRatingCalculatorTests
     [Fact]
     public void RawRatingRenormalizesActivePaceAndConsistencyWeights()
     {
-        var result = new DownhillRatingCalculator().Calculate(
-            pace: 94,
-            consistency: 80);
+        var result = new DownhillRatingCalculator().Calculate(pace: 94, consistency: 80);
 
         var expectedRawRating = (0.70 * 94 + 0.15 * 80) / 0.85;
 
@@ -35,14 +33,8 @@ public sealed class DownhillRatingCalculatorTests
     {
         var calculator = new DownhillRatingCalculator();
         var withoutResultScore = calculator.Calculate(90, 80);
-        var winningResults = calculator.Calculate(
-            pace: 90,
-            consistency: 80,
-            resultScore: 100);
-        var weakResults = calculator.Calculate(
-            pace: 90,
-            consistency: 80,
-            resultScore: 0);
+        var winningResults = calculator.Calculate(pace: 90, consistency: 80, resultScore: 100);
+        var weakResults = calculator.Calculate(pace: 90, consistency: 80, resultScore: 0);
 
         Assert.Equal((0.70 * 90 + 0.15 * 80) / 0.85, withoutResultScore.RawRating, precision: 10);
         Assert.Equal(90, winningResults.RawRating, precision: 10);
@@ -55,15 +47,13 @@ public sealed class DownhillRatingCalculatorTests
     public void RatingAlwaysUsesFullContrast()
     {
         var calculator = new DownhillRatingCalculator();
-        var result = calculator.Calculate(
-            pace: 90,
-            consistency: 80,
-            resultScore: 100);
+        var result = calculator.Calculate(pace: 90, consistency: 80, resultScore: 100);
 
         Assert.Equal(
             calculator.ApplyRatingContrast(result.RawRating),
             result.Rating,
-            precision: 10);
+            precision: 10
+        );
     }
 
     [Theory]
@@ -96,7 +86,8 @@ public sealed class DownhillRatingCalculatorTests
     [Fact]
     public void ContrastIsStrictlyMonotonic()
     {
-        var ratings = Enumerable.Range(0, 101)
+        var ratings = Enumerable
+            .Range(0, 101)
             .Select(rawRating => CalculateForRaw(rawRating).Rating)
             .ToArray();
 
@@ -122,10 +113,7 @@ public sealed class DownhillRatingCalculatorTests
     [Fact]
     public void ZeroContrastReturnsRawRating()
     {
-        var calculator = new DownhillRatingCalculator(new RatingOptions
-        {
-            RatingContrast = 0
-        });
+        var calculator = new DownhillRatingCalculator(new RatingOptions { RatingContrast = 0 });
         var result = calculator.Calculate(82, 62);
 
         Assert.Equal(result.RawRating, result.Rating, precision: 10);
@@ -140,20 +128,17 @@ public sealed class DownhillRatingCalculatorTests
         Assert.Equal(
             calculator.ApplyRatingContrast(result.RawRating),
             result.Rating,
-            precision: 10);
+            precision: 10
+        );
     }
 
     [Theory]
     [InlineData(-100, -100)]
     [InlineData(150, 150)]
     [InlineData(150, -100)]
-    public void RatingAlwaysRemainsWithinZeroToOneHundred(
-        double pace,
-        double consistency)
+    public void RatingAlwaysRemainsWithinZeroToOneHundred(double pace, double consistency)
     {
-        var result = new DownhillRatingCalculator().Calculate(
-            pace,
-            consistency);
+        var result = new DownhillRatingCalculator().Calculate(pace, consistency);
 
         Assert.InRange(result.RawRating, 0, 100);
         Assert.InRange(result.Rating, 0, 100);
@@ -184,8 +169,8 @@ public sealed class DownhillRatingCalculatorTests
         var expectedRawRating = (0.70 * 90 + 0.15 * 10) / 0.85;
         var expectedFromRawRating = calculator.ApplyRatingContrast(expectedRawRating);
         var separatelyContrasted =
-            (0.70 / 0.85) * calculator.ApplyRatingContrast(90) +
-            (0.15 / 0.85) * calculator.ApplyRatingContrast(10);
+            (0.70 / 0.85) * calculator.ApplyRatingContrast(90)
+            + (0.15 / 0.85) * calculator.ApplyRatingContrast(10);
 
         Assert.Equal(expectedRawRating, result.RawRating, precision: 10);
         Assert.Equal(expectedFromRawRating, result.Rating, precision: 10);
@@ -194,8 +179,6 @@ public sealed class DownhillRatingCalculatorTests
 
     private static RatingResult CalculateForRaw(double rawRating)
     {
-        return new DownhillRatingCalculator().Calculate(
-            pace: rawRating,
-            consistency: rawRating);
+        return new DownhillRatingCalculator().Calculate(pace: rawRating, consistency: rawRating);
     }
 }

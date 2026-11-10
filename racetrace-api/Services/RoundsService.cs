@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 
@@ -6,8 +7,9 @@ namespace RaceTrace.Api.Services;
 
 public sealed class RoundsService
 {
-
-    private static readonly Dictionary<string, string> RoundSorts = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> RoundSorts = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
         ["roundNumber"] = "round_number",
         ["round_number"] = "round_number",
@@ -23,10 +25,12 @@ public sealed class RoundsService
         ["endDate"] = "end_date",
         ["end_date"] = "end_date",
         ["competitionClassName"] = "competition_levels(name)",
-        ["competitionClassPriority"] = "competition_levels(priority)"
+        ["competitionClassPriority"] = "competition_levels(priority)",
     };
 
-    private static readonly Dictionary<string, string> SessionSorts = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> SessionSorts = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
         ["name"] = "name",
         ["sessionType"] = "session_type",
@@ -34,7 +38,7 @@ public sealed class RoundsService
         ["category"] = "category_id",
         ["sessionDate"] = "session_date",
         ["session_date"] = "session_date",
-        ["status"] = "status"
+        ["status"] = "status",
     };
 
     private readonly ISupabaseRestClient _supabase;
@@ -46,7 +50,8 @@ public sealed class RoundsService
         ISupabaseRestClient supabase,
         QueryValidationService validator,
         DomainQueryService domainQueries,
-        RoundImageStorageService? imageStorage = null)
+        RoundImageStorageService? imageStorage = null
+    )
     {
         _supabase = supabase;
         _validator = validator;
@@ -54,7 +59,10 @@ public sealed class RoundsService
         _images = new RoundImageQueries(supabase, imageStorage);
     }
 
-    public async Task<PublicPagedResponse<RoundListItemDto>> ListRoundsAsync(IQueryCollection queryString, CancellationToken cancellationToken)
+    public async Task<PublicPagedResponse<RoundListItemDto>> ListRoundsAsync(
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         var page = _validator.Page(queryString);
         var requestedSort = _validator.Sort(queryString, RoundSorts, "startDate", "desc");
@@ -69,14 +77,14 @@ public sealed class RoundsService
         }
 
         var query = new SupabaseQuery("rounds")
-            .Select("*,tracks(*,venue_images(storage_path)),competition_levels(*),conditions(*),round_categories(*,categories(*),sessions(status)),round_images(round_id,storage_path)")
+            .Select(
+                "*,tracks(*,venue_images(storage_path)),competition_levels(*),conditions(*),round_categories(*,categories(*),sessions(status)),round_images(round_id,storage_path)"
+            )
             .Limit(page.Limit)
             .Offset(page.Offset)
             .Filter("season_year", "eq", seasons[0]);
         var direction = requestedSort.Descending ? "desc" : "asc";
-        query.Add(
-            "order",
-            $"start_date.{direction}.nullslast,id.{direction}");
+        query.Add("order", $"start_date.{direction}.nullslast,id.{direction}");
 
         await ApplyRoundFiltersAsync(query, queryString, cancellationToken);
         if (!await ApplyRoundReferenceFiltersAsync(query, queryString, cancellationToken))
@@ -84,13 +92,21 @@ public sealed class RoundsService
             return PublicPagedResponse<RoundListItemDto>.Create([], page.Page, page.Limit, 0);
         }
 
-        var response = await _supabase.GetAsync(query, count: true, cancellationToken: cancellationToken);
+        var response = await _supabase.GetAsync(
+            query,
+            count: true,
+            cancellationToken: cancellationToken
+        );
         foreach (var round in response.Data)
         {
-            DomainQueryService.NormalizeRoundEmbed(round);
-            round["sessions"] = new JsonArray((round.Array("round_categories") ?? [])
-                .OfType<JsonObject>().SelectMany(category => category.Array("sessions")?.OfType<JsonObject>() ?? [])
-                .Select(session => session.DeepClone()).ToArray());
+            ResultEmbedMapping.NormalizeRoundEmbed(round);
+            round["sessions"] = new JsonArray(
+                (round.Array("round_categories") ?? [])
+                    .OfType<JsonObject>()
+                    .SelectMany(category => category.Array("sessions")?.OfType<JsonObject>() ?? [])
+                    .Select(session => session.DeepClone())
+                    .ToArray()
+            );
             _images.AttachEmbeddedImageMetadata(round);
         }
 
@@ -99,7 +115,8 @@ public sealed class RoundsService
             items,
             page.Page,
             page.Limit,
-            response.Total ?? items.Length);
+            response.Total ?? items.Length
+        );
     }
 
     public async Task<IReadOnlyList<int>> ListSeasonsAsync(CancellationToken cancellationToken)
@@ -109,10 +126,11 @@ public sealed class RoundsService
                 .Select("season_year")
                 .Order("season_year", descending: true)
                 .Limit(1000),
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
 
-        return response.Data
-            .Select(row => row["season_year"]?.GetValue<int?>())
+        return response
+            .Data.Select(row => row["season_year"]?.GetValue<int?>())
             .Where(year => year is not null)
             .Select(year => year!.Value)
             .Distinct()
@@ -122,24 +140,32 @@ public sealed class RoundsService
 
     public Task<RoundImageFile?> GetRoundImageAsync(
         long roundId,
-        CancellationToken cancellationToken)
-        => _images.GetRoundImageAsync(roundId, cancellationToken);
+        CancellationToken cancellationToken
+    ) => _images.GetRoundImageAsync(roundId, cancellationToken);
 
-    public async Task<JsonObject> GetRoundAsync(string roundId, string[] include, CancellationToken cancellationToken)
+    public async Task<JsonObject> GetRoundAsync(
+        string roundId,
+        string[] include,
+        CancellationToken cancellationToken
+    )
     {
         var round = await _domainQueries.FindByIdAsync(
             "rounds",
             roundId,
             "*,tracks(*),competition_levels(*),conditions(*),round_categories(*,categories(*))",
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
 
         if (round is null)
         {
-            throw new ApiException(StatusCodes.Status404NotFound, "ROUND_NOT_FOUND", "Round was not found.");
+            throw new ApiException(
+                StatusCodes.Status404NotFound,
+                "ROUND_NOT_FOUND",
+                "Round was not found."
+            );
         }
 
-
-        DomainQueryService.NormalizeRoundEmbed(round);
+        ResultEmbedMapping.NormalizeRoundEmbed(round);
 
         if (include.Contains("sessions", StringComparer.OrdinalIgnoreCase))
         {
@@ -148,15 +174,22 @@ public sealed class RoundsService
                     .Select(DomainQueryService.SessionSelect)
                     .Filter("round_id", "eq", roundId)
                     .Order("session_date", false),
-                cancellationToken: cancellationToken);
-            DomainQueryService.NormalizeSessionEmbeds(sessions.Data);
-            round["sessions"] = new JsonArray(sessions.Data.Select(session => session.DeepClone()).ToArray());
+                cancellationToken: cancellationToken
+            );
+            ResultEmbedMapping.NormalizeSessionEmbeds(sessions.Data);
+            round["sessions"] = new JsonArray(
+                sessions.Data.Select(session => session.DeepClone()).ToArray()
+            );
         }
 
         return round;
     }
 
-    public async Task<PublicPagedResponse<CommonSessionDto>> ListRoundSessionsAsync(string roundId, IQueryCollection queryString, CancellationToken cancellationToken)
+    public async Task<PublicPagedResponse<CommonSessionDto>> ListRoundSessionsAsync(
+        string roundId,
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         var page = _validator.Page(queryString);
         var requestedSort = _validator.Sort(queryString, SessionSorts, "sessionDate", "asc");
@@ -168,13 +201,21 @@ public sealed class RoundsService
             .Offset(page.Offset)
             .Order(sort.Sort, sort.Descending);
 
-        var categoryValue = _validator.StringAny(queryString, "category", "categoryCode", "category_code");
+        var categoryValue = _validator.StringAny(
+            queryString,
+            "category",
+            "categoryCode",
+            "category_code"
+        );
         string? categoryCode = null;
         if (!string.IsNullOrWhiteSpace(categoryValue))
         {
             try
             {
-                categoryCode = await _domainQueries.ResolveCategoryCodeAsync(categoryValue, cancellationToken);
+                categoryCode = await _domainQueries.ResolveCategoryCodeAsync(
+                    categoryValue,
+                    cancellationToken
+                );
             }
             catch (ArgumentException)
             {
@@ -182,7 +223,10 @@ public sealed class RoundsService
             }
         }
 
-        var categoryId = await _domainQueries.FindCategoryIdByCodeAsync(categoryCode, cancellationToken: cancellationToken);
+        var categoryId = await _domainQueries.FindCategoryIdByCodeAsync(
+            categoryCode,
+            cancellationToken: cancellationToken
+        );
         if (!string.IsNullOrWhiteSpace(categoryCode) && categoryId is null)
         {
             return PublicPagedResponse<CommonSessionDto>.Create([], page.Page, page.Limit, 0);
@@ -199,7 +243,11 @@ public sealed class RoundsService
         {
             try
             {
-                query.Filter("session_type", "eq", await _domainQueries.ResolveSessionTypeCodeAsync(type, cancellationToken));
+                query.Filter(
+                    "session_type",
+                    "eq",
+                    await _domainQueries.ResolveSessionTypeCodeAsync(type, cancellationToken)
+                );
             }
             catch (ArgumentException)
             {
@@ -210,50 +258,80 @@ public sealed class RoundsService
         var q = _validator.StringAny(queryString, "search", "q");
         if (!string.IsNullOrWhiteSpace(q))
         {
-            query.Filter("name", "ilike", $"*{q.Replace("*", string.Empty, StringComparison.Ordinal)}*");
+            query.Filter(
+                "name",
+                "ilike",
+                $"*{q.Replace("*", string.Empty, StringComparison.Ordinal)}*"
+            );
         }
 
-        var response = await _supabase.GetAsync(query, count: true, cancellationToken: cancellationToken);
-        DomainQueryService.NormalizeSessionEmbeds(response.Data);
-        var items = response.Data.Select(session => new CommonSessionDto(
-            PublicDtoMapping.Long(session.String("id")),
-            PublicDtoMapping.Long(session.String("round_id") ?? session.Object("rounds")?.String("id")),
-            PublicApiCodes.ToPublicSessionType(session.String("session_type")),
-            PublicApiCodes.ToPublicCategory(session.Object("categories")?.String("code")),
-            ParseDate(session.String("session_date")),
-            [])).ToArray();
+        var response = await _supabase.GetAsync(
+            query,
+            count: true,
+            cancellationToken: cancellationToken
+        );
+        ResultEmbedMapping.NormalizeSessionEmbeds(response.Data);
+        var items = response
+            .Data.Select(session => new CommonSessionDto(
+                PublicDtoMapping.Long(session.String("id")),
+                PublicDtoMapping.Long(
+                    session.String("round_id") ?? session.Object("rounds")?.String("id")
+                ),
+                PublicApiCodes.ToPublicSessionType(session.String("session_type")),
+                PublicApiCodes.ToPublicCategory(session.Object("categories")?.String("code")),
+                ParseDate(session.String("session_date")),
+                []
+            ))
+            .ToArray();
         return PublicPagedResponse<CommonSessionDto>.Create(
             items,
             page.Page,
             page.Limit,
-            response.Total ?? items.Length);
+            response.Total ?? items.Length
+        );
     }
 
     public async Task<string> ResolveResultsSessionIdAsync(
         string roundId,
         IQueryCollection queryString,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var categoryValue = _validator.StringAny(queryString, "category", "categoryCode", "category_code")
+        var categoryValue =
+            _validator.StringAny(queryString, "category", "categoryCode", "category_code")
             ?? throw _validator.BadQuery("category is required for round results.");
-        var sessionTypeValue = _validator.StringAny(queryString, "sessionType", "session_type")
+        var sessionTypeValue =
+            _validator.StringAny(queryString, "sessionType", "session_type")
             ?? throw _validator.BadQuery("sessionType is required for round results.");
         string categoryCode;
         string sessionType;
         try
         {
-            categoryCode = await _domainQueries.ResolveCategoryCodeAsync(categoryValue, cancellationToken);
-            sessionType = await _domainQueries.ResolveSessionTypeCodeAsync(sessionTypeValue, cancellationToken);
+            categoryCode = await _domainQueries.ResolveCategoryCodeAsync(
+                categoryValue,
+                cancellationToken
+            );
+            sessionType = await _domainQueries.ResolveSessionTypeCodeAsync(
+                sessionTypeValue,
+                cancellationToken
+            );
         }
         catch (ArgumentException exception)
         {
             throw _validator.BadQuery(exception.Message);
         }
 
-        var categoryId = await _domainQueries.FindCategoryIdByCodeAsync(categoryCode, cancellationToken: cancellationToken);
+        var categoryId = await _domainQueries.FindCategoryIdByCodeAsync(
+            categoryCode,
+            cancellationToken: cancellationToken
+        );
         if (categoryId is null)
         {
-            throw new ApiException(StatusCodes.Status404NotFound, "CATEGORY_NOT_FOUND", "Category was not found.");
+            throw new ApiException(
+                StatusCodes.Status404NotFound,
+                "CATEGORY_NOT_FOUND",
+                "Category was not found."
+            );
         }
 
         var sessions = await _supabase.GetAsync(
@@ -263,36 +341,49 @@ public sealed class RoundsService
                 .Filter("category_id", "eq", categoryId)
                 .Filter("session_type", "eq", sessionType)
                 .Limit(2),
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         if (sessions.Data.Count == 0)
         {
-            throw new ApiException(StatusCodes.Status404NotFound, "SESSION_NOT_FOUND", "No session matches the requested round, category, and sessionType.");
+            throw new ApiException(
+                StatusCodes.Status404NotFound,
+                "SESSION_NOT_FOUND",
+                "No session matches the requested round, category, and sessionType."
+            );
         }
 
         if (sessions.Data.Count > 1)
         {
-            throw new ApiException(StatusCodes.Status409Conflict, "SESSION_AMBIGUOUS", "More than one session matches the requested round filters.");
+            throw new ApiException(
+                StatusCodes.Status409Conflict,
+                "SESSION_AMBIGUOUS",
+                "More than one session matches the requested round filters."
+            );
         }
 
         return sessions.Data[0].String("id")!;
     }
 
-    private async Task ApplyRoundFiltersAsync(SupabaseQuery query, IQueryCollection queryString, CancellationToken cancellationToken)
+    private async Task ApplyRoundFiltersAsync(
+        SupabaseQuery query,
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         var q = _validator.StringAny(queryString, "search", "q");
         if (!string.IsNullOrWhiteSpace(q))
         {
-            var safe = new string(q
-                .Where(character => character is not ('*' or ',' or '(' or ')'))
-                .ToArray())
-                .Trim();
+            var safe = new string(
+                q.Where(character => character is not ('*' or ',' or '(' or ')')).ToArray()
+            ).Trim();
             var tracks = await _supabase.GetAsync(
                 new SupabaseQuery("tracks")
                     .Select("id")
                     .Or($"name.ilike.*{safe}*,venue.ilike.*{safe}*,country_code.ilike.*{safe}*"),
-                cancellationToken: cancellationToken);
-            var trackIds = tracks.Data
-                .Select(track => track.String("id"))
+                cancellationToken: cancellationToken
+            );
+            var trackIds = tracks
+                .Data.Select(track => track.String("id"))
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Select(id => id!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -307,10 +398,22 @@ public sealed class RoundsService
         }
     }
 
-    private async Task<bool> ApplyRoundReferenceFiltersAsync(SupabaseQuery query, IQueryCollection queryString, CancellationToken cancellationToken)
+    private async Task<bool> ApplyRoundReferenceFiltersAsync(
+        SupabaseQuery query,
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
-        var competitionClassCode = _validator.StringAny(queryString, "competitionClassCode", "competition_class_code");
-        var competitionClassId = _validator.IntAny(queryString, "competitionClassId", "competition_class_id");
+        var competitionClassCode = _validator.StringAny(
+            queryString,
+            "competitionClassCode",
+            "competition_class_code"
+        );
+        var competitionClassId = _validator.IntAny(
+            queryString,
+            "competitionClassId",
+            "competition_class_id"
+        );
         if (competitionClassId is not null)
         {
             if (competitionClassId <= 0)
@@ -324,7 +427,8 @@ public sealed class RoundsService
         {
             var resolvedCompetitionClassId = await _domainQueries.FindCompetitionClassIdByCodeAsync(
                 competitionClassCode,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken
+            );
             if (resolvedCompetitionClassId is null)
             {
                 return false;
@@ -336,15 +440,18 @@ public sealed class RoundsService
         var countryCode = _validator.StringAny(queryString, "countryCode", "country_code");
         var venue = _validator.StringAny(queryString, "venueName", "venue");
         var trackName = _validator.StringAny(queryString, "trackName", "track_name");
-        if (!string.IsNullOrWhiteSpace(countryCode) ||
-            !string.IsNullOrWhiteSpace(venue) ||
-            !string.IsNullOrWhiteSpace(trackName))
+        if (
+            !string.IsNullOrWhiteSpace(countryCode)
+            || !string.IsNullOrWhiteSpace(venue)
+            || !string.IsNullOrWhiteSpace(trackName)
+        )
         {
             var trackIds = await _domainQueries.FindTrackIdsAsync(
                 countryCode,
                 venue,
                 trackName,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken
+            );
             if (trackIds.Count == 0)
             {
                 return false;
@@ -357,9 +464,14 @@ public sealed class RoundsService
         if (!string.IsNullOrWhiteSpace(status))
         {
             var normalizedStatus = status.ToLowerInvariant();
-            if (normalizedStatus is not ("upcoming" or "confirmed" or "live" or "completed" or "cancelled"))
+            if (
+                normalizedStatus
+                is not ("upcoming" or "confirmed" or "live" or "completed" or "cancelled")
+            )
             {
-                throw _validator.BadQuery("status must be upcoming, confirmed, live, completed, or cancelled.");
+                throw _validator.BadQuery(
+                    "status must be upcoming, confirmed, live, completed, or cancelled."
+                );
             }
 
             var current = DateTimeOffset.UtcNow;
@@ -374,7 +486,9 @@ public sealed class RoundsService
             }
             else if (normalizedStatus == "completed")
             {
-                query.Or($"status.eq.completed,end_date.lt.{current.AddDays(-1).ToString("O", System.Globalization.CultureInfo.InvariantCulture)}");
+                query.Or(
+                    $"status.eq.completed,end_date.lt.{current.AddDays(-1).ToString("O", System.Globalization.CultureInfo.InvariantCulture)}"
+                );
             }
             else
             {
@@ -382,9 +496,10 @@ public sealed class RoundsService
                     new SupabaseQuery("sessions")
                         .Select("round_id")
                         .In("status", ["live", "active", "running"]),
-                    cancellationToken: cancellationToken);
-                var roundIds = sessions.Data
-                    .Select(row => row.String("round_id"))
+                    cancellationToken: cancellationToken
+                );
+                var roundIds = sessions
+                    .Data.Select(row => row.String("round_id"))
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .Select(id => id!)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -394,7 +509,7 @@ public sealed class RoundsService
                     "status.eq.live",
                     "status.eq.active",
                     "status.eq.running",
-                    $"and(start_date.lte.{now},end_date.gte.{current.AddDays(-1).ToString("O", System.Globalization.CultureInfo.InvariantCulture)})"
+                    $"and(start_date.lte.{now},end_date.gte.{current.AddDays(-1).ToString("O", System.Globalization.CultureInfo.InvariantCulture)})",
                 };
                 if (roundIds.Length > 0)
                 {
@@ -405,13 +520,21 @@ public sealed class RoundsService
             }
         }
 
-        var categoryValue = _validator.StringAny(queryString, "category", "categoryCode", "category_code");
+        var categoryValue = _validator.StringAny(
+            queryString,
+            "category",
+            "categoryCode",
+            "category_code"
+        );
         string? categoryCode = null;
         if (!string.IsNullOrWhiteSpace(categoryValue))
         {
             try
             {
-                categoryCode = await _domainQueries.ResolveCategoryCodeAsync(categoryValue, cancellationToken);
+                categoryCode = await _domainQueries.ResolveCategoryCodeAsync(
+                    categoryValue,
+                    cancellationToken
+                );
             }
             catch (ArgumentException)
             {
@@ -420,7 +543,10 @@ public sealed class RoundsService
         }
         if (!string.IsNullOrWhiteSpace(categoryCode))
         {
-            var categoryId = await _domainQueries.FindCategoryIdByCodeAsync(categoryCode, cancellationToken: cancellationToken);
+            var categoryId = await _domainQueries.FindCategoryIdByCodeAsync(
+                categoryCode,
+                cancellationToken: cancellationToken
+            );
             if (categoryId is null)
             {
                 return false;
@@ -430,9 +556,10 @@ public sealed class RoundsService
                 new SupabaseQuery("round_categories")
                     .Select("round_id")
                     .Filter("category_id", "eq", categoryId),
-                cancellationToken: cancellationToken);
-            var roundIds = roundCategories.Data
-                .Select(row => row.String("round_id"))
+                cancellationToken: cancellationToken
+            );
+            var roundIds = roundCategories
+                .Data.Select(row => row.String("round_id"))
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Select(id => id!)
                 .ToArray();
@@ -451,7 +578,8 @@ public sealed class RoundsService
     private static RoundListItemDto ToPublicRound(JsonObject round)
     {
         var track = round.Object("tracks");
-        var competitionClass = round.Object("competition_class") ?? round.Object("competition_levels");
+        var competitionClass =
+            round.Object("competition_class") ?? round.Object("competition_levels");
         var roundId = PublicDtoMapping.Long(round.String("id"));
         var trackId = PublicDtoMapping.Long(round.String("track_id") ?? track?.String("id"));
         return new RoundListItemDto(
@@ -468,10 +596,15 @@ public sealed class RoundsService
             ParseDate(round.String("start_date")),
             ParseDate(round.String("end_date")),
             RoundStatus(round),
-            PublicDtoMapping.NullableLong(round.String("competition_class_id") ?? round.String("competition_level_id") ?? competitionClass?.String("id")),
+            PublicDtoMapping.NullableLong(
+                round.String("competition_class_id")
+                    ?? round.String("competition_level_id")
+                    ?? competitionClass?.String("id")
+            ),
             competitionClass?.String("code"),
             competitionClass?.String("name"),
-            competitionClass?.Int("priority"));
+            competitionClass?.Int("priority")
+        );
     }
 
     internal static string RoundStatus(JsonObject round, DateTimeOffset? now = null)
@@ -488,11 +621,14 @@ public sealed class RoundsService
         }
 
         var current = now ?? DateTimeOffset.UtcNow;
-        var sessionStatuses = round.Array("sessions")?
-            .OfType<JsonObject>()
-            .Select(session => session.String("status")?.Trim().ToLowerInvariant())
-            .Where(status => !string.IsNullOrWhiteSpace(status))
-            .ToArray() ?? [];
+        var sessionStatuses =
+            round
+                .Array("sessions")
+                ?.OfType<JsonObject>()
+                .Select(session => session.String("status")?.Trim().ToLowerInvariant())
+                .Where(status => !string.IsNullOrWhiteSpace(status))
+                .ToArray()
+            ?? [];
         if (sessionStatuses.Any(status => status is "live" or "active" or "running"))
         {
             return "live";
@@ -510,8 +646,13 @@ public sealed class RoundsService
             return "live";
         }
 
-        if ((end is not null && end <= current) ||
-            (sessionStatuses.Length > 0 && sessionStatuses.All(status => status is "finished" or "completed" or "final")))
+        if (
+            (end is not null && end <= current)
+            || (
+                sessionStatuses.Length > 0
+                && sessionStatuses.All(status => status is "finished" or "completed" or "final")
+            )
+        )
         {
             return "completed";
         }
@@ -520,7 +661,9 @@ public sealed class RoundsService
     }
 
     private static DateOnly? ParseDate(string? value) =>
-        DateTimeOffset.TryParse(value, out var parsed) ? DateOnly.FromDateTime(parsed.UtcDateTime) : null;
+        DateTimeOffset.TryParse(value, out var parsed)
+            ? DateOnly.FromDateTime(parsed.UtcDateTime)
+            : null;
 
     private static DateTimeOffset? ParseDateTime(string? value) =>
         DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;
@@ -532,7 +675,4 @@ public sealed class RoundsService
             ? parsed.Value.AddDays(1)
             : parsed;
     }
-
-
-
 }

@@ -9,11 +9,16 @@ public sealed class FantasyController(FantasyService fantasy) : ControllerBase
 {
     [HttpGet("current")]
     [ProducesResponseType(typeof(RaceTrace.Api.Models.FantasyCurrentDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Current(CancellationToken token) => Ok(await fantasy.CurrentAsync(token));
+    public async Task<IActionResult> Current(CancellationToken token) =>
+        Ok(await fantasy.CurrentAsync(token));
 
     [HttpGet("riders")]
-    [ProducesResponseType(typeof(IReadOnlyList<RaceTrace.Api.Models.FantasyRiderDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Riders(CancellationToken token) => Ok((await fantasy.CurrentAsync(token)).Riders);
+    [ProducesResponseType(
+        typeof(IReadOnlyList<RaceTrace.Api.Models.FantasyRiderDto>),
+        StatusCodes.Status200OK
+    )]
+    public async Task<IActionResult> Riders(CancellationToken token) =>
+        Ok((await fantasy.CurrentAsync(token)).Riders);
 
     [HttpGet("recommendation")]
     [ProducesResponseType(typeof(RaceTrace.Api.Models.FantasyCurrentDto), StatusCodes.Status200OK)]

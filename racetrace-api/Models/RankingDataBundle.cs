@@ -7,4 +7,5 @@ public sealed record RankingDataBundle(
     IReadOnlyList<JsonObject> Results,
     IReadOnlyList<JsonObject> FieldResults,
     IReadOnlyList<JsonObject> Splits,
-    IReadOnlyDictionary<string, decimal> PointsByResultId);
+    IReadOnlyDictionary<string, decimal> PointsByResultId
+);

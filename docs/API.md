@@ -90,10 +90,10 @@ W `racetrace-web-app` `src/lib/api-client.ts` odpowiada za HTTP, anulowanie, tim
 Eksporter ASP.NET generuje `contracts/openapi.json` z metadanych kontrolerów i DTO. Pinned `openapi-typescript` tworzy typy w `src/types/generated/api.d.ts`; nie edytujemy ich ręcznie. Eksport uruchamia host narzędziowy bez produkcyjnego startu, dostępu do Supabase i zadań w tle. Pracując w repozytorium frontendu:
 
 ```powershell
-pnpm contracts:export
-pnpm contracts:generate
-pnpm contracts:check
-pnpm contracts:test
+npm run contracts:export
+npm run contracts:generate
+npm run contracts:check
+npm run contracts:test
 ```
 
 `contracts:check` sprawdza zgodność artefaktów i potrafi wykryć rozjazd między repozytoriami. Po zmianie DTO należy sprawdzić zarówno JSON, jak i wygenerowane schematy oraz frontend. Sam poprawny build C# nie dowodzi zachowania kontraktu.

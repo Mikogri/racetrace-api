@@ -2,8 +2,7 @@ namespace RaceTrace.Api.Services;
 
 internal sealed partial class DownhillConsistencyCalculator
 {
-    private static double WeightedMedian(
-        IReadOnlyCollection<WeightedPosition> values)
+    private static double WeightedMedian(IReadOnlyCollection<WeightedPosition> values)
     {
         var ordered = values.OrderBy(value => value.Value).ToArray();
         var halfWeight = ordered.Sum(value => value.Weight) / 2.0;
@@ -21,14 +20,16 @@ internal sealed partial class DownhillConsistencyCalculator
     }
 
     private static double CalculateWeightedRelativeVariation(
-        IReadOnlyCollection<WeightedTime> times)
+        IReadOnlyCollection<WeightedTime> times
+    )
     {
         var validTimes = times
             .Where(item =>
-                IsValidTime(item.TimeSeconds) &&
-                item.Weight > 0 &&
-                !double.IsNaN(item.Weight) &&
-                !double.IsInfinity(item.Weight))
+                IsValidTime(item.TimeSeconds)
+                && item.Weight > 0
+                && !double.IsNaN(item.Weight)
+                && !double.IsInfinity(item.Weight)
+            )
             .Select(item => (LogTime: Math.Log(item.TimeSeconds), item.Weight))
             .ToArray();
 
@@ -43,9 +44,9 @@ internal sealed partial class DownhillConsistencyCalculator
             return 0;
         }
 
-        var weightedLogMean = validTimes.Sum(item =>
-            item.LogTime * item.Weight) / weightSum;
-        var weightedVariance = validTimes.Sum(item =>
+        var weightedLogMean = validTimes.Sum(item => item.LogTime * item.Weight) / weightSum;
+        var weightedVariance =
+            validTimes.Sum(item =>
             {
                 var difference = item.LogTime - weightedLogMean;
                 return item.Weight * difference * difference;
@@ -54,9 +55,7 @@ internal sealed partial class DownhillConsistencyCalculator
         return Math.Sqrt(Math.Exp(weightedVariance) - 1.0);
     }
 
-    private static double QuantileSorted(
-        double[] ordered,
-        double quantile)
+    private static double QuantileSorted(double[] ordered, double quantile)
     {
         if (ordered.Length == 0)
         {
@@ -72,8 +71,7 @@ internal sealed partial class DownhillConsistencyCalculator
         }
 
         var fraction = position - lowerIndex;
-        return ordered[lowerIndex] +
-            fraction * (ordered[upperIndex] - ordered[lowerIndex]);
+        return ordered[lowerIndex] + fraction * (ordered[upperIndex] - ordered[lowerIndex]);
     }
 
     private static double Clamp(double value, double minimum, double maximum)
@@ -86,11 +84,7 @@ internal sealed partial class DownhillConsistencyCalculator
         return time > 0 && !double.IsNaN(time) && !double.IsInfinity(time);
     }
 
-    private readonly record struct WeightedTime(
-        double TimeSeconds,
-        double Weight);
+    private readonly record struct WeightedTime(double TimeSeconds, double Weight);
 
-    private readonly record struct WeightedPosition(
-        double Value,
-        double Weight);
+    private readonly record struct WeightedPosition(double Value, double Weight);
 }

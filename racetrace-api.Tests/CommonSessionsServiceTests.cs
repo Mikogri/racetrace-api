@@ -15,12 +15,15 @@ public sealed class CommonSessionsServiceTests
         var service = new SessionsService(
             supabase,
             new QueryValidationService(),
-            new DomainQueryService(supabase));
-        var query = new QueryCollection(new Dictionary<string, StringValues>
-        {
-            ["riderId"] = new StringValues(["3", "8"]),
-            ["commonSessionsOnly"] = "true"
-        });
+            new DomainQueryService(supabase)
+        );
+        var query = new QueryCollection(
+            new Dictionary<string, StringValues>
+            {
+                ["riderId"] = new StringValues(["3", "8"]),
+                ["commonSessionsOnly"] = "true",
+            }
+        );
 
         var response = await service.ListCommonSessionsAsync(query, CancellationToken.None);
 
@@ -36,12 +39,15 @@ public sealed class CommonSessionsServiceTests
         var service = new SessionsService(
             supabase,
             new QueryValidationService(),
-            new DomainQueryService(supabase));
-        var query = new QueryCollection(new Dictionary<string, StringValues>
-        {
-            ["riderId"] = "3",
-            ["commonSessionsOnly"] = "true"
-        });
+            new DomainQueryService(supabase)
+        );
+        var query = new QueryCollection(
+            new Dictionary<string, StringValues>
+            {
+                ["riderId"] = "3",
+                ["commonSessionsOnly"] = "true",
+            }
+        );
 
         var response = await service.ListCommonSessionsAsync(query, CancellationToken.None);
 
@@ -56,15 +62,12 @@ public sealed class CommonSessionsServiceTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             if (query.Table == "sessions" && _sessionQueryCount++ == 0)
             {
-                IReadOnlyList<JsonObject> sessions =
-                [
-                    Session("11", "1"),
-                    Session("12", "1")
-                ];
+                IReadOnlyList<JsonObject> sessions = [Session("11", "1"), Session("12", "1")];
                 return Task.FromResult(new SupabaseQueryResult(sessions, sessions.Count));
             }
 
@@ -72,9 +75,24 @@ public sealed class CommonSessionsServiceTests
             {
                 IReadOnlyList<JsonObject> results =
                 [
-                    new JsonObject { ["session_id"] = "11", ["rider_id"] = "3", ["status"] = "Finished" },
-                    new JsonObject { ["session_id"] = "11", ["rider_id"] = "8", ["status"] = "DNF" },
-                    new JsonObject { ["session_id"] = "12", ["rider_id"] = "3", ["status"] = "Finished" }
+                    new JsonObject
+                    {
+                        ["session_id"] = "11",
+                        ["rider_id"] = "3",
+                        ["status"] = "Finished",
+                    },
+                    new JsonObject
+                    {
+                        ["session_id"] = "11",
+                        ["rider_id"] = "8",
+                        ["status"] = "DNF",
+                    },
+                    new JsonObject
+                    {
+                        ["session_id"] = "12",
+                        ["rider_id"] = "3",
+                        ["status"] = "Finished",
+                    },
                 ];
                 return Task.FromResult(new SupabaseQueryResult(results, results.Count));
             }
@@ -88,34 +106,66 @@ public sealed class CommonSessionsServiceTests
             throw new NotSupportedException($"Unexpected table '{query.Table}'.");
         }
 
-        private static JsonObject Session(string id, string roundId) => new()
-        {
-            ["id"] = id,
-            ["round_id"] = roundId,
-            ["category_id"] = "4",
-            ["session_type"] = "FINAL",
-            ["session_date"] = "2026-07-20"
-        };
-
-        internal static JsonObject FullSession(string id, string roundId) => new()
-        {
-            ["id"] = id,
-            ["round_id"] = roundId,
-            ["category_id"] = "4",
-            ["session_type"] = "FINAL",
-            ["session_date"] = "2026-07-20",
-            ["round_categories"] = new JsonObject
+        private static JsonObject Session(string id, string roundId) =>
+            new()
             {
-                ["rounds"] = new JsonObject { ["id"] = roundId },
-                ["categories"] = new JsonObject { ["id"] = "4", ["code"] = "EM" }
-            }
-        };
+                ["id"] = id,
+                ["round_id"] = roundId,
+                ["category_id"] = "4",
+                ["session_type"] = "FINAL",
+                ["session_date"] = "2026-07-20",
+            };
 
-        public Task<JsonObject?> GetSingleAsync(SupabaseQuery query, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<JsonObject>> PostAsync(string table, JsonNode payload, SupabaseRole role, string? onConflict = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<JsonObject>> PatchAsync(string table, JsonObject payload, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task DeleteAsync(string table, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        internal static JsonObject FullSession(string id, string roundId) =>
+            new()
+            {
+                ["id"] = id,
+                ["round_id"] = roundId,
+                ["category_id"] = "4",
+                ["session_type"] = "FINAL",
+                ["session_date"] = "2026-07-20",
+                ["round_categories"] = new JsonObject
+                {
+                    ["rounds"] = new JsonObject { ["id"] = roundId },
+                    ["categories"] = new JsonObject { ["id"] = "4", ["code"] = "EM" },
+                },
+            };
+
+        public Task<JsonObject?> GetSingleAsync(
+            SupabaseQuery query,
+            SupabaseRole role = SupabaseRole.Anon,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<JsonObject>> PostAsync(
+            string table,
+            JsonNode payload,
+            SupabaseRole role,
+            string? onConflict = null,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<JsonObject>> PatchAsync(
+            string table,
+            JsonObject payload,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task DeleteAsync(
+            string table,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<JsonNode?> RpcAsync(
+            string functionName,
+            JsonObject payload,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 
     private sealed class SingleRiderSessionsSupabaseClient : ISupabaseRestClient
@@ -124,20 +174,51 @@ public sealed class CommonSessionsServiceTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             IReadOnlyList<JsonObject> sessions =
             [
                 CommonSessionsSupabaseClient.FullSession("11", "1"),
-                CommonSessionsSupabaseClient.FullSession("12", "1")
+                CommonSessionsSupabaseClient.FullSession("12", "1"),
             ];
             return Task.FromResult(new SupabaseQueryResult(sessions, sessions.Count));
         }
 
-        public Task<JsonObject?> GetSingleAsync(SupabaseQuery query, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<JsonObject>> PostAsync(string table, JsonNode payload, SupabaseRole role, string? onConflict = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<JsonObject>> PatchAsync(string table, JsonObject payload, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task DeleteAsync(string table, SupabaseQuery query, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<JsonObject?> GetSingleAsync(
+            SupabaseQuery query,
+            SupabaseRole role = SupabaseRole.Anon,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<JsonObject>> PostAsync(
+            string table,
+            JsonNode payload,
+            SupabaseRole role,
+            string? onConflict = null,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<JsonObject>> PatchAsync(
+            string table,
+            JsonObject payload,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task DeleteAsync(
+            string table,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<JsonNode?> RpcAsync(
+            string functionName,
+            JsonObject payload,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 }

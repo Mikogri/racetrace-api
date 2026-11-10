@@ -17,7 +17,9 @@ public record DisplayLabelDto
     public required string ShortName { get; init; }
     public required int DisplayOrder { get; init; }
     public IReadOnlyList<string> Aliases { get; init; } = [];
-    [JsonIgnore] public string DatabaseCode { get; init; } = "";
+
+    [JsonIgnore]
+    public string DatabaseCode { get; init; } = "";
 }
 
 public sealed record CategoryMetadataDto : DisplayLabelDto

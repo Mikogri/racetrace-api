@@ -10,7 +10,13 @@ public sealed class FantasyImportOptions
     public Dictionary<string, string[]> NameAliases { get; set; } = new(StringComparer.Ordinal);
 }
 
-public sealed record PinkbikeHistoricalRound(int PinkbikeRoundNumber, string Name, DateOnly Date, decimal? Price, int Points);
+public sealed record PinkbikeHistoricalRound(
+    int PinkbikeRoundNumber,
+    string Name,
+    DateOnly Date,
+    decimal? Price,
+    int Points
+);
 
 public sealed record PinkbikeFantasyRider(
     string ExternalId,
@@ -22,7 +28,8 @@ public sealed record PinkbikeFantasyRider(
     DateTimeOffset FetchedAtUtc,
     string MappingStatus,
     string? CountryName,
-    IReadOnlyList<PinkbikeHistoricalRound> HistoricalRounds);
+    IReadOnlyList<PinkbikeHistoricalRound> HistoricalRounds
+);
 
 public sealed record FantasyPriceSnapshot(
     string Id,
@@ -31,11 +38,17 @@ public sealed record FantasyPriceSnapshot(
     DateTimeOffset FetchedAtUtc,
     IReadOnlyList<PinkbikeFantasyRider> Riders,
     string SourceUrl,
-    string AcquisitionMethod)
+    string AcquisitionMethod
+)
 {
     public int DataVersion { get; init; }
 }
 
-public sealed record FantasyPriceStatus(FantasyPriceSnapshot? Snapshot, bool IsStale, string? LastSyncError, DateTimeOffset? LastSyncAttemptUtc);
+public sealed record FantasyPriceStatus(
+    FantasyPriceSnapshot? Snapshot,
+    bool IsStale,
+    string? LastSyncError,
+    DateTimeOffset? LastSyncAttemptUtc
+);
 
 public sealed record FantasyRiderIdentity(string RiderId, string Name, string? Gender);

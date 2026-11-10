@@ -4,14 +4,16 @@ using RaceTrace.Api.Infrastructure.Telemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services
-    .AddRaceTraceTelemetry(builder.Configuration)
+builder
+    .Services.AddRaceTraceTelemetry(builder.Configuration)
     .AddRaceTraceConfiguration(builder.Configuration)
     .AddRaceTraceHttp()
     .AddSupabaseInfrastructure()
     .AddRaceTraceApplication();
 
-builder.Services.Configure<CacheCoherenceOptions>(builder.Configuration.GetSection("CacheCoherence"));
+builder.Services.Configure<CacheCoherenceOptions>(
+    builder.Configuration.GetSection("CacheCoherence")
+);
 
 var app = builder.Build();
 
@@ -26,7 +28,7 @@ app.UseMiddleware<ApiAccessMiddleware>();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-	app.MapOpenApi();
+    app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();

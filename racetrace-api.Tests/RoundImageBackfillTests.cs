@@ -18,11 +18,16 @@ public sealed class RoundImageBackfillTests
         var png = Convert.FromBase64String(OnePixelPng);
         using var handler = new StorageHandler(png);
         using var http = new HttpClient(handler);
-        var storage = new RoundImageStorageService(http, Options.Create(new SupabaseOptions
-        {
-            Url = "https://storage.example.test",
-            ServiceRoleKey = "test-key"
-        }));
+        var storage = new RoundImageStorageService(
+            http,
+            Options.Create(
+                new SupabaseOptions
+                {
+                    Url = "https://storage.example.test",
+                    ServiceRoleKey = "test-key",
+                }
+            )
+        );
         var database = new ImageDatabase(png);
 
         var backfill = new RoundImageBackfillService(database, storage);
@@ -46,10 +51,18 @@ public sealed class RoundImageBackfillTests
     {
         public int WebpUploads { get; private set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
         {
             if (request.Method == HttpMethod.Get)
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(png) });
+                return Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new ByteArrayContent(png),
+                    }
+                );
             Assert.Equal("image/webp", request.Content!.Headers.ContentType?.MediaType);
             WebpUploads++;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
@@ -61,43 +74,83 @@ public sealed class RoundImageBackfillTests
         public JsonObject? RoundPatch { get; private set; }
         public JsonObject? VenuePatch { get; private set; }
 
-        public Task<SupabaseQueryResult> GetAsync(SupabaseQuery query, bool count = false,
-            SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+        public Task<SupabaseQueryResult> GetAsync(
+            SupabaseQuery query,
+            bool count = false,
+            SupabaseRole role = SupabaseRole.Anon,
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal(SupabaseRole.Service, role);
             var rows = query.Table switch
             {
                 "round_images" when RoundPatch is null => new JsonObject[]
                 {
-                    new() { ["round_id"] = 7, ["image_data"] = "\\x" + Convert.ToHexString(png),
-                        ["file_name"] = "round.png" }
+                    new()
+                    {
+                        ["round_id"] = 7,
+                        ["image_data"] = "\\x" + Convert.ToHexString(png),
+                        ["file_name"] = "round.png",
+                    },
                 },
                 "venue_images" when VenuePatch is null => new JsonObject[]
                 {
-                    new() { ["id"] = 3, ["storage_path"] = "images/old.png", ["file_name"] = "venue.png" }
+                    new()
+                    {
+                        ["id"] = 3,
+                        ["storage_path"] = "images/old.png",
+                        ["file_name"] = "venue.png",
+                    },
                 },
                 "round_images" or "venue_images" => [],
-                _ => throw new InvalidOperationException(query.Table)
+                _ => throw new InvalidOperationException(query.Table),
             };
             return Task.FromResult(new SupabaseQueryResult(rows, null));
         }
 
-        public Task<IReadOnlyList<JsonObject>> PatchAsync(string table, JsonObject payload, SupabaseQuery query,
-            SupabaseRole role, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<JsonObject>> PatchAsync(
+            string table,
+            JsonObject payload,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        )
         {
-            if (table == "round_images") RoundPatch = payload;
-            else if (table == "venue_images") VenuePatch = payload;
-            else throw new InvalidOperationException(table);
+            if (table == "round_images")
+                RoundPatch = payload;
+            else if (table == "venue_images")
+                VenuePatch = payload;
+            else
+                throw new InvalidOperationException(table);
             return Task.FromResult<IReadOnlyList<JsonObject>>([new JsonObject()]);
         }
 
-        public Task<JsonObject?> GetSingleAsync(SupabaseQuery query, SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<JsonObject>> PostAsync(string table, JsonNode payload, SupabaseRole role,
-            string? onConflict = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task DeleteAsync(string table, SupabaseQuery query, SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<JsonNode?> RpcAsync(string functionName, JsonObject payload, SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<JsonObject?> GetSingleAsync(
+            SupabaseQuery query,
+            SupabaseRole role = SupabaseRole.Anon,
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
+
+        public Task<IReadOnlyList<JsonObject>> PostAsync(
+            string table,
+            JsonNode payload,
+            SupabaseRole role,
+            string? onConflict = null,
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
+
+        public Task DeleteAsync(
+            string table,
+            SupabaseQuery query,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
+
+        public Task<JsonNode?> RpcAsync(
+            string functionName,
+            JsonObject payload,
+            SupabaseRole role,
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
     }
 }

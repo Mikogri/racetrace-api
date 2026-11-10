@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
-using RaceTrace.Api.Services;
 using RaceTrace.Api.Features.Results;
+using RaceTrace.Api.Services;
 
 namespace RaceTrace.Api.Tests;
 
@@ -15,12 +15,18 @@ public sealed class PerfectRunResultsTests
     {
         var invalid = Result(2, 151_000);
         invalid["status"] = status;
-        var splits = Enumerable.Range(1, 4)
-            .SelectMany(index => new[] { Split(1, index, index * 37_500), Split(2, index, index * 37_500) })
+        var splits = Enumerable
+            .Range(1, 4)
+            .SelectMany(index =>
+                new[] { Split(1, index, index * 37_500), Split(2, index, index * 37_500) }
+            )
             .ToArray();
 
         var sectors = ResultTimingProjection.BuildSectorsByResultId(
-            splits, new[] { Result(1, 180_000), invalid }, includeFinishSector: true);
+            splits,
+            new[] { Result(1, 180_000), invalid },
+            includeFinishSector: true
+        );
 
         Assert.Equal(5, sectors["1"].Count);
         Assert.Equal(4, sectors["2"].Count);
@@ -30,11 +36,7 @@ public sealed class PerfectRunResultsTests
     [Fact]
     public void PerfectRunIncludesTheFifthFinishSector()
     {
-        var results = new[]
-        {
-            Result(1, 180_000),
-            Result(2, 182_000)
-        };
+        var results = new[] { Result(1, 180_000), Result(2, 182_000) };
         var splits = new[]
         {
             Split(1, 1, 30_000),
@@ -44,7 +46,7 @@ public sealed class PerfectRunResultsTests
             Split(2, 1, 29_000),
             Split(2, 2, 71_000),
             Split(2, 3, 112_000),
-            Split(2, 4, 151_000)
+            Split(2, 4, 151_000),
         };
 
         var perfect = ResultsService.BuildPerfectRun(results, splits, "sectors");
@@ -68,7 +70,8 @@ public sealed class PerfectRunResultsTests
             Results(),
             Splits(),
             "sectors",
-            trackLengthM: 1000);
+            trackLengthM: 1000
+        );
 
         Assert.NotNull(perfect);
         Assert.True(perfect.IsPerfectRun);
@@ -92,16 +95,14 @@ public sealed class PerfectRunResultsTests
                 Assert.Equal(18m, second.Time);
                 Assert.Equal(0m, second.GapToBest);
                 Assert.Equal(1, second.Position);
-            });
+            }
+        );
     }
 
     [Fact]
     public void BuildsPerfectRunSplitsAsCumulativeFastestSectorTimes()
     {
-        var perfect = ResultsService.BuildPerfectRun(
-            Results(),
-            Splits(),
-            "splits");
+        var perfect = ResultsService.BuildPerfectRun(Results(), Splits(), "splits");
 
         Assert.NotNull(perfect);
         Assert.Collection(
@@ -115,51 +116,49 @@ public sealed class PerfectRunResultsTests
             {
                 Assert.Equal(28m, second.Time);
                 Assert.Equal(-1m, second.GapToBest);
-            });
+            }
+        );
     }
 
     private static IReadOnlyList<JsonObject> Results() =>
-    [
-        new JsonObject
-        {
-            ["id"] = 1,
-            ["race_time_ms"] = 30_000,
-            ["position"] = 2,
-            ["is_classified"] = true,
-            ["status"] = "Finished"
-        },
-        new JsonObject
-        {
-            ["id"] = 2,
-            ["race_time_ms"] = 29_000,
-            ["position"] = 1,
-            ["is_classified"] = true,
-            ["status"] = "Finished"
-        }
-    ];
+        [
+            new JsonObject
+            {
+                ["id"] = 1,
+                ["race_time_ms"] = 30_000,
+                ["position"] = 2,
+                ["is_classified"] = true,
+                ["status"] = "Finished",
+            },
+            new JsonObject
+            {
+                ["id"] = 2,
+                ["race_time_ms"] = 29_000,
+                ["position"] = 1,
+                ["is_classified"] = true,
+                ["status"] = "Finished",
+            },
+        ];
 
     private static IReadOnlyList<JsonObject> Splits() =>
-    [
-        Split(1, 1, 10_000),
-        Split(1, 2, 30_000),
-        Split(2, 1, 11_000),
-        Split(2, 2, 29_000)
-    ];
+        [Split(1, 1, 10_000), Split(1, 2, 30_000), Split(2, 1, 11_000), Split(2, 2, 29_000)];
 
-    private static JsonObject Split(int resultId, int index, int timeMs) => new()
-    {
-        ["id"] = $"{resultId}{index}",
-        ["result_id"] = resultId,
-        ["split_index"] = index,
-        ["race_time"] = timeMs
-    };
+    private static JsonObject Split(int resultId, int index, int timeMs) =>
+        new()
+        {
+            ["id"] = $"{resultId}{index}",
+            ["result_id"] = resultId,
+            ["split_index"] = index,
+            ["race_time"] = timeMs,
+        };
 
-    private static JsonObject Result(int resultId, int finishTimeMs) => new()
-    {
-        ["id"] = resultId,
-        ["race_time_ms"] = finishTimeMs,
-        ["position"] = resultId,
-        ["is_classified"] = true,
-        ["status"] = "Finished"
-    };
+    private static JsonObject Result(int resultId, int finishTimeMs) =>
+        new()
+        {
+            ["id"] = resultId,
+            ["race_time_ms"] = finishTimeMs,
+            ["position"] = resultId,
+            ["is_classified"] = true,
+            ["status"] = "Finished",
+        };
 }

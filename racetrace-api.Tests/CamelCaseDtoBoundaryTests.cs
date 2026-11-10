@@ -2,9 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using RaceTrace.Api.Configuration;
 using RaceTrace.Api.Features.Fantasy.Import;
 using RaceTrace.Api.Features.Metadata;
-using RaceTrace.Api.Configuration;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 
@@ -18,7 +18,7 @@ public sealed class CamelCaseDtoBoundaryTests
         var metrics = new RiderPerformanceMetricValues(90, 89, 88, 87, 0.5m, 4, 86, 0.6m, 3, 8)
         {
             PaceUsedFinals = 2,
-            ResultScore = 85
+            ResultScore = 85,
         };
 
         var json = HttpJson(metrics);
@@ -35,8 +35,15 @@ public sealed class CamelCaseDtoBoundaryTests
     public void SplitAnalyticsDtosKeepOptionalInitPropertiesAndCamelCaseOutput()
     {
         var spread = new FieldSpreadPointDto(2, 120, 1, 0.8m) { PreviousPosition = 1 };
-        var profile = new RoundProfileResponseDto(2026, "men_elite", null, 12, [],
-            new FieldSpreadDto(2, "close", null, [spread]), new TrackFingerprintDto(null, []));
+        var profile = new RoundProfileResponseDto(
+            2026,
+            "men_elite",
+            null,
+            12,
+            [],
+            new FieldSpreadDto(2, "close", null, [spread]),
+            new TrackFingerprintDto(null, [])
+        );
 
         var json = HttpJson(profile);
 
@@ -55,10 +62,17 @@ public sealed class CamelCaseDtoBoundaryTests
         Assert.Equal(3, pagination["totalPages"]!.GetValue<int>());
         Assert.Null(pagination["total_pages"]);
 
-        using var provider = new ServiceCollection().AddLogging().AddRaceTraceHttp().BuildServiceProvider();
-        var options = provider.GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>().Value.JsonSerializerOptions;
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddRaceTraceHttp()
+            .BuildServiceProvider();
+        var options = provider
+            .GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>()
+            .Value.JsonSerializerOptions;
         var request = JsonSerializer.Deserialize<PointsRecalculateRequest>(
-            """{"seasonYear":2026,"categoryCode":"men_elite"}""", options)!;
+            """{"seasonYear":2026,"categoryCode":"men_elite"}""",
+            options
+        )!;
         Assert.Equal(2026, request.SeasonYear);
         Assert.Equal("men_elite", request.CategoryCode);
         Assert.Null(request.Scope);
@@ -68,9 +82,11 @@ public sealed class CamelCaseDtoBoundaryTests
     [Fact]
     public void HttpDictionaryKeysRemainDataRatherThanPropertyNames()
     {
-        var chart = new RiderChartStatisticsDto(null,
+        var chart = new RiderChartStatisticsDto(
+            null,
             new Dictionary<string, decimal> { ["round_12"] = 10 },
-            new Dictionary<string, decimal?> { ["Val_di_Sole"] = 2.5m });
+            new Dictionary<string, decimal?> { ["Val_di_Sole"] = 2.5m }
+        );
 
         var json = HttpJson(chart);
 
@@ -89,8 +105,14 @@ public sealed class CamelCaseDtoBoundaryTests
 
         using var handler = new MetadataHandler(payload);
         using var http = new HttpClient(handler);
-        var service = new DisplayMetadataService(new SupabaseRestClient(http,
-            Options.Create(new SupabaseOptions { Url = "https://example.supabase.co", AnonKey = "anon" })));
+        var service = new DisplayMetadataService(
+            new SupabaseRestClient(
+                http,
+                Options.Create(
+                    new SupabaseOptions { Url = "https://example.supabase.co", AnonKey = "anon" }
+                )
+            )
+        );
         var metadata = await service.GetAsync(default);
 
         Assert.Equal("Plan", Assert.Single(metadata.RoundStatuses).ShortName);
@@ -108,7 +130,12 @@ public sealed class CamelCaseDtoBoundaryTests
             """;
         var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var snapshot = JsonSerializer.Deserialize<FantasyPriceSnapshot>(stored, web)!;
-        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(stored), JsonSerializer.SerializeToNode(snapshot, web)));
+        Assert.True(
+            JsonNode.DeepEquals(
+                JsonNode.Parse(stored),
+                JsonSerializer.SerializeToNode(snapshot, web)
+            )
+        );
 
         var provider = JsonNode.Parse("""{"session_id":12,"raw_rating":80}""")!;
         var roundTrip = JsonSerializer.SerializeToNode(provider, web)!;
@@ -119,14 +146,27 @@ public sealed class CamelCaseDtoBoundaryTests
 
     private static JsonNode HttpJson<T>(T value)
     {
-        using var provider = new ServiceCollection().AddLogging().AddRaceTraceHttp().BuildServiceProvider();
-        var options = provider.GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>().Value.JsonSerializerOptions;
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddRaceTraceHttp()
+            .BuildServiceProvider();
+        var options = provider
+            .GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>()
+            .Value.JsonSerializerOptions;
         return JsonSerializer.SerializeToNode(value, options)!;
     }
 
     private sealed class MetadataHandler(string payload) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(payload) });
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) =>
+            Task.FromResult(
+                new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(payload),
+                }
+            );
     }
 }

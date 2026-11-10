@@ -11,19 +11,24 @@ public sealed class TeamsServiceTests
     {
         var teams = new[]
         {
-            new JsonObject { ["id"] = "10", ["code"] = "AON", ["name"] = "AON Racing" }
+            new JsonObject
+            {
+                ["id"] = "10",
+                ["code"] = "AON",
+                ["name"] = "AON Racing",
+            },
         };
         var results = new[]
         {
             Result("10", "1", "Max", "Alran", "1", "EM", "Elite Men"),
             Result("10", "1", "Max", "Alran", "1", "EM", "Elite Men"),
             Result("10", "1", "Max", "Alran", "2", "MJ", "Junior Men"),
-            Result("10", "2", "Till", "Alran", "1", "EM", "Elite Men")
+            Result("10", "2", "Till", "Alran", "1", "EM", "Elite Men"),
         };
         var performance = new Dictionary<string, RiderPerformanceMetricValues>
         {
             ["1"] = Metric(90.12m),
-            ["2"] = Metric(70.00m)
+            ["2"] = Metric(70.00m),
         };
 
         TeamsService.DecorateTeams(teams, results, performance);
@@ -45,7 +50,8 @@ public sealed class TeamsServiceTests
         TeamsService.DecorateTeams(
             [team],
             [],
-            new Dictionary<string, RiderPerformanceMetricValues>());
+            new Dictionary<string, RiderPerformanceMetricValues>()
+        );
 
         Assert.Empty(team["riders"]!.AsArray());
         Assert.Equal(0, team["riders_count"]!.GetValue<int>());
@@ -58,12 +64,12 @@ public sealed class TeamsServiceTests
         var teams = new[]
         {
             new JsonObject { ["id"] = "10" },
-            new JsonObject { ["id"] = "20" }
+            new JsonObject { ["id"] = "20" },
         };
         var allResults = new[]
         {
             Result("10", "1", "Max", "Alran", "1", "EM", "Elite Men"),
-            Result("20", "1", "Max", "Alran", "1", "EM", "Elite Men")
+            Result("20", "1", "Max", "Alran", "1", "EM", "Elite Men"),
         };
         var assignments = new[]
         {
@@ -71,18 +77,16 @@ public sealed class TeamsServiceTests
             {
                 ["rider_id"] = "1",
                 ["team_id"] = "20",
-                ["valid_from"] = "2026-01-01"
-            }
+                ["valid_from"] = "2026-01-01",
+            },
         };
 
         TeamsService.DecorateTeamsFromHistory(
             teams,
             assignments,
             allResults,
-            new Dictionary<string, RiderPerformanceMetricValues>
-            {
-                ["1"] = Metric(90m)
-            });
+            new Dictionary<string, RiderPerformanceMetricValues> { ["1"] = Metric(90m) }
+        );
 
         Assert.Equal(0, teams[0]["riders_count"]!.GetValue<int>());
         Assert.Equal(1, teams[1]["riders_count"]!.GetValue<int>());
@@ -96,7 +100,8 @@ public sealed class TeamsServiceTests
         string lastName,
         string categoryId,
         string categoryCode,
-        string categoryName)
+        string categoryName
+    )
     {
         return new JsonObject
         {
@@ -107,7 +112,7 @@ public sealed class TeamsServiceTests
                 ["id"] = riderId,
                 ["uci_id"] = $"100{riderId}",
                 ["first_name"] = firstName,
-                ["last_name"] = lastName
+                ["last_name"] = lastName,
             },
             ["sessions"] = new JsonObject
             {
@@ -115,9 +120,9 @@ public sealed class TeamsServiceTests
                 {
                     ["id"] = categoryId,
                     ["code"] = categoryCode,
-                    ["name"] = categoryName
-                }
-            }
+                    ["name"] = categoryName,
+                },
+            },
         };
     }
 

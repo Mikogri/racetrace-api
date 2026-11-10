@@ -13,13 +13,17 @@ public sealed record RiderMetricsContext(
     int? ConditionId,
     string? CompetitionClassCode,
     string? SessionType,
-    string? Status)
+    string? Status
+)
 {
-    public IReadOnlyList<int> ConditionIds { get; init; } = ConditionId is null ? [] : [ConditionId.Value];
+    public IReadOnlyList<int> ConditionIds { get; init; } =
+        ConditionId is null ? [] : [ConditionId.Value];
 
-    public IReadOnlyList<int> SeasonYears { get; init; } = SeasonYear is null ? [] : [SeasonYear.Value];
+    public IReadOnlyList<int> SeasonYears { get; init; } =
+        SeasonYear is null ? [] : [SeasonYear.Value];
 
-    public IReadOnlyList<string> TrackIds { get; init; } = string.IsNullOrWhiteSpace(TrackId) ? [] : [TrackId];
+    public IReadOnlyList<string> TrackIds { get; init; } =
+        string.IsNullOrWhiteSpace(TrackId) ? [] : [TrackId];
 
     public string? Venue { get; init; }
 
@@ -50,7 +54,8 @@ public sealed record RiderPerformanceMetricValues(
     decimal? Consistency,
     decimal ConsistencyConfidence,
     int ConsistencyUsedRuns,
-    int ConsistencyUsedSectors)
+    int ConsistencyUsedSectors
+)
 {
     public decimal ConsistencyEvidence => ConsistencyConfidence;
 
@@ -97,7 +102,8 @@ public sealed record RiderMetricValues(
     decimal? AvgGapMs,
     decimal? AvgRaceTimeMs,
     JsonObject? BestResult,
-    decimal? BestSpeed)
+    decimal? BestSpeed
+)
 {
     public decimal ConsistencyEvidence => ConsistencyConfidence;
 

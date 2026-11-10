@@ -1,13 +1,14 @@
-using RaceTrace.Api.Features.Metrics;
-using RaceTrace.Api.Features.Metadata;
-using RaceTrace.Api.Infrastructure.Supabase;
-using RaceTrace.Api.Infrastructure.Calculations;
-using RaceTrace.Api.Infrastructure.Telemetry;
 using System.Globalization;
-using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Caching.Memory;
+using RaceTrace.Api.Features.Metadata;
+using RaceTrace.Api.Features.Metrics;
 using RaceTrace.Api.Infrastructure;
+using RaceTrace.Api.Infrastructure.Calculations;
+using RaceTrace.Api.Infrastructure.Supabase;
+using RaceTrace.Api.Infrastructure.Telemetry;
 using RaceTrace.Api.Models;
+using static RaceTrace.Api.Features.Results.ResultEmbedMapping;
 
 namespace RaceTrace.Api.Services;
 
@@ -22,27 +23,43 @@ public sealed class DomainQueryService
     private readonly RiderTeamHistoryQueries _teamHistory;
     private readonly RankingInputPackageReader _rankingPackages;
 
-    public const string RiderSelect = "id,uci_id,uci_code,first_name,last_name,nation,birth_date,is_protected,created_at,updated_at,profile_image_url,profile_image_updated_at,gender";
-    public const string ResultSelect = "*,riders(" + RiderSelect + "),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,conditions(*),round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
+    public const string RiderSelect =
+        "id,uci_id,uci_code,first_name,last_name,nation,birth_date,is_protected,created_at,updated_at,profile_image_url,profile_image_updated_at,gender";
+    public const string ResultSelect =
+        "*,riders("
+        + RiderSelect
+        + "),teams(*),result_points(points_awarded,points_system_id,point_system_stage_id,point_rule_id),sessions(*,conditions(*),round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*)))";
 
     public const string RankingResultSelect =
-        "id,rider_id,session_id,race_time_ms,top_speed,position,is_classified,status," +
-        "riders(" + RiderSelect + "),teams(*)," +
-        "sessions(id,round_id,category_id,name,session_type,session_date," +
-        "round_categories(round_id,category_id," +
-        "rounds(id,track_id,competition_level_id,is_season_final_round,season_year,start_date,competition_levels(id,code,name,priority)),categories(id,code)))";
+        "id,rider_id,session_id,race_time_ms,top_speed,position,is_classified,status,"
+        + "riders("
+        + RiderSelect
+        + "),teams(*),"
+        + "sessions(id,round_id,category_id,name,session_type,session_date,"
+        + "round_categories(round_id,category_id,"
+        + "rounds(id,track_id,competition_level_id,is_season_final_round,season_year,start_date,competition_levels(id,code,name,priority)),categories(id,code)))";
 
-    public const string SessionSelect = "*,round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*))";
+    public const string SessionSelect =
+        "*,round_categories(*,rounds(*,tracks(*),competition_levels(*),conditions(*)),categories(*))";
 
     private readonly RaceTrace.Api.Configuration.ReadOptimizationOptions _readOptions;
     private readonly ILogger<DomainQueryService>? _logger;
 
-    public DomainQueryService(ISupabaseRestClient supabase, DisplayMetadataService? metadata = null, IMemoryCache? packageCache = null,
-        Microsoft.Extensions.Options.IOptions<RaceTrace.Api.Configuration.ReadOptimizationOptions>? readOptions = null,
-        ILogger<DomainQueryService>? logger = null, DataRevisionService? revisions = null)
+    public DomainQueryService(
+        ISupabaseRestClient supabase,
+        DisplayMetadataService? metadata = null,
+        IMemoryCache? packageCache = null,
+        Microsoft.Extensions.Options.IOptions<RaceTrace.Api.Configuration.ReadOptimizationOptions>? readOptions =
+            null,
+        ILogger<DomainQueryService>? logger = null,
+        DataRevisionService? revisions = null
+    )
     {
         _supabase = supabase;
-        _metadataQueries = new DomainMetadataQueries(supabase, metadata ?? new DisplayMetadataService(supabase));
+        _metadataQueries = new DomainMetadataQueries(
+            supabase,
+            metadata ?? new DisplayMetadataService(supabase)
+        );
         _teamHistory = new RiderTeamHistoryQueries(supabase);
         _readOptions = readOptions?.Value ?? new();
         _logger = logger;
@@ -53,42 +70,67 @@ public sealed class DomainQueryService
         IQueryCollection query,
         QueryValidationService validator,
         CancellationToken cancellationToken,
-        string? forcedStatus = null) =>
-        MetricsQueryParser.ParseAsync(query, validator, this, cancellationToken, forcedStatus);
+        string? forcedStatus = null
+    ) => MetricsQueryParser.ParseAsync(query, validator, this, cancellationToken, forcedStatus);
 
-    public Task<string> ResolveCategoryCodeAsync(string value, CancellationToken cancellationToken)
-        => _metadataQueries.ResolveCategoryCodeAsync(value, cancellationToken);
+    public Task<string> ResolveCategoryCodeAsync(
+        string value,
+        CancellationToken cancellationToken
+    ) => _metadataQueries.ResolveCategoryCodeAsync(value, cancellationToken);
 
-    public Task<string> ResolveSessionTypeCodeAsync(string value, CancellationToken cancellationToken)
-        => _metadataQueries.ResolveSessionTypeCodeAsync(value, cancellationToken);
+    public Task<string> ResolveSessionTypeCodeAsync(
+        string value,
+        CancellationToken cancellationToken
+    ) => _metadataQueries.ResolveSessionTypeCodeAsync(value, cancellationToken);
 
-    public Task<string?> FindCategoryIdByCodeAsync(string? categoryCode, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
-        => _metadataQueries.FindCategoryIdByCodeAsync(categoryCode, role, cancellationToken);
+    public Task<string?> FindCategoryIdByCodeAsync(
+        string? categoryCode,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    ) => _metadataQueries.FindCategoryIdByCodeAsync(categoryCode, role, cancellationToken);
 
-    internal Task<string?> FindLegacyCompetitionClassIdByCodeAsync(string? code, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
-        => _metadataQueries.FindLegacyCompetitionClassIdByCodeAsync(code, role, cancellationToken);
+    internal Task<string?> FindLegacyCompetitionClassIdByCodeAsync(
+        string? code,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    ) => _metadataQueries.FindLegacyCompetitionClassIdByCodeAsync(code, role, cancellationToken);
 
-    public Task<string?> FindCompetitionClassIdByCodeAsync(string? code, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
-        => _metadataQueries.FindCompetitionClassIdByCodeAsync(code, role, cancellationToken);
+    public Task<string?> FindCompetitionClassIdByCodeAsync(
+        string? code,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    ) => _metadataQueries.FindCompetitionClassIdByCodeAsync(code, role, cancellationToken);
 
-    public async Task<JsonObject?> FindByIdAsync(string table, string id, string select = "*", SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<JsonObject?> FindByIdAsync(
+        string table,
+        string id,
+        string select = "*",
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         return await _supabase.GetSingleAsync(
             new SupabaseQuery(table)
                 .Select(table == "riders" && select == "*" ? RiderSelect : select)
                 .Filter("id", "eq", id),
             role,
-            cancellationToken);
+            cancellationToken
+        );
     }
 
-    public async Task<IReadOnlyList<string>> FindTrackIdsByCountryAsync(string? countryCode, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> FindTrackIdsByCountryAsync(
+        string? countryCode,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         return await FindTrackIdsAsync(
             countryCode,
             venue: null,
             trackName: null,
             role,
-            cancellationToken);
+            cancellationToken
+        );
     }
 
     public async Task<IReadOnlyList<string>> FindTrackIdsAsync(
@@ -96,11 +138,14 @@ public sealed class DomainQueryService
         string? venue,
         string? trackName,
         SupabaseRole role = SupabaseRole.Anon,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        if (string.IsNullOrWhiteSpace(countryCode) &&
-            string.IsNullOrWhiteSpace(venue) &&
-            string.IsNullOrWhiteSpace(trackName))
+        if (
+            string.IsNullOrWhiteSpace(countryCode)
+            && string.IsNullOrWhiteSpace(venue)
+            && string.IsNullOrWhiteSpace(trackName)
+        )
         {
             return [];
         }
@@ -112,7 +157,8 @@ public sealed class DomainQueryService
         var tracks = await _supabase.GetAsync(
             query,
             role: role,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
 
         return Ids(tracks.Data);
     }
@@ -120,16 +166,23 @@ public sealed class DomainQueryService
     private async Task<IReadOnlyList<string>> FindTrackIdsAsync(
         RiderMetricsContext filters,
         SupabaseRole role,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var countries = filters.CountryCodes.Count > 0
-            ? filters.CountryCodes
-            : string.IsNullOrWhiteSpace(filters.CountryCode) ? [] : [filters.CountryCode];
-        var venues = filters.VenueNames.Count > 0
-            ? filters.VenueNames
-            : string.IsNullOrWhiteSpace(filters.Venue) ? [] : [filters.Venue];
+        var countries =
+            filters.CountryCodes.Count > 0 ? filters.CountryCodes
+            : string.IsNullOrWhiteSpace(filters.CountryCode) ? []
+            : [filters.CountryCode];
+        var venues =
+            filters.VenueNames.Count > 0 ? filters.VenueNames
+            : string.IsNullOrWhiteSpace(filters.Venue) ? []
+            : [filters.Venue];
 
-        if (countries.Count == 0 && venues.Count == 0 && string.IsNullOrWhiteSpace(filters.TrackName))
+        if (
+            countries.Count == 0
+            && venues.Count == 0
+            && string.IsNullOrWhiteSpace(filters.TrackName)
+        )
         {
             return [];
         }
@@ -150,18 +203,25 @@ public sealed class DomainQueryService
         }
         else if (venues.Count > 1)
         {
-            query.Or(string.Join(",", venues.Select(venue => $"venue.ilike.{SanitizeSearch(venue)}")));
+            query.Or(
+                string.Join(",", venues.Select(venue => $"venue.ilike.{SanitizeSearch(venue)}"))
+            );
         }
 
         query.Filter("name", "ilike", filters.TrackName?.Trim());
-        var tracks = await _supabase.GetAsync(query, role: role, cancellationToken: cancellationToken);
+        var tracks = await _supabase.GetAsync(
+            query,
+            role: role,
+            cancellationToken: cancellationToken
+        );
         return Ids(tracks.Data);
     }
 
     private async Task<IReadOnlyList<string>> FindCompetitionClassIdsAsync(
         IReadOnlyList<string> codes,
         SupabaseRole role,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (codes.Count == 0)
         {
@@ -173,14 +233,16 @@ public sealed class DomainQueryService
                 .Select("id")
                 .In("code", codes.Select(code => code.ToLowerInvariant())),
             role: role,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         return Ids(response.Data);
     }
 
     private async Task<IReadOnlyList<string>> FindConditionIdsAsync(
         IReadOnlyList<string> names,
         SupabaseRole role,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (names.Count == 0)
         {
@@ -192,14 +254,16 @@ public sealed class DomainQueryService
                 .Select("id")
                 .Or(string.Join(",", names.Select(name => $"name.ilike.{SanitizeSearch(name)}"))),
             role: role,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         return Ids(response.Data);
     }
 
     private async Task<IReadOnlyList<string>> FindCategoryIdsAsync(
         IReadOnlyList<string> codes,
         SupabaseRole role,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (codes.Count == 0)
         {
@@ -207,15 +271,18 @@ public sealed class DomainQueryService
         }
 
         var response = await _supabase.GetAsync(
-            new SupabaseQuery("categories")
-                .Select("id")
-                .In("code", codes),
+            new SupabaseQuery("categories").Select("id").In("code", codes),
             role: role,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         return Ids(response.Data);
     }
 
-    public async Task<IReadOnlyList<string>> ResolveRoundIdsAsync(RiderMetricsContext filters, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> ResolveRoundIdsAsync(
+        RiderMetricsContext filters,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         var query = new SupabaseQuery("rounds").Select("id");
         var hasRoundFilter = false;
@@ -228,7 +295,10 @@ public sealed class DomainQueryService
 
         if (filters.SeasonYears.Count > 0)
         {
-            query.In("season_year", filters.SeasonYears.Select(year => year.ToString(CultureInfo.InvariantCulture)));
+            query.In(
+                "season_year",
+                filters.SeasonYears.Select(year => year.ToString(CultureInfo.InvariantCulture))
+            );
             hasRoundFilter = true;
         }
         else if (filters.SeasonYear is not null)
@@ -248,11 +318,13 @@ public sealed class DomainQueryService
             hasRoundFilter = true;
         }
 
-        if (filters.CountryCodes.Count > 0 ||
-            filters.VenueNames.Count > 0 ||
-            !string.IsNullOrWhiteSpace(filters.CountryCode) ||
-            !string.IsNullOrWhiteSpace(filters.Venue) ||
-            !string.IsNullOrWhiteSpace(filters.TrackName))
+        if (
+            filters.CountryCodes.Count > 0
+            || filters.VenueNames.Count > 0
+            || !string.IsNullOrWhiteSpace(filters.CountryCode)
+            || !string.IsNullOrWhiteSpace(filters.Venue)
+            || !string.IsNullOrWhiteSpace(filters.TrackName)
+        )
         {
             var trackIds = await FindTrackIdsAsync(filters, role, cancellationToken);
             if (trackIds.Count == 0)
@@ -266,12 +338,19 @@ public sealed class DomainQueryService
 
         if (filters.CompetitionClassIds.Count > 0)
         {
-            query.In("competition_level_id", filters.CompetitionClassIds.Select(id => id.ToString(CultureInfo.InvariantCulture)));
+            query.In(
+                "competition_level_id",
+                filters.CompetitionClassIds.Select(id => id.ToString(CultureInfo.InvariantCulture))
+            );
             hasRoundFilter = true;
         }
         else if (filters.CompetitionClassCodes.Count > 0)
         {
-            var classIds = await FindCompetitionClassIdsAsync(filters.CompetitionClassCodes, role, cancellationToken);
+            var classIds = await FindCompetitionClassIdsAsync(
+                filters.CompetitionClassCodes,
+                role,
+                cancellationToken
+            );
             if (classIds.Count == 0)
             {
                 return [];
@@ -282,7 +361,11 @@ public sealed class DomainQueryService
         }
         else if (!string.IsNullOrWhiteSpace(filters.CompetitionClassCode))
         {
-            var classId = await FindCompetitionClassIdByCodeAsync(filters.CompetitionClassCode, role, cancellationToken);
+            var classId = await FindCompetitionClassIdByCodeAsync(
+                filters.CompetitionClassCode,
+                role,
+                cancellationToken
+            );
             if (classId is null)
             {
                 return [];
@@ -294,12 +377,21 @@ public sealed class DomainQueryService
 
         if (filters.ConditionIds.Count > 0)
         {
-            query.In("condition_id", filters.ConditionIds.Select(conditionId => conditionId.ToString(CultureInfo.InvariantCulture)));
+            query.In(
+                "condition_id",
+                filters.ConditionIds.Select(conditionId =>
+                    conditionId.ToString(CultureInfo.InvariantCulture)
+                )
+            );
             hasRoundFilter = true;
         }
         else if (filters.ConditionNames.Count > 0)
         {
-            var conditionIds = await FindConditionIdsAsync(filters.ConditionNames, role, cancellationToken);
+            var conditionIds = await FindConditionIdsAsync(
+                filters.ConditionNames,
+                role,
+                cancellationToken
+            );
             if (conditionIds.Count == 0)
             {
                 return [];
@@ -326,11 +418,19 @@ public sealed class DomainQueryService
             return [];
         }
 
-        var rounds = await _supabase.GetAsync(query, role: role, cancellationToken: cancellationToken);
+        var rounds = await _supabase.GetAsync(
+            query,
+            role: role,
+            cancellationToken: cancellationToken
+        );
         return Ids(rounds.Data);
     }
 
-    public async Task<IReadOnlyList<string>> ResolveSessionIdsAsync(RiderMetricsContext filters, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> ResolveSessionIdsAsync(
+        RiderMetricsContext filters,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         return Ids(await GetMatchingSessionsAsync(filters, role, cancellationToken));
     }
@@ -342,7 +442,8 @@ public sealed class DomainQueryService
         string? riderId = null,
         IEnumerable<string>? resolvedSessionIds = null,
         SupabaseRole role = SupabaseRole.Anon,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var payload = BuildMetricsRpcPayload(filters, resolvedSessionIds);
         payload["p_rider_query"] = riderQuery;
@@ -353,7 +454,8 @@ public sealed class DomainQueryService
             "get_ranking_data",
             payload,
             role,
-            cancellationToken);
+            cancellationToken
+        );
         return RestrictToCategories(ParseRankingDataBundle(response), filters);
     }
 
@@ -363,31 +465,56 @@ public sealed class DomainQueryService
         string? nation = null,
         SupabaseRole role = SupabaseRole.Anon,
         CancellationToken cancellationToken = default,
-        bool includeSplits = true) =>
-        _rankingPackages.ReadAsync(sessions, riderQuery, nation, role, cancellationToken, includeSplits);
+        bool includeSplits = true
+    ) =>
+        _rankingPackages.ReadAsync(
+            sessions,
+            riderQuery,
+            nation,
+            role,
+            cancellationToken,
+            includeSplits
+        );
 
-    internal static bool MatchesRankingRider(JsonObject? rider, string? riderQuery, string? nation) =>
-        RankingInputPackageReader.MatchesRankingRider(rider, riderQuery, nation);
+    internal static bool MatchesRankingRider(
+        JsonObject? rider,
+        string? riderQuery,
+        string? nation
+    ) => RankingInputPackageReader.MatchesRankingRider(rider, riderQuery, nation);
 
     internal async Task<RiderDetailDataBundle> GetRiderDetailDataAsync(
         RiderMetricsContext filters,
         string riderId,
         IEnumerable<string>? resolvedSessionIds = null,
         SupabaseRole role = SupabaseRole.Anon,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var payload = BuildMetricsRpcPayload(filters, resolvedSessionIds);
         payload["p_rider_id"] = LongNode(riderId);
 
         var inputPayload = payload.DeepClone().AsObject();
-        inputPayload["p_use_preaggregation"] = _readOptions.PreparedRiderDetails && string.IsNullOrWhiteSpace(filters.Status);
+        inputPayload["p_use_preaggregation"] =
+            _readOptions.PreparedRiderDetails && string.IsNullOrWhiteSpace(filters.Status);
         try
         {
-            var input = await _supabase.RpcAsync("get_rider_input_data", inputPayload, role, cancellationToken);
-            if (input is JsonObject envelope && envelope.Bool("complete") == true &&
-                envelope["payload"] is JsonObject data && CompactMetricsPackageParser.HasCompleteInputMeasurements(data))
+            var input = await _supabase.RpcAsync(
+                "get_rider_input_data",
+                inputPayload,
+                role,
+                cancellationToken
+            );
+            if (
+                input is JsonObject envelope
+                && envelope.Bool("complete") == true
+                && envelope["payload"] is JsonObject data
+                && CompactMetricsPackageParser.HasCompleteInputMeasurements(data)
+            )
             {
-                ApiTelemetry.Cache("preaggregation", envelope.Bool("cached") == true ? "hit" : "bypass");
+                ApiTelemetry.Cache(
+                    "preaggregation",
+                    envelope.Bool("cached") == true ? "hit" : "bypass"
+                );
                 return RestrictToCategories(ParseRiderDetailDataBundle(data), filters);
             }
             _logger?.LogWarning("Incomplete rider input package; using legacy read.");
@@ -402,48 +529,94 @@ public sealed class DomainQueryService
             "get_rider_detail_data",
             payload,
             role,
-            cancellationToken);
+            cancellationToken
+        );
         return RestrictToCategories(ParseRiderDetailDataBundle(response), filters);
     }
 
     internal async Task<JsonObject[]> GetPointsSummaryAsync(
-        RiderMetricsContext filters, IReadOnlyList<JsonObject> sessions, CancellationToken cancellationToken)
+        RiderMetricsContext filters,
+        IReadOnlyList<JsonObject> sessions,
+        CancellationToken cancellationToken
+    )
     {
-        var ids = sessions.Select(session => session.String("id")).OfType<string>().Distinct().ToArray();
-        if (ids.Length == 0) return [];
+        var ids = sessions
+            .Select(session => session.String("id"))
+            .OfType<string>()
+            .Distinct()
+            .ToArray();
+        if (ids.Length == 0)
+            return [];
         JsonNode? response = string.IsNullOrWhiteSpace(filters.Status)
-            ? await _supabase.RpcAsync("get_ranking_points_summary",
-                new JsonObject { ["p_session_ids"] = LongArray(ids) }, SupabaseRole.Anon, cancellationToken)
+            ? await _supabase.RpcAsync(
+                "get_ranking_points_summary",
+                new JsonObject { ["p_session_ids"] = LongArray(ids) },
+                SupabaseRole.Anon,
+                cancellationToken
+            )
             : null;
         if (response is null || response is JsonObject cached && cached.Bool("complete") == false)
-            response = await _supabase.RpcAsync("get_ranking_points_raw_summary",
+            response = await _supabase.RpcAsync(
+                "get_ranking_points_raw_summary",
                 BuildMetricsRpcPayload(filters, ids),
-                SupabaseRole.Anon, cancellationToken);
+                SupabaseRole.Anon,
+                cancellationToken
+            );
         if (response is not JsonObject package || package.Array("rows") is not { } rows)
-            throw new ApiException(502, "POINTS_DATA_INVALID", "Supabase returned an invalid points summary.");
+            throw new ApiException(
+                502,
+                "POINTS_DATA_INVALID",
+                "Supabase returned an invalid points summary."
+            );
         if (package.Bool("complete") != true)
-            throw new ApiException(502, "POINTS_DATA_INVALID", "Supabase returned an incomplete points summary.");
-        return rows.OfType<JsonObject>().Select(row => new JsonObject
-        {
-            ["rider_id"] = row.String("rider_id"),
-            ["rider_name"] = row.Object("rider")?.DisplayName(),
-            ["points"] = row.Decimal("points") ?? 0m
-        }).ToArray();
+            throw new ApiException(
+                502,
+                "POINTS_DATA_INVALID",
+                "Supabase returned an incomplete points summary."
+            );
+        return rows.OfType<JsonObject>()
+            .Select(row => new JsonObject
+            {
+                ["rider_id"] = row.String("rider_id"),
+                ["rider_name"] = row.Object("rider")?.DisplayName(),
+                ["points"] = row.Decimal("points") ?? 0m,
+            })
+            .ToArray();
     }
 
     internal static RiderDetailDataBundle RestrictToCategories(
         RiderDetailDataBundle bundle,
-        RiderMetricsContext filters)
+        RiderMetricsContext filters
+    )
     {
         if (bundle.ReadData is { } read)
         {
             var categories = RequestedCategoryCodes(filters);
-            if (categories.Count == 0) return bundle;
-            var sessions = read.Sessions.Where(s => categories.Contains(CanonicalCategoryCode(s.Object("categories")?.String("code")))).ToArray();
-            var ids = sessions.Select(s => s.String("id")).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            read = read with { Sessions = sessions, Results = read.Results.Where(r => ids.Contains(r.String("session_id"))).ToArray(),
-                FieldResults = read.FieldResults.Where(r => ids.Contains(r.String("session_id"))).ToArray() };
-            return new RiderDetailDataBundle(read.ToLegacy(),bundle.PaceSessions.Where(p => ids.Contains(p.SessionId)).ToArray(),read);
+            if (categories.Count == 0)
+                return bundle;
+            var sessions = read
+                .Sessions.Where(s =>
+                    categories.Contains(
+                        CanonicalCategoryCode(s.Object("categories")?.String("code"))
+                    )
+                )
+                .ToArray();
+            var ids = sessions
+                .Select(s => s.String("id"))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            read = read with
+            {
+                Sessions = sessions,
+                Results = read.Results.Where(r => ids.Contains(r.String("session_id"))).ToArray(),
+                FieldResults = read
+                    .FieldResults.Where(r => ids.Contains(r.String("session_id")))
+                    .ToArray(),
+            };
+            return new RiderDetailDataBundle(
+                read.ToLegacy(),
+                bundle.PaceSessions.Where(p => ids.Contains(p.SessionId)).ToArray(),
+                read
+            );
         }
         var data = RestrictToCategories(bundle.Data, filters);
         if (ReferenceEquals(data, bundle.Data))
@@ -451,21 +624,21 @@ public sealed class DomainQueryService
             return bundle;
         }
 
-        var sessionIds = data.Sessions
-            .Select(session => session.String("id"))
+        var sessionIds = data
+            .Sessions.Select(session => session.String("id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return new RiderDetailDataBundle(
             data,
-            bundle.PaceSessions
-                .Where(session => sessionIds.Contains(session.SessionId))
-                .ToArray());
+            bundle.PaceSessions.Where(session => sessionIds.Contains(session.SessionId)).ToArray()
+        );
     }
 
     internal static RankingDataBundle RestrictToCategories(
         RankingDataBundle bundle,
-        RiderMetricsContext filters)
+        RiderMetricsContext filters
+    )
     {
         var requestedCategories = RequestedCategoryCodes(filters);
         if (requestedCategories.Count == 0)
@@ -473,21 +646,31 @@ public sealed class DomainQueryService
             return bundle;
         }
 
-        var sessions = bundle.Sessions
-            .Where(session => requestedCategories.Contains(CanonicalCategoryCode(
-                session.Object("categories")?.String("code") ??
-                session.Object("round_categories")?.Object("categories")?.String("code"))))
+        var sessions = bundle
+            .Sessions.Where(session =>
+                requestedCategories.Contains(
+                    CanonicalCategoryCode(
+                        session.Object("categories")?.String("code")
+                            ?? session
+                                .Object("round_categories")
+                                ?.Object("categories")
+                                ?.String("code")
+                    )
+                )
+            )
             .ToArray();
         var sessionIds = sessions
             .Select(session => session.String("id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var results = bundle.Results
-            .Where(result => sessionIds.Contains(ResultSessionId(result) ?? string.Empty))
+        var results = bundle
+            .Results.Where(result => sessionIds.Contains(ResultSessionId(result) ?? string.Empty))
             .ToArray();
-        var fieldResults = bundle.FieldResults
-            .Where(result => sessionIds.Contains(ResultSessionId(result) ?? string.Empty))
+        var fieldResults = bundle
+            .FieldResults.Where(result =>
+                sessionIds.Contains(ResultSessionId(result) ?? string.Empty)
+            )
             .ToArray();
         var fieldResultIds = fieldResults
             .Concat(results)
@@ -505,19 +688,27 @@ public sealed class DomainQueryService
             sessions,
             results,
             fieldResults,
-            bundle.Splits
-                .Where(split => fieldResultIds.Contains(split.String("result_id") ?? string.Empty))
+            bundle
+                .Splits.Where(split =>
+                    fieldResultIds.Contains(split.String("result_id") ?? string.Empty)
+                )
                 .ToArray(),
-            bundle.PointsByResultId
-                .Where(pair => resultIds.Contains(pair.Key))
-                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase));
+            bundle
+                .PointsByResultId.Where(pair => resultIds.Contains(pair.Key))
+                .ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
+                    StringComparer.OrdinalIgnoreCase
+                )
+        );
     }
 
     private static HashSet<string> RequestedCategoryCodes(RiderMetricsContext filters)
     {
-        var values = filters.CategoryCodes.Count > 0
-            ? filters.CategoryCodes
-            : string.IsNullOrWhiteSpace(filters.CategoryCode) ? [] : [filters.CategoryCode];
+        var values =
+            filters.CategoryCodes.Count > 0 ? filters.CategoryCodes
+            : string.IsNullOrWhiteSpace(filters.CategoryCode) ? []
+            : [filters.CategoryCode];
         return values
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(CanonicalCategoryCode)
@@ -543,32 +734,41 @@ public sealed class DomainQueryService
 
     internal static JsonObject BuildMetricsRpcPayload(
         RiderMetricsContext filters,
-        IEnumerable<string>? resolvedSessionIds)
+        IEnumerable<string>? resolvedSessionIds
+    )
     {
-        var seasonYears = filters.SeasonYears.Count > 0
-            ? filters.SeasonYears
-            : filters.SeasonYear is { } seasonYear ? [seasonYear] : [];
-        var trackIds = filters.TrackIds.Count > 0
-            ? filters.TrackIds
-            : string.IsNullOrWhiteSpace(filters.TrackId) ? [] : [filters.TrackId];
-        var countries = filters.CountryCodes.Count > 0
-            ? filters.CountryCodes
-            : string.IsNullOrWhiteSpace(filters.CountryCode) ? [] : [filters.CountryCode];
-        var venues = filters.VenueNames.Count > 0
-            ? filters.VenueNames
-            : string.IsNullOrWhiteSpace(filters.Venue) ? [] : [filters.Venue];
-        var conditionIds = filters.ConditionIds.Count > 0
-            ? filters.ConditionIds
-            : filters.ConditionId is { } conditionId ? [conditionId] : [];
-        var classCodes = filters.CompetitionClassCodes.Count > 0
-            ? filters.CompetitionClassCodes
-            : string.IsNullOrWhiteSpace(filters.CompetitionClassCode) ? [] : [filters.CompetitionClassCode];
-        var categoryCodes = filters.CategoryCodes.Count > 0
-            ? filters.CategoryCodes
-            : string.IsNullOrWhiteSpace(filters.CategoryCode) ? [] : [filters.CategoryCode];
-        var sessionTypes = filters.SessionTypes.Count > 0
-            ? filters.SessionTypes
-            : string.IsNullOrWhiteSpace(filters.SessionType) ? [] : [NormalizeSessionType(filters.SessionType)];
+        var seasonYears =
+            filters.SeasonYears.Count > 0 ? filters.SeasonYears
+            : filters.SeasonYear is { } seasonYear ? [seasonYear]
+            : [];
+        var trackIds =
+            filters.TrackIds.Count > 0 ? filters.TrackIds
+            : string.IsNullOrWhiteSpace(filters.TrackId) ? []
+            : [filters.TrackId];
+        var countries =
+            filters.CountryCodes.Count > 0 ? filters.CountryCodes
+            : string.IsNullOrWhiteSpace(filters.CountryCode) ? []
+            : [filters.CountryCode];
+        var venues =
+            filters.VenueNames.Count > 0 ? filters.VenueNames
+            : string.IsNullOrWhiteSpace(filters.Venue) ? []
+            : [filters.Venue];
+        var conditionIds =
+            filters.ConditionIds.Count > 0 ? filters.ConditionIds
+            : filters.ConditionId is { } conditionId ? [conditionId]
+            : [];
+        var classCodes =
+            filters.CompetitionClassCodes.Count > 0 ? filters.CompetitionClassCodes
+            : string.IsNullOrWhiteSpace(filters.CompetitionClassCode) ? []
+            : [filters.CompetitionClassCode];
+        var categoryCodes =
+            filters.CategoryCodes.Count > 0 ? filters.CategoryCodes
+            : string.IsNullOrWhiteSpace(filters.CategoryCode) ? []
+            : [filters.CategoryCode];
+        var sessionTypes =
+            filters.SessionTypes.Count > 0 ? filters.SessionTypes
+            : string.IsNullOrWhiteSpace(filters.SessionType) ? []
+            : [NormalizeSessionType(filters.SessionType)];
         var payload = new JsonObject
         {
             ["p_season_years"] = IntArray(seasonYears),
@@ -583,10 +783,13 @@ public sealed class DomainQueryService
             ["p_competition_class_codes"] = StringArray(classCodes),
             ["p_category_codes"] = StringArray(categoryCodes),
             ["p_session_types"] = StringArray(sessionTypes),
-            ["p_date_from"] = filters.FromDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            ["p_date_from"] = filters.FromDate?.ToString(
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture
+            ),
             ["p_date_to"] = filters.ToDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             ["p_status"] = filters.Status,
-            ["p_session_ids"] = LongArray(resolvedSessionIds ?? [])
+            ["p_session_ids"] = LongArray(resolvedSessionIds ?? []),
         };
         return payload;
     }
@@ -594,7 +797,8 @@ public sealed class DomainQueryService
     public async Task<IReadOnlyList<JsonObject>> GetMatchingSessionsAsync(
         RiderMetricsContext filters,
         SupabaseRole role = SupabaseRole.Anon,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var query = new SupabaseQuery("sessions").Select(SessionSelect);
         var roundIds = await ResolveRoundIdsAsync(filters, role, cancellationToken);
@@ -613,7 +817,11 @@ public sealed class DomainQueryService
         IReadOnlyList<string> categoryIds = [];
         if (filters.CategoryCodes.Count > 0)
         {
-            categoryIds = await FindCategoryIdsAsync(filters.CategoryCodes, role, cancellationToken);
+            categoryIds = await FindCategoryIdsAsync(
+                filters.CategoryCodes,
+                role,
+                cancellationToken
+            );
             if (categoryIds.Count == 0)
             {
                 return [];
@@ -621,7 +829,11 @@ public sealed class DomainQueryService
         }
         else if (!string.IsNullOrWhiteSpace(filters.CategoryCode))
         {
-            var categoryId = await FindCategoryIdByCodeAsync(filters.CategoryCode, role, cancellationToken);
+            var categoryId = await FindCategoryIdByCodeAsync(
+                filters.CategoryCode,
+                role,
+                cancellationToken
+            );
             if (categoryId is null)
             {
                 return [];
@@ -635,15 +847,20 @@ public sealed class DomainQueryService
             query.In("category_id", categoryIds);
         }
 
-        var sessionTypes = filters.SessionTypes.Count > 0
-            ? filters.SessionTypes
-            : string.IsNullOrWhiteSpace(filters.SessionType) ? [] : [NormalizeSessionType(filters.SessionType)];
+        var sessionTypes =
+            filters.SessionTypes.Count > 0 ? filters.SessionTypes
+            : string.IsNullOrWhiteSpace(filters.SessionType) ? []
+            : [NormalizeSessionType(filters.SessionType)];
         if (sessionTypes.Count > 0)
         {
             query.In("session_type", sessionTypes);
         }
 
-        var sessions = await _supabase.GetAsync(query, role: role, cancellationToken: cancellationToken);
+        var sessions = await _supabase.GetAsync(
+            query,
+            role: role,
+            cancellationToken: cancellationToken
+        );
         NormalizeSessionEmbeds(sessions.Data);
         return sessions.Data;
     }
@@ -656,7 +873,8 @@ public sealed class DomainQueryService
         SupabaseRole role = SupabaseRole.Anon,
         CancellationToken cancellationToken = default,
         IReadOnlyList<JsonObject>? resolvedSessions = null,
-        string? select = null)
+        string? select = null
+    )
     {
         var sessionIds = resolvedSessions is null
             ? await ResolveSessionIdsAsync(filters, role, cancellationToken)
@@ -670,7 +888,12 @@ public sealed class DomainQueryService
         IReadOnlyList<string> nationRiderIds = [];
         if (!string.IsNullOrWhiteSpace(nation))
         {
-            nationRiderIds = await FindRiderIdsAsync(riderQuery: null, nation: nation, role: role, cancellationToken: cancellationToken);
+            nationRiderIds = await FindRiderIdsAsync(
+                riderQuery: null,
+                nation: nation,
+                role: role,
+                cancellationToken: cancellationToken
+            );
             if (nationRiderIds.Count == 0)
             {
                 return [];
@@ -689,8 +912,7 @@ public sealed class DomainQueryService
 
         SupabaseQuery ResultsQuery(int offset)
         {
-            var query = new SupabaseQuery("results")
-                .Select(select ?? ResultSelect);
+            var query = new SupabaseQuery("results").Select(select ?? ResultSelect);
 
             if (sessionIds.Count > 0)
             {
@@ -709,10 +931,7 @@ public sealed class DomainQueryService
                 query.In("rider_id", matchingRiderIds);
             }
 
-            query
-                .Order("id", descending: false)
-                .Limit(ResultsPageSize)
-                .Offset(offset);
+            query.Order("id", descending: false).Limit(ResultsPageSize).Offset(offset);
 
             return query;
         }
@@ -721,7 +940,8 @@ public sealed class DomainQueryService
             ResultsQuery(0),
             count: true,
             role: role,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         var rows = new List<JsonObject>(firstPage.Total ?? firstPage.Data.Count);
         rows.AddRange(firstPage.Data);
 
@@ -738,16 +958,18 @@ public sealed class DomainQueryService
                 new ParallelOptions
                 {
                     MaxDegreeOfParallelism = MaximumConcurrentResultPageQueries,
-                    CancellationToken = cancellationToken
+                    CancellationToken = cancellationToken,
                 },
                 async (pageIndex, token) =>
                 {
                     var page = await _supabase.GetAsync(
                         ResultsQuery(offsets[pageIndex]),
                         role: role,
-                        cancellationToken: token);
+                        cancellationToken: token
+                    );
                     pages[pageIndex] = page.Data;
-                });
+                }
+            );
 
             foreach (var page in pages)
             {
@@ -762,7 +984,8 @@ public sealed class DomainQueryService
                 var page = await _supabase.GetAsync(
                     ResultsQuery(offset),
                     role: role,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 rows.AddRange(page.Data);
                 if (page.Data.Count < ResultsPageSize)
                 {
@@ -782,32 +1005,36 @@ public sealed class DomainQueryService
         DateOnly? fromDate = null,
         DateOnly? toDate = null,
         SupabaseRole role = SupabaseRole.Anon,
-        CancellationToken cancellationToken = default)
-        => _teamHistory.GetRiderTeamHistoryAsync(riderIds, fromDate, toDate, role, cancellationToken);
+        CancellationToken cancellationToken = default
+    ) => _teamHistory.GetRiderTeamHistoryAsync(riderIds, fromDate, toDate, role, cancellationToken);
 
     public Task DecorateMissingResultTeamsFromHistoryAsync(
         IReadOnlyList<JsonObject> results,
-        CancellationToken cancellationToken = default)
-        => _teamHistory.DecorateMissingResultTeamsFromHistoryAsync(results, cancellationToken);
+        CancellationToken cancellationToken = default
+    ) => _teamHistory.DecorateMissingResultTeamsFromHistoryAsync(results, cancellationToken);
 
     public Task DecorateRankingRiderTeamsAsync(
         IReadOnlyList<JsonObject> results,
-        CancellationToken cancellationToken = default)
-        => _teamHistory.DecorateRankingRiderTeamsAsync(results, cancellationToken);
+        CancellationToken cancellationToken = default
+    ) => _teamHistory.DecorateRankingRiderTeamsAsync(results, cancellationToken);
 
     internal static JsonObject? FindTeamPeriod(
         IEnumerable<JsonObject> history,
         string riderId,
-        DateOnly effectiveDate)
-        => RiderTeamHistoryQueries.FindTeamPeriod(history, riderId, effectiveDate);
+        DateOnly effectiveDate
+    ) => RiderTeamHistoryQueries.FindTeamPeriod(history, riderId, effectiveDate);
 
     internal static JsonObject? FindTeamPeriodOrNearest(
         IEnumerable<JsonObject> history,
         string riderId,
-        DateOnly effectiveDate)
-        => RiderTeamHistoryQueries.FindTeamPeriodOrNearest(history, riderId, effectiveDate);
+        DateOnly effectiveDate
+    ) => RiderTeamHistoryQueries.FindTeamPeriodOrNearest(history, riderId, effectiveDate);
 
-    public async Task<IReadOnlyDictionary<string, decimal>> GetPointsByResultIdAsync(IEnumerable<string> resultIds, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyDictionary<string, decimal>> GetPointsByResultIdAsync(
+        IEnumerable<string> resultIds,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         var ids = resultIds
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -825,7 +1052,7 @@ public sealed class DomainQueryService
             new ParallelOptions
             {
                 MaxDegreeOfParallelism = MaximumConcurrentResultPageQueries,
-                CancellationToken = cancellationToken
+                CancellationToken = cancellationToken,
             },
             async (batchIndex, token) =>
             {
@@ -840,7 +1067,8 @@ public sealed class DomainQueryService
                             .Limit(ResultsPageSize)
                             .Offset(offset),
                         role: role,
-                        cancellationToken: token);
+                        cancellationToken: token
+                    );
                     rows.AddRange(points.Data);
                     if (points.Data.Count < ResultsPageSize)
                     {
@@ -851,7 +1079,8 @@ public sealed class DomainQueryService
                 }
 
                 pages[batchIndex] = rows;
-            });
+            }
+        );
 
         return pages
             .SelectMany(page => page)
@@ -860,10 +1089,15 @@ public sealed class DomainQueryService
             .ToDictionary(
                 group => group.Key,
                 group => group.Sum(row => row.Decimal("points_awarded") ?? 0m),
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase
+            );
     }
 
-    public async Task DecorateGapMsAsync(IReadOnlyList<JsonObject> results, SupabaseRole role = SupabaseRole.Anon, CancellationToken cancellationToken = default)
+    public async Task DecorateGapMsAsync(
+        IReadOnlyList<JsonObject> results,
+        SupabaseRole role = SupabaseRole.Anon,
+        CancellationToken cancellationToken = default
+    )
     {
         var sessionIds = results
             .Select(ResultSessionId)
@@ -877,15 +1111,21 @@ public sealed class DomainQueryService
             return;
         }
 
-        var bestTimesBySessionId = await GetBestRaceTimeBySessionIdAsync(sessionIds, role, cancellationToken);
+        var bestTimesBySessionId = await GetBestRaceTimeBySessionIdAsync(
+            sessionIds,
+            role,
+            cancellationToken
+        );
         foreach (var result in results)
         {
             var sessionId = ResultSessionId(result);
             var raceTime = result.Int("race_time_ms");
-            if (string.IsNullOrWhiteSpace(sessionId) ||
-                raceTime is not > 0 ||
-                !bestTimesBySessionId.TryGetValue(sessionId, out var bestTime) ||
-                !IsClassifiedResult(result))
+            if (
+                string.IsNullOrWhiteSpace(sessionId)
+                || raceTime is not > 0
+                || !bestTimesBySessionId.TryGetValue(sessionId, out var bestTime)
+                || !IsClassifiedResult(result)
+            )
             {
                 result["gap_ms"] = null;
                 continue;
@@ -896,30 +1136,37 @@ public sealed class DomainQueryService
         }
     }
 
-    private async Task<IReadOnlyDictionary<string, int>> GetBestRaceTimeBySessionIdAsync(IReadOnlyList<string> sessionIds, SupabaseRole role, CancellationToken cancellationToken)
+    private async Task<IReadOnlyDictionary<string, int>> GetBestRaceTimeBySessionIdAsync(
+        IReadOnlyList<string> sessionIds,
+        SupabaseRole role,
+        CancellationToken cancellationToken
+    )
     {
         var response = await _supabase.GetAsync(
             new SupabaseQuery("results")
                 .Select("session_id,race_time_ms,is_classified,position,status")
                 .In("session_id", sessionIds),
             role: role,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
 
-        return response.Data
-            .Where(row => row.Int("race_time_ms") is > 0 && IsClassifiedResult(row))
+        return response
+            .Data.Where(row => row.Int("race_time_ms") is > 0 && IsClassifiedResult(row))
             .GroupBy(row => row.String("session_id") ?? string.Empty)
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
             .ToDictionary(
                 group => group.Key,
                 group => group.Min(row => row.Int("race_time_ms")!.Value),
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase
+            );
     }
 
     public async Task<IReadOnlyList<string>> FindRiderIdsAsync(
         string? riderQuery,
         string? nation,
         SupabaseRole role = SupabaseRole.Anon,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var query = new SupabaseQuery("riders").Select("id");
         var safe = string.Empty;
@@ -932,7 +1179,7 @@ public sealed class DomainQueryService
                 $"first_name.ilike.*{safe}*",
                 $"last_name.ilike.*{safe}*",
                 $"uci_code.ilike.*{safe}*",
-                $"nation.ilike.*{safe}*"
+                $"nation.ilike.*{safe}*",
             };
 
             if (long.TryParse(safe, out var numericQuery))
@@ -949,12 +1196,19 @@ public sealed class DomainQueryService
             query.Filter("nation", "eq", nation);
         }
 
-        var riders = await _supabase.GetAsync(query, role: role, cancellationToken: cancellationToken);
+        var riders = await _supabase.GetAsync(
+            query,
+            role: role,
+            cancellationToken: cancellationToken
+        );
         var riderIds = Ids(riders.Data).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (!string.IsNullOrWhiteSpace(safe))
         {
-            var nameParts = safe.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var nameParts = safe.Split(
+                ' ',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            );
             if (nameParts.Length >= 2)
             {
                 var firstLast = await _supabase.GetAsync(
@@ -963,14 +1217,16 @@ public sealed class DomainQueryService
                         .Filter("first_name", "ilike", $"*{nameParts[0]}*")
                         .Filter("last_name", "ilike", $"*{nameParts[^1]}*"),
                     role: role,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 var lastFirst = await _supabase.GetAsync(
                     new SupabaseQuery("riders")
                         .Select("id")
                         .Filter("first_name", "ilike", $"*{nameParts[^1]}*")
                         .Filter("last_name", "ilike", $"*{nameParts[0]}*"),
                     role: role,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 riderIds.UnionWith(Ids(firstLast.Data));
                 riderIds.UnionWith(Ids(lastFirst.Data));
             }
@@ -980,20 +1236,22 @@ public sealed class DomainQueryService
                     .Select("id")
                     .Or($"name.ilike.*{safe}*,code.ilike.*{safe}*"),
                 role: role,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken
+            );
             var teamIds = Ids(teams.Data);
             if (teamIds.Length > 0)
             {
                 var teamResults = await _supabase.GetAsync(
-                    new SupabaseQuery("results")
-                        .Select("rider_id")
-                        .In("team_id", teamIds),
+                    new SupabaseQuery("results").Select("rider_id").In("team_id", teamIds),
                     role: role,
-                    cancellationToken: cancellationToken);
-                riderIds.UnionWith(teamResults.Data
-                    .Select(result => result.String("rider_id"))
-                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                    .Select(id => id!));
+                    cancellationToken: cancellationToken
+                );
+                riderIds.UnionWith(
+                    teamResults
+                        .Data.Select(result => result.String("rider_id"))
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Select(id => id!)
+                );
             }
         }
 
@@ -1004,7 +1262,8 @@ public sealed class DomainQueryService
                     .Select("id")
                     .Filter("nation", "eq", nation.ToUpperInvariant()),
                 role: role,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken
+            );
             riderIds.IntersectWith(Ids(nationRiders.Data));
         }
 
@@ -1013,20 +1272,20 @@ public sealed class DomainQueryService
 
     private static string SanitizeSearch(string value)
     {
-        return new string(value
-            .Where(character => character is not ('*' or ',' or '(' or ')'))
-            .ToArray())
-            .Trim();
+        return new string(
+            value.Where(character => character is not ('*' or ',' or '(' or ')')).ToArray()
+        ).Trim();
     }
 
     public static RiderMetricsContext MetricsContextFromQuery(
-        IQueryCollection query, QueryValidationService validator, string? forcedStatus = null) =>
-        MetricsQueryParser.Parse(query, validator, forcedStatus);
+        IQueryCollection query,
+        QueryValidationService validator,
+        string? forcedStatus = null
+    ) => MetricsQueryParser.Parse(query, validator, forcedStatus);
 
     private static string[] Ids(IEnumerable<JsonObject> rows)
     {
-        return rows
-            .Select(row => row.String("id"))
+        return rows.Select(row => row.String("id"))
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -1035,32 +1294,32 @@ public sealed class DomainQueryService
 
     private static bool HasRoundFilters(RiderMetricsContext filters)
     {
-        return filters.SeasonYears.Count > 0 ||
-            filters.SeasonYear is not null ||
-            filters.FromDate is not null ||
-            filters.ToDate is not null ||
-            !string.IsNullOrWhiteSpace(filters.RoundId) ||
-            filters.TrackIds.Count > 0 ||
-            !string.IsNullOrWhiteSpace(filters.TrackId) ||
-            filters.ConditionIds.Count > 0 ||
-            filters.ConditionNames.Count > 0 ||
-            filters.CountryCodes.Count > 0 ||
-            filters.VenueNames.Count > 0 ||
-            !string.IsNullOrWhiteSpace(filters.CountryCode) ||
-            !string.IsNullOrWhiteSpace(filters.Venue) ||
-            !string.IsNullOrWhiteSpace(filters.TrackName) ||
-            !string.IsNullOrWhiteSpace(filters.CompetitionClassCode) ||
-            filters.CompetitionClassIds.Count > 0 ||
-            filters.CompetitionClassCodes.Count > 0;
+        return filters.SeasonYears.Count > 0
+            || filters.SeasonYear is not null
+            || filters.FromDate is not null
+            || filters.ToDate is not null
+            || !string.IsNullOrWhiteSpace(filters.RoundId)
+            || filters.TrackIds.Count > 0
+            || !string.IsNullOrWhiteSpace(filters.TrackId)
+            || filters.ConditionIds.Count > 0
+            || filters.ConditionNames.Count > 0
+            || filters.CountryCodes.Count > 0
+            || filters.VenueNames.Count > 0
+            || !string.IsNullOrWhiteSpace(filters.CountryCode)
+            || !string.IsNullOrWhiteSpace(filters.Venue)
+            || !string.IsNullOrWhiteSpace(filters.TrackName)
+            || !string.IsNullOrWhiteSpace(filters.CompetitionClassCode)
+            || filters.CompetitionClassIds.Count > 0
+            || filters.CompetitionClassCodes.Count > 0;
     }
 
     private static bool HasSessionFilters(RiderMetricsContext filters)
     {
-        return HasRoundFilters(filters) ||
-            !string.IsNullOrWhiteSpace(filters.CategoryCode) ||
-            filters.CategoryCodes.Count > 0 ||
-            !string.IsNullOrWhiteSpace(filters.SessionType) ||
-            filters.SessionTypes.Count > 0;
+        return HasRoundFilters(filters)
+            || !string.IsNullOrWhiteSpace(filters.CategoryCode)
+            || filters.CategoryCodes.Count > 0
+            || !string.IsNullOrWhiteSpace(filters.SessionType)
+            || filters.SessionTypes.Count > 0;
     }
 
     private static string? ResultSessionId(JsonObject result)
@@ -1072,146 +1331,10 @@ public sealed class DomainQueryService
     {
         var status = result.String("status");
         var position = result.Int("position");
-        return (result.Bool("is_classified") == true || position is > 0) &&
-            !string.Equals(status, "DNF", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(status, "DNS", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(status, "DSQ", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static string NormalizeSessionType(string sessionType)
-    {
-        var normalized = sessionType.Trim().ToUpperInvariant();
-        return normalized switch
-        {
-            "FINAL" or "FINALS" => "FINAL",
-            "QUALIFICATION" or "QUALIFYING" => "QUALI",
-            "SEMIFINAL" or "SEMI_FINAL" or "SEMI-FINAL" => "SEMI",
-            _ => normalized
-        };
-    }
-
-    public static bool IsFinalResult(JsonObject result)
-    {
-        var sessionType = result.Object("sessions")?.String("session_type");
-        return !string.IsNullOrWhiteSpace(sessionType) &&
-            string.Equals(NormalizeSessionType(sessionType), "FINAL", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static bool IsFinalSession(JsonObject session)
-    {
-        var sessionType = session.String("session_type");
-        return !string.IsNullOrWhiteSpace(sessionType) &&
-            string.Equals(NormalizeSessionType(sessionType), "FINAL", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static void NormalizeResultEmbeds(IReadOnlyList<JsonObject> results)
-    {
-        foreach (var result in results)
-        {
-            var pointRows = result.Array("result_points")?.OfType<JsonObject>().ToArray() ?? [];
-            result["awarded_points"] = pointRows.Sum(row => row.Decimal("points_awarded") ?? 0m);
-            if (pointRows.Length == 1)
-            {
-                result["applied_point_system_id"] = pointRows[0]["points_system_id"]?.DeepClone();
-                result["applied_point_system_stage_id"] = pointRows[0]["point_system_stage_id"]?.DeepClone();
-                result["applied_point_rule_id"] = pointRows[0]["point_rule_id"]?.DeepClone();
-            }
-
-            if (result.Object("sessions") is { } session)
-            {
-                NormalizeSessionEmbed(session);
-            }
-        }
-    }
-
-    public static JsonArray BuildTeamHistory(IEnumerable<JsonObject> results)
-        => BuildTeamHistory(results.Select(RankingReadResult.FromLegacy));
-
-    internal static JsonArray BuildTeamHistory(IEnumerable<RankingReadResult> results)
-    {
-        var teams = results
-            .Where(result => result.Object("teams") is not null)
-            .GroupBy(
-                result => result.Object("teams")!.String("id") ?? string.Empty,
-                StringComparer.OrdinalIgnoreCase)
-            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-            .Select(group =>
-            {
-                var rows = group.ToArray();
-                var team = rows[0].Object("teams")!.DeepClone().AsObject();
-                var dates = rows
-                    .Select(ResultDate)
-                    .Where(date => !string.IsNullOrWhiteSpace(date))
-                    .Select(date => date!)
-                    .OrderBy(date => date, StringComparer.Ordinal)
-                    .ToArray();
-
-                team["results_count"] = rows.Length;
-                team["first_result_date"] = dates.FirstOrDefault();
-                team["last_result_date"] = dates.LastOrDefault();
-                return team;
-            })
-            .OrderByDescending(team => team.String("last_result_date"), StringComparer.Ordinal)
-            .ThenBy(team => team.String("name"), StringComparer.OrdinalIgnoreCase)
-            .Select(team => (JsonNode)team)
-            .ToArray();
-
-        return new JsonArray(teams);
-    }
-
-    public static void NormalizeSessionEmbeds(IReadOnlyList<JsonObject> sessions)
-    {
-        foreach (var session in sessions)
-        {
-            NormalizeSessionEmbed(session);
-        }
-    }
-
-    public static void NormalizeSessionEmbed(JsonObject session)
-    {
-        var roundCategory = session.Object("round_categories");
-        if (roundCategory is null)
-        {
-            return;
-        }
-
-        if (roundCategory.Object("rounds") is { } round)
-        {
-            NormalizeRoundEmbed(round);
-            session["rounds"] = round.DeepClone();
-        }
-
-        if (roundCategory.Object("categories") is { } category)
-        {
-            session["categories"] = category.DeepClone();
-        }
-
-        if (session.Object("conditions") is null && roundCategory.Object("rounds")?.Object("conditions") is { } condition)
-        {
-            session["conditions"] = condition.DeepClone();
-        }
-    }
-
-    public static void NormalizeRoundEmbed(JsonObject round)
-    {
-        var competitionClassId = round.String("competition_level_id");
-        if (round.Object("competition_levels") is not { } competitionClass)
-        {
-            round["competition_class_id"] = competitionClassId;
-            round["competition_class"] = null;
-            round["competition_class_priority"] = null;
-        }
-        else
-        {
-            round["competition_class_id"] = competitionClassId ?? competitionClass.String("id");
-            round["competition_class"] = competitionClass.DeepClone();
-            round["competition_class_priority"] = competitionClass.Int("priority");
-        }
-
-        round.Remove("competition_level_id");
-        round.Remove("competition_levels");
-        round.Remove("competition_rank_id");
-        round.Remove("competition_ranks");
+        return (result.Bool("is_classified") == true || position is > 0)
+            && !string.Equals(status, "DNF", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(status, "DNS", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(status, "DSQ", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static RankingDataBundle ParseRankingDataBundle(JsonNode? response) =>
@@ -1221,43 +1344,43 @@ public sealed class DomainQueryService
         CompactMetricsPackageParser.ParseRiderDetailDataBundle(response);
 
     private static JsonArray StringArray(IEnumerable<string> values) =>
-        new(values
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(value => (JsonNode?)JsonValue.Create(value.Trim()))
-            .ToArray());
+        new(
+            values
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(value => (JsonNode?)JsonValue.Create(value.Trim()))
+                .ToArray()
+        );
 
     private static JsonArray IntArray(IEnumerable<int> values) =>
-        new(values
-            .Distinct()
-            .Select(value => (JsonNode?)JsonValue.Create(value))
-            .ToArray());
+        new(values.Distinct().Select(value => (JsonNode?)JsonValue.Create(value)).ToArray());
 
     internal static JsonArray LongArray(IEnumerable<string> values) =>
-        new(values
-            .Select(value => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-                ? (long?)parsed
-                : null)
-            .Where(value => value.HasValue)
-            .Select(value => (JsonNode?)JsonValue.Create(value!.Value))
-            .ToArray());
+        new(
+            values
+                .Select(value =>
+                    long.TryParse(
+                        value,
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out var parsed
+                    )
+                        ? (long?)parsed
+                        : null
+                )
+                .Where(value => value.HasValue)
+                .Select(value => (JsonNode?)JsonValue.Create(value!.Value))
+                .ToArray()
+        );
 
     private static JsonValue? LongNode(string? value) =>
         long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? JsonValue.Create(parsed)
             : null;
-
-    internal static string? ResultDate(JsonObject result)
-        => ResultDate(RankingReadResult.FromLegacy(result));
-
-    private static string? ResultDate(RankingReadResult result)
-    {
-        var session = result.Object("sessions");
-        return session?.String("session_date") ?? session?.Object("rounds")?.String("start_date");
-    }
 }
 
 internal sealed record RiderDetailDataBundle(
     RankingDataBundle Data,
     IReadOnlyList<PacePrecomputedSessionData> PaceSessions,
-    RankingReadData? ReadData = null);
+    RankingReadData? ReadData = null
+);

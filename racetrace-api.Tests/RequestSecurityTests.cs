@@ -16,8 +16,13 @@ public sealed class RequestSecurityTests
     [Fact]
     public async Task PublicRequestBudgetIsPerAddressAndRejectsWithoutQueueing()
     {
-        using var services = new ServiceCollection().AddLogging().AddRaceTraceHttp().BuildServiceProvider();
-        var limiter = services.GetRequiredService<IOptions<RateLimiterOptions>>().Value.GlobalLimiter;
+        using var services = new ServiceCollection()
+            .AddLogging()
+            .AddRaceTraceHttp()
+            .BuildServiceProvider();
+        var limiter = services
+            .GetRequiredService<IOptions<RateLimiterOptions>>()
+            .Value.GlobalLimiter;
         Assert.NotNull(limiter);
         var context = Request("/api/v1/rounds", "203.0.113.1");
         for (var i = 0; i < 240; i++)
@@ -26,7 +31,9 @@ public sealed class RequestSecurityTests
             Assert.True(lease.IsAcquired);
         }
         using var rejected = await limiter.AcquireAsync(context);
-        using var independent = await limiter.AcquireAsync(Request("/api/v1/rounds", "203.0.113.2"));
+        using var independent = await limiter.AcquireAsync(
+            Request("/api/v1/rounds", "203.0.113.2")
+        );
         Assert.False(rejected.IsAcquired);
         Assert.True(independent.IsAcquired);
     }
@@ -38,15 +45,22 @@ public sealed class RequestSecurityTests
     [InlineData("/api/v1/riders/18/venues")]
     public async Task HeavyRequestsHaveAnApplicationWideConcurrencyLimit(string heavyPath)
     {
-        using var services = new ServiceCollection().AddLogging().AddRaceTraceHttp().BuildServiceProvider();
-        var limiter = services.GetRequiredService<IOptions<RateLimiterOptions>>().Value.GlobalLimiter;
+        using var services = new ServiceCollection()
+            .AddLogging()
+            .AddRaceTraceHttp()
+            .BuildServiceProvider();
+        var limiter = services
+            .GetRequiredService<IOptions<RateLimiterOptions>>()
+            .Value.GlobalLimiter;
         Assert.NotNull(limiter);
         var leases = new List<System.Threading.RateLimiting.RateLimitLease>();
         try
         {
             for (var i = 1; i <= 8; i++)
             {
-                var lease = await limiter.AcquireAsync(Request("/api/v1/ranking", $"203.0.113.{i}"));
+                var lease = await limiter.AcquireAsync(
+                    Request("/api/v1/ranking", $"203.0.113.{i}")
+                );
                 Assert.True(lease.IsAcquired);
                 leases.Add(lease);
             }
@@ -55,19 +69,28 @@ public sealed class RequestSecurityTests
             Assert.False(rejected.IsAcquired);
             Assert.True(light.IsAcquired);
             leases[0].Dispose();
-            using var recovered = await limiter.AcquireAsync(Request("/api/v1/ranking", "203.0.113.22"));
+            using var recovered = await limiter.AcquireAsync(
+                Request("/api/v1/ranking", "203.0.113.22")
+            );
             Assert.True(recovered.IsAcquired);
         }
-        finally { leases.ForEach(lease => lease.Dispose()); }
+        finally
+        {
+            leases.ForEach(lease => lease.Dispose());
+        }
     }
 
     [Fact]
     public async Task HttpRejectionReturns429AndRetryAfterWhileHealthRemainsAvailable()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
+        var builder = WebApplication.CreateBuilder(
+            new WebApplicationOptions { EnvironmentName = "Testing" }
+        );
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRaceTraceHttp();
-        builder.Services.Configure<RaceTrace.Api.Configuration.RequestLimitOptions>(limits => limits.RequestsPerMinute = 1);
+        builder.Services.Configure<RaceTrace.Api.Configuration.RequestLimitOptions>(limits =>
+            limits.RequestsPerMinute = 1
+        );
         await using var app = builder.Build();
         app.UseRateLimiter();
         app.MapGet("/api/v1/rounds", () => Results.Ok());
@@ -85,7 +108,10 @@ public sealed class RequestSecurityTests
             Assert.Contains("RATE_LIMITED", await rejected.Content.ReadAsStringAsync());
             Assert.Equal(HttpStatusCode.OK, health.StatusCode);
         }
-        finally { await app.StopAsync(); }
+        finally
+        {
+            await app.StopAsync();
+        }
     }
 
     [Theory]
@@ -94,9 +120,15 @@ public sealed class RequestSecurityTests
     [InlineData("TissotTimingJsonFetcher")]
     public void TimingHttpClientsDoNotFollowRedirects(string clientName)
     {
-        using var provider = new ServiceCollection().AddLogging().AddRaceTraceApplication().BuildServiceProvider();
-        var handler = provider.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(clientName);
-        while (handler is DelegatingHandler delegating) handler = delegating.InnerHandler!;
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddRaceTraceApplication()
+            .BuildServiceProvider();
+        var handler = provider
+            .GetRequiredService<IHttpMessageHandlerFactory>()
+            .CreateHandler(clientName);
+        while (handler is DelegatingHandler delegating)
+            handler = delegating.InnerHandler!;
         Assert.False(Assert.IsType<SocketsHttpHandler>(handler).AllowAutoRedirect);
     }
 
@@ -106,16 +138,17 @@ public sealed class RequestSecurityTests
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     public async Task ProductionRefusesMissingWeakOrSharedSecrets(string read, string admin)
     {
-        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
-        {
-            EnvironmentName = Environments.Production
-        });
+        var builder = Host.CreateApplicationBuilder(
+            new HostApplicationBuilderSettings { EnvironmentName = Environments.Production }
+        );
         builder.Configuration.Sources.Clear();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["ApiAccess:ReadSecret"] = read,
-            ["Admin:ApiSecret"] = admin
-        });
+        builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["ApiAccess:ReadSecret"] = read,
+                ["Admin:ApiSecret"] = admin,
+            }
+        );
         builder.Services.AddRaceTraceConfiguration(builder.Configuration);
         using var host = builder.Build();
         await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
@@ -125,15 +158,23 @@ public sealed class RequestSecurityTests
     [InlineData("Production", false)]
     [InlineData("Production", true)]
     [InlineData("Development", false)]
-    public async Task ValidProductionAndExistingDevelopmentConfigurationCanStart(string environment, bool administration)
+    public async Task ValidProductionAndExistingDevelopmentConfigurationCanStart(
+        string environment,
+        bool administration
+    )
     {
-        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = environment });
+        var builder = Host.CreateApplicationBuilder(
+            new HostApplicationBuilderSettings { EnvironmentName = environment }
+        );
         builder.Configuration.Sources.Clear();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["ApiAccess:ReadSecret"] = environment == "Production" ? new string('r', 64) : "dev-read-secret",
-            ["Admin:ApiSecret"] = administration ? new string('a', 64) : ""
-        });
+        builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["ApiAccess:ReadSecret"] =
+                    environment == "Production" ? new string('r', 64) : "dev-read-secret",
+                ["Admin:ApiSecret"] = administration ? new string('a', 64) : "",
+            }
+        );
         builder.Services.AddRaceTraceConfiguration(builder.Configuration);
         using var host = builder.Build();
         await host.StartAsync();

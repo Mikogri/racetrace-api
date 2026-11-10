@@ -14,7 +14,8 @@ public sealed class PointSystemSeedHostedService : IHostedService
         IServiceScopeFactory scopeFactory,
         IWebHostEnvironment environment,
         IOptions<PointSystemSeedOptions> options,
-        ILogger<PointSystemSeedHostedService> logger)
+        ILogger<PointSystemSeedHostedService> logger
+    )
     {
         _scopeFactory = scopeFactory;
         _environment = environment;
@@ -45,7 +46,8 @@ public sealed class PointSystemSeedHostedService : IHostedService
             "Point system seed completed. Systems: {Systems}, stages: {Stages}, rules: {Rules}.",
             result.SystemsProcessed,
             result.StagesProcessed,
-            result.RulesWritten);
+            result.RulesWritten
+        );
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

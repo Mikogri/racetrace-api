@@ -8,27 +8,31 @@ public sealed record FantasyRiderDto(
     [property: Infrastructure.ApiContractValues("male", "female")] string Gender,
     decimal? Price,
     int? PinkbikeSeasonPoints,
-    [property: Infrastructure.ApiContractValues("unknown", "entered", "not_entered")] string EntryStatus,
+    [property: Infrastructure.ApiContractValues("unknown", "entered", "not_entered")]
+        string EntryStatus,
     decimal? ExpectedFinalPoints,
     decimal? ExpectedQ1Bonus,
     decimal? ExpectedFantasyPoints,
     decimal? PredictedPosition,
     decimal? Confidence,
     bool IsRecommended,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings
+);
 
 public sealed record FantasyRoundDto(
     string RoundId,
     int? RoundNumber,
     string? Venue,
     string? TrackName,
-    string? StartDate);
+    string? StartDate
+);
 
 public sealed record FantasyRecommendationDto(
     IReadOnlyList<FantasyRiderDto> Riders,
     decimal TotalPrice,
     decimal RemainingBudget,
-    decimal ExpectedFantasyPoints);
+    decimal ExpectedFantasyPoints
+);
 
 public sealed record FantasyCurrentDto(
     string Status,
@@ -42,7 +46,8 @@ public sealed record FantasyCurrentDto(
     string SourceUrl,
     string PredictionEngineVersion,
     string FantasyProjectionVersion,
-    FantasyCalculationDto? Calculation = null);
+    FantasyCalculationDto? Calculation = null
+);
 
 public sealed record FantasyCalculationDto(
     string AlgorithmVersion,
@@ -54,13 +59,13 @@ public sealed record FantasyCalculationDto(
     DateTimeOffset? PredictionAsOf,
     int? SimulationSeed,
     int? SimulationIterations,
-    string CalculationFingerprint);
+    string CalculationFingerprint
+);
 
-public sealed record FantasyPlacementDto(
-    int Position,
-    int? MenPoints,
-    int? WomenPoints);
+public sealed record FantasyPlacementDto(int Position, int? MenPoints, int? WomenPoints);
+
 public sealed record FantasyBonusDto(int Position, int Points);
+
 public sealed record FantasyRulesDto(
     int Season,
     string Version,
@@ -71,4 +76,5 @@ public sealed record FantasyRulesDto(
     IReadOnlyList<FantasyPlacementDto> FinalPlacementPoints,
     IReadOnlyList<FantasyBonusDto> Q1Bonus,
     bool DynamicPricing,
-    string SourceUrl);
+    string SourceUrl
+);

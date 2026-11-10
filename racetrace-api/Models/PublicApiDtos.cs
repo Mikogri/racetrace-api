@@ -9,13 +9,15 @@ public sealed record PublicPagedResponse<T>(
     int TotalItems,
     int TotalPages,
     bool HasPreviousPage,
-    bool HasNextPage)
+    bool HasNextPage
+)
 {
     public static PublicPagedResponse<T> Create(
         IReadOnlyList<T> items,
         int page,
         int pageSize,
-        int totalItems)
+        int totalItems
+    )
     {
         var totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)pageSize);
         return new PublicPagedResponse<T>(
@@ -25,14 +27,12 @@ public sealed record PublicPagedResponse<T>(
             totalItems,
             totalPages,
             page > 1,
-            page < totalPages);
+            page < totalPages
+        );
     }
 }
 
-public sealed record ConditionDto(
-    long? Id,
-    string? Code,
-    string? Name);
+public sealed record ConditionDto(long? Id, string? Code, string? Name);
 
 public sealed record TrackFilterOptionDto(
     long TrackId,
@@ -41,4 +41,5 @@ public sealed record TrackFilterOptionDto(
     string? VenueName,
     string? CountryCode,
     int? LengthM,
-    decimal? AvgSlope);
+    decimal? AvgSlope
+);

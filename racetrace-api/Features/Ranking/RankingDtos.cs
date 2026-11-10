@@ -19,17 +19,15 @@ public sealed record RankingRiderDto(
     decimal Confidence,
     int FinalsCount,
     decimal QualifyingRate,
-    string? ProfileImageUrl)
+    string? ProfileImageUrl
+)
 {
     public decimal ConsistencyEvidence { get; init; }
 
     public int? PositionChange { get; init; }
 }
 
-public sealed record RankingSummaryDto(
-    int SessionsCount,
-    int FinalsCount,
-    int RidersCount);
+public sealed record RankingSummaryDto(int SessionsCount, int FinalsCount, int RidersCount);
 
 public sealed record RankingResponseDto(
     IReadOnlyList<RankingRiderDto> Items,
@@ -40,4 +38,10 @@ public sealed record RankingResponseDto(
     bool HasPreviousPage,
     bool HasNextPage,
     RankingSummaryDto Summary,
-    [property: Infrastructure.ApiContractValues("previousRound", "defaultFilters", "previousFilters")] string? ComparisonBasis = null);
+    [property: Infrastructure.ApiContractValues(
+        "previousRound",
+        "defaultFilters",
+        "previousFilters"
+    )]
+        string? ComparisonBasis = null
+);

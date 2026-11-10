@@ -11,7 +11,7 @@ public sealed class TeamImportTests
         var rider = new JsonObject
         {
             ["UciTeamCode"] = " aon ",
-            ["UciTeamName"] = "  AON RACING  "
+            ["UciTeamName"] = "  AON RACING  ",
         };
 
         var team = ChronoRaceImportService.ParseChronoRaceTeam(rider);
@@ -28,7 +28,7 @@ public sealed class TeamImportTests
         {
             ["UciTeamCode"] = "",
             ["UciTeamId"] = "ytr",
-            ["UciTeamName"] = ""
+            ["UciTeamName"] = "",
         };
 
         var team = ChronoRaceImportService.ParseChronoRaceTeam(rider);
@@ -44,7 +44,7 @@ public sealed class TeamImportTests
         var rider = new JsonObject
         {
             ["UciTeamCode"] = " fw5 ",
-            ["UciTeamName"] = "Frameworks Racing"
+            ["UciTeamName"] = "Frameworks Racing",
         };
 
         var team = ChronoRaceImportService.ParseChronoRaceTeam(rider);
@@ -74,7 +74,7 @@ public sealed class TeamImportTests
             ["RaceTime"] = 185123,
             ["CompletedDistance"] = 2100,
             ["Status"] = "OK",
-            ["Speed"] = 62.4m
+            ["Speed"] = 62.4m,
         };
         var rider = new JsonObject { ["RaceNr"] = 17 };
 
@@ -85,7 +85,8 @@ public sealed class TeamImportTests
             result,
             rider,
             position: 2,
-            isClassified: true);
+            isClassified: true
+        );
 
         Assert.Equal("team-7", payload["team_id"]!.GetValue<string>());
         Assert.Equal("rider-1", payload["rider_id"]!.GetValue<string>());
@@ -102,7 +103,8 @@ public sealed class TeamImportTests
             new JsonObject(),
             new JsonObject { ["RaceNr"] = 17 },
             position: null,
-            isClassified: false);
+            isClassified: false
+        );
 
         Assert.True(payload.ContainsKey("team_id"));
         Assert.Null(payload["team_id"]);

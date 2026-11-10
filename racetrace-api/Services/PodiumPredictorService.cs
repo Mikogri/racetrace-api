@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Infrastructure.Calculations;
 using RaceTrace.Api.Models;
@@ -8,17 +9,19 @@ namespace RaceTrace.Api.Services;
 public sealed class PodiumPredictorService
 {
     private const string PredictionRoundSelect =
-        "id,context_name,season_year,round_number,track_id,start_date,end_date,competition_level_id," +
-        "conditions(name,is_dry),tracks(id,name,venue,country_code,length_m,avg_slope)," +
-        "competition_levels(id,code,name,priority)";
+        "id,context_name,season_year,round_number,track_id,start_date,end_date,competition_level_id,"
+        + "conditions(name,is_dry),tracks(id,name,venue,country_code,length_m,avg_slope),"
+        + "competition_levels(id,code,name,priority)";
 
     private const string PredictionResultSelect =
-        "id,rider_id,session_id,race_time_ms,top_speed,position,is_classified,status," +
-        "riders(" + DomainQueryService.RiderSelect + "),teams(*),result_points(points_awarded)," +
-        "sessions(id,round_id,category_id,name,session_type,session_date,conditions(name,is_dry)," +
-        "round_categories(round_id,category_id," +
-        "rounds(id,track_id,competition_level_id,is_season_final_round,season_year,start_date," +
-        "conditions(name,is_dry),competition_levels(id,code,name,priority)),categories(id,code)))";
+        "id,rider_id,session_id,race_time_ms,top_speed,position,is_classified,status,"
+        + "riders("
+        + DomainQueryService.RiderSelect
+        + "),teams(*),result_points(points_awarded),"
+        + "sessions(id,round_id,category_id,name,session_type,session_date,conditions(name,is_dry),"
+        + "round_categories(round_id,category_id,"
+        + "rounds(id,track_id,competition_level_id,is_season_final_round,season_year,start_date,"
+        + "conditions(name,is_dry),competition_levels(id,code,name,priority)),categories(id,code)))";
     private const int ResultSize = 10;
     private const int ProbabilityFieldSize = 30;
     private const decimal MinimumCandidateConfidence = 35m;
@@ -36,7 +39,9 @@ public sealed class PodiumPredictorService
         DomainQueryService domainQueries,
         MetricsService metrics,
         SeasonSummaryService seasonSummary,
-        TimeProvider timeProvider, CalculationProvenance? provenance = null)
+        TimeProvider timeProvider,
+        CalculationProvenance? provenance = null
+    )
     {
         _supabase = supabase;
         _domainQueries = domainQueries;
@@ -48,34 +53,30 @@ public sealed class PodiumPredictorService
 
     public async Task<PodiumPredictionResponseDto> GetAsync(
         IQueryCollection queryString,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var season = _seasonSummary.ReadSeason(queryString);
-        var (publicCategory, categoryCode) = await _seasonSummary.ReadCategoryAsync(queryString, cancellationToken);
+        var (publicCategory, categoryCode) = await _seasonSummary.ReadCategoryAsync(
+            queryString,
+            cancellationToken
+        );
         if (IsJuniorCategory(categoryCode))
         {
-            return new PodiumPredictionResponseDto(
-                season,
-                publicCategory,
-                null,
-                []);
+            return new PodiumPredictionResponseDto(season, publicCategory, null, []);
         }
 
         var nextRound = await LoadTargetRoundAsync(
             season,
             queryString["roundId"].FirstOrDefault(),
-            cancellationToken);
+            cancellationToken
+        );
         if (nextRound is null)
         {
-            return new PodiumPredictionResponseDto(
-                season,
-                publicCategory,
-                null,
-                []);
+            return new PodiumPredictionResponseDto(season, publicCategory, null, []);
         }
 
-        var trackId = nextRound.String("track_id") ??
-            nextRound.Object("tracks")?.String("id");
+        var trackId = nextRound.String("track_id") ?? nextRound.Object("tracks")?.String("id");
         var nextRoundDate = PublicDtoMapping.Date(nextRound.String("start_date"));
         if (string.IsNullOrWhiteSpace(trackId) || nextRoundDate is null)
         {
@@ -83,7 +84,8 @@ public sealed class PodiumPredictorService
                 season,
                 publicCategory,
                 SeasonSummaryService.ToRoundDto(nextRound, _timeProvider.GetUtcNow()),
-                []);
+                []
+            );
         }
 
         var historyCutoff = nextRoundDate.Value.AddDays(-1);
@@ -96,21 +98,28 @@ public sealed class PodiumPredictorService
             _provenance.SimulationIterations = _options.MonteCarloIterations;
         }
         var currentTask = LoadMetricsAsync(
-            SeasonContext(season, categoryCode) with { ToDate = historyCutoff },
-            cancellationToken);
+            SeasonContext(season, categoryCode) with
+            {
+                ToDate = historyCutoff,
+            },
+            cancellationToken
+        );
         var previousTask = LoadMetricsAsync(
             SeasonContext(season - 1, categoryCode),
-            cancellationToken);
+            cancellationToken
+        );
         var trackTask = LoadRecentTrackMetricsAsync(
             season,
             categoryCode,
             trackId,
             nextRoundDate.Value,
-            cancellationToken);
+            cancellationToken
+        );
         var weekendTask = LoadWeekendMetricsAsync(
             nextRound.String("id")!,
             categoryCode,
-            cancellationToken);
+            cancellationToken
+        );
         await Task.WhenAll(currentTask, previousTask, trackTask, weekendTask);
         var current = await currentTask;
         var previous = await previousTask;
@@ -122,10 +131,11 @@ public sealed class PodiumPredictorService
         var roundsRemaining = await CountRemainingRoundsAsync(
             season,
             nextRoundDate.Value,
-            cancellationToken);
+            cancellationToken
+        );
         var featureBuilder = new PodiumPredictionFeatureBuilder(_options);
-        var features = current.Metrics
-            .Where(pair => pair.Value.PaceConfidence >= MinimumCandidateConfidence)
+        var features = current
+            .Metrics.Where(pair => pair.Value.PaceConfidence >= MinimumCandidateConfidence)
             .Select(pair =>
             {
                 previous.Metrics.TryGetValue(pair.Key, out var previousMetric);
@@ -133,7 +143,8 @@ public sealed class PodiumPredictorService
                 var rider = FindLatestIdentity(pair.Key, current.Results)?.Object("riders");
                 var wasJunior = RiderCategoryResolver.WasJuniorInSeason(
                     PublicDtoMapping.Date(rider?.String("birth_date")),
-                    season - 1);
+                    season - 1
+                );
                 return featureBuilder.Build(
                     pair.Key,
                     pair.Value,
@@ -144,96 +155,101 @@ public sealed class PodiumPredictorService
                     targetCondition,
                     isWorldChampionship,
                     roundsRemaining,
-                    season - 1);
+                    season - 1
+                );
             })
             .OrderByDescending(feature => feature.Rating)
             .ThenByDescending(feature => feature.Confidence)
             .Take(ProbabilityFieldSize)
             .ToArray();
-        var distributions = new PodiumPredictionCalibration(_options)
-            .Calculate(features, isWorldChampionship);
+        var distributions = new PodiumPredictionCalibration(_options).Calculate(
+            features,
+            isWorldChampionship
+        );
         var simulations = new MonteCarloRaceSimulator(_options).Simulate(distributions);
 
         var items = distributions
-            .Select((candidate, index) => new
-            {
-                Candidate = candidate,
-                Simulation = simulations[index]
-            })
+            .Select(
+                (candidate, index) => new { Candidate = candidate, Simulation = simulations[index] }
+            )
             .OrderByDescending(value => value.Simulation.PodiumProbability)
             .ThenByDescending(value => value.Candidate.ExpectedPerformance)
             .Take(ResultSize)
-            .Select((value, index) =>
-            {
-                var identity = FindLatestIdentity(
-                    value.Candidate.Features.RiderId,
-                    current.Results,
-                    weekend.Results,
-                    track.Results,
-                    previous.Results);
-                var rider = identity?.Object("riders") ?? new JsonObject();
-                var team = identity?.Object("teams");
-                return new PodiumPredictionRiderDto(
-                    index + 1,
-                    PublicDtoMapping.Long(value.Candidate.Features.RiderId),
-                    rider.DisplayName(),
-                    rider.String("nation"),
-                    PublicDtoMapping.NullableLong(team?.String("id")),
-                    team?.String("name"),
-                    Percent(value.Simulation.PodiumProbability),
-                    Rounded(value.Candidate.ExpectedPerformance),
-                    value.Candidate.Features.CurrentRating,
-                    value.Candidate.Features.TrackPace,
-                    value.Candidate.Features.PreviousRating,
-                    Rounded(value.Candidate.Features.Confidence))
+            .Select(
+                (value, index) =>
                 {
-                    WinProbability = Percent(value.Simulation.WinProbability),
-                    Top5Probability = Percent(value.Simulation.Top5Probability),
-                    ExpectedPosition = Rounded(value.Simulation.ExpectedPosition),
-                    ExpectedPerformance = Rounded(value.Candidate.ExpectedPerformance),
-                    PerformanceUncertainty = Rounded(value.Candidate.PerformanceUncertainty),
-                    IncidentProbability = Percent(value.Candidate.IncidentProbability),
-                    Context = new PodiumPredictionContextDto(
-                        Rounded(value.Candidate.Features.TrackAffinity),
-                        Rounded(value.Candidate.Features.ConditionsAffinity),
-                        Rounded(value.Candidate.Features.RecentForm),
-                        Rounded(value.Candidate.Features.TitleLeverage),
-                        Rounded(value.Candidate.Features.PressureResponse))
-                };
-            })
+                    var identity = FindLatestIdentity(
+                        value.Candidate.Features.RiderId,
+                        current.Results,
+                        weekend.Results,
+                        track.Results,
+                        previous.Results
+                    );
+                    var rider = identity?.Object("riders") ?? new JsonObject();
+                    var team = identity?.Object("teams");
+                    return new PodiumPredictionRiderDto(
+                        index + 1,
+                        PublicDtoMapping.Long(value.Candidate.Features.RiderId),
+                        rider.DisplayName(),
+                        rider.String("nation"),
+                        PublicDtoMapping.NullableLong(team?.String("id")),
+                        team?.String("name"),
+                        Percent(value.Simulation.PodiumProbability),
+                        Rounded(value.Candidate.ExpectedPerformance),
+                        value.Candidate.Features.CurrentRating,
+                        value.Candidate.Features.TrackPace,
+                        value.Candidate.Features.PreviousRating,
+                        Rounded(value.Candidate.Features.Confidence)
+                    )
+                    {
+                        WinProbability = Percent(value.Simulation.WinProbability),
+                        Top5Probability = Percent(value.Simulation.Top5Probability),
+                        ExpectedPosition = Rounded(value.Simulation.ExpectedPosition),
+                        ExpectedPerformance = Rounded(value.Candidate.ExpectedPerformance),
+                        PerformanceUncertainty = Rounded(value.Candidate.PerformanceUncertainty),
+                        IncidentProbability = Percent(value.Candidate.IncidentProbability),
+                        Context = new PodiumPredictionContextDto(
+                            Rounded(value.Candidate.Features.TrackAffinity),
+                            Rounded(value.Candidate.Features.ConditionsAffinity),
+                            Rounded(value.Candidate.Features.RecentForm),
+                            Rounded(value.Candidate.Features.TitleLeverage),
+                            Rounded(value.Candidate.Features.PressureResponse)
+                        ),
+                    };
+                }
+            )
             .ToArray();
 
         return new PodiumPredictionResponseDto(
             season,
             publicCategory,
             SeasonSummaryService.ToRoundDto(nextRound, _timeProvider.GetUtcNow()),
-            items)
+            items
+        )
         {
-            ModelVersion = _options.ModelVersion
+            ModelVersion = _options.ModelVersion,
         };
     }
 
     private static decimal Rounded(double value) =>
         Math.Round((decimal)value, 2, MidpointRounding.AwayFromZero);
 
-    private static decimal Percent(double probability) =>
-        Rounded(100 * probability);
+    private static decimal Percent(double probability) => Rounded(100 * probability);
 
     internal static IReadOnlyList<int> RecentTrackSeasons(int season)
     {
         var firstSeason = Math.Max(1990, season - 2);
-        return Enumerable.Range(
-            firstSeason,
-            season - firstSeason + 1).ToArray();
+        return Enumerable.Range(firstSeason, season - firstSeason + 1).ToArray();
     }
 
     internal static bool IsJuniorCategory(string categoryCode) =>
-        string.Equals(categoryCode, "JM", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(categoryCode, "JW", StringComparison.OrdinalIgnoreCase);
+        string.Equals(categoryCode, "JM", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(categoryCode, "JW", StringComparison.OrdinalIgnoreCase);
 
     private async Task<JsonObject?> LoadNextRoundAsync(
         int season,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
         var response = await _supabase.GetAsync(
@@ -243,11 +259,12 @@ public sealed class PodiumPredictorService
                 .Filter("end_date", "gte", today)
                 .Add("order", "start_date.asc.nullslast,id.asc")
                 .Limit(1),
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         var round = response.Data.FirstOrDefault();
         if (round is not null)
         {
-            DomainQueryService.NormalizeRoundEmbed(round);
+            ResultEmbedMapping.NormalizeRoundEmbed(round);
         }
 
         return round;
@@ -256,7 +273,8 @@ public sealed class PodiumPredictorService
     private async Task<JsonObject?> LoadTargetRoundAsync(
         int season,
         string? roundId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (string.IsNullOrWhiteSpace(roundId))
         {
@@ -268,7 +286,8 @@ public sealed class PodiumPredictorService
             throw new ApiException(
                 StatusCodes.Status400BadRequest,
                 "INVALID_QUERY",
-                "roundId must be a positive integer.");
+                "roundId must be a positive integer."
+            );
         }
 
         var round = await _supabase.GetSingleAsync(
@@ -276,10 +295,11 @@ public sealed class PodiumPredictorService
                 .Select(PredictionRoundSelect)
                 .Filter("id", "eq", parsedRoundId)
                 .Filter("season_year", "eq", season),
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         if (round is not null)
         {
-            DomainQueryService.NormalizeRoundEmbed(round);
+            ResultEmbedMapping.NormalizeRoundEmbed(round);
         }
 
         return round;
@@ -287,29 +307,34 @@ public sealed class PodiumPredictorService
 
     private async Task<MetricDataset> LoadMetricsAsync(
         RiderMetricsContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var sessions = await _domainQueries.GetMatchingSessionsAsync(
             context,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         var results = await _domainQueries.GetMatchingResultsAsync(
             context,
             cancellationToken: cancellationToken,
             resolvedSessions: sessions,
-            select: PredictionResultSelect);
+            select: PredictionResultSelect
+        );
         var metrics = await _metrics.CalculatePerformanceByRiderAsync(
             results,
             context,
             cancellationToken,
             resultsContainFullField: true,
-            availableSessions: sessions);
+            availableSessions: sessions
+        );
         return new MetricDataset(results, metrics);
     }
 
     private async Task<MetricDataset> LoadWeekendMetricsAsync(
         string roundId,
         string categoryCode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var context = new RiderMetricsContext(
             null,
@@ -322,17 +347,20 @@ public sealed class PodiumPredictorService
             null,
             null,
             null,
-            null)
+            null
+        )
         {
-            CategoryCodes = [categoryCode]
+            CategoryCodes = [categoryCode],
         };
         var sessions = await _domainQueries.GetMatchingSessionsAsync(
             context,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         var preFinalSessions = sessions
-            .Where(session => PaceService.ParseSessionType(
-                session.String("session_type"),
-                session.String("name")) != PaceSessionType.Final)
+            .Where(session =>
+                PaceService.ParseSessionType(session.String("session_type"), session.String("name"))
+                != PaceSessionType.Final
+            )
             .ToArray();
         if (preFinalSessions.Length == 0)
         {
@@ -343,7 +371,8 @@ public sealed class PodiumPredictorService
             context,
             cancellationToken: cancellationToken,
             resolvedSessions: preFinalSessions,
-            select: PredictionResultSelect);
+            select: PredictionResultSelect
+        );
         return new MetricDataset(results, new Dictionary<string, RiderPerformanceMetricValues>());
     }
 
@@ -352,7 +381,8 @@ public sealed class PodiumPredictorService
         string categoryCode,
         string trackId,
         DateOnly nextRoundDate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var seasons = RecentTrackSeasons(season);
         var context = new RiderMetricsContext(
@@ -366,25 +396,26 @@ public sealed class PodiumPredictorService
             null,
             null,
             null,
-            null)
+            null
+        )
         {
             SeasonYears = seasons,
             TrackIds = [trackId],
-            CategoryCodes = [categoryCode]
+            CategoryCodes = [categoryCode],
         };
         var sessions = await _domainQueries.GetMatchingSessionsAsync(
             context,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         var results = await _domainQueries.GetMatchingResultsAsync(
             context,
             cancellationToken: cancellationToken,
             resolvedSessions: sessions,
-            select: PredictionResultSelect);
+            select: PredictionResultSelect
+        );
         var latestRoundByRider = results
             .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")))
-            .GroupBy(
-                result => result.String("rider_id")!,
-                StringComparer.OrdinalIgnoreCase)
+            .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)
             .Select(group => new
             {
                 RiderId = group.Key,
@@ -392,33 +423,34 @@ public sealed class PodiumPredictorService
                     .Select(result => new
                     {
                         RoundId = ResultRoundId(result),
-                        Date = ResultDate(result)
+                        Date = ResultDate(result),
                     })
                     .Where(value => !string.IsNullOrWhiteSpace(value.RoundId))
                     .OrderByDescending(value => value.Date)
                     .ThenByDescending(value => value.RoundId, StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault()?
-                    .RoundId
+                    .FirstOrDefault()
+                    ?.RoundId,
             })
             .Where(value => !string.IsNullOrWhiteSpace(value.RoundId))
             .ToDictionary(
                 value => value.RiderId,
                 value => value.RoundId!,
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase
+            );
         var selectedResults = results
             .Where(result =>
                 latestRoundByRider.TryGetValue(
                     result.String("rider_id") ?? string.Empty,
-                    out var roundId) &&
-                string.Equals(
-                    ResultRoundId(result),
-                    roundId,
-                    StringComparison.OrdinalIgnoreCase))
+                    out var roundId
+                )
+                && string.Equals(ResultRoundId(result), roundId, StringComparison.OrdinalIgnoreCase)
+            )
             .ToArray();
         var metricTasks = selectedResults
             .GroupBy(
                 result => ResultRoundId(result) ?? string.Empty,
-                StringComparer.OrdinalIgnoreCase)
+                StringComparer.OrdinalIgnoreCase
+            )
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
             .Select(async group =>
             {
@@ -436,7 +468,8 @@ public sealed class PodiumPredictorService
                     context,
                     cancellationToken,
                     resultsContainFullField: false,
-                    availableSessions: roundSessions);
+                    availableSessions: roundSessions
+                );
             })
             .ToArray();
         var metricGroups = await Task.WhenAll(metricTasks);
@@ -446,94 +479,95 @@ public sealed class PodiumPredictorService
             .ToDictionary(
                 group => group.Key,
                 group => group.First().Value,
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase
+            );
         return new MetricDataset(selectedResults, metrics);
     }
 
     private async Task<int> CountRemainingRoundsAsync(
         int season,
         DateOnly fromDate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var response = await _supabase.GetAsync(
             new SupabaseQuery("rounds")
                 .Select("id")
                 .Filter("season_year", "eq", season)
                 .Filter("start_date", "gte", fromDate),
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         return Math.Max(1, response.Data.Count);
     }
 
     private static bool IsWorldChampionship(JsonObject round)
     {
-        var code = round.Object("competition_levels")?.String("code") ??
-            round.Object("competition_class")?.String("code");
-        return code is not null &&
-            (code.Contains("champ", StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(code, "WCH", StringComparison.OrdinalIgnoreCase));
+        var code =
+            round.Object("competition_levels")?.String("code")
+            ?? round.Object("competition_class")?.String("code");
+        return code is not null
+            && (
+                code.Contains("champ", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(code, "WCH", StringComparison.OrdinalIgnoreCase)
+            );
     }
 
     private static string? TargetCondition(
         JsonObject round,
-        IReadOnlyList<JsonObject> weekendResults)
+        IReadOnlyList<JsonObject> weekendResults
+    )
     {
         var finalCondition = weekendResults
             .Select(result => result.Object("sessions"))
-            .Where(session => session is not null &&
-                PaceService.ParseSessionType(
+            .Where(session =>
+                session is not null
+                && PaceService.ParseSessionType(
                     session.String("session_type"),
-                    session.String("name")) == PaceSessionType.Final)
+                    session.String("name")
+                ) == PaceSessionType.Final
+            )
             .Select(session => session!.Object("conditions")?.String("name"))
             .FirstOrDefault(code => !string.IsNullOrWhiteSpace(code));
-        return finalCondition ??
-            weekendResults.Select(result =>
-                    result.Object("sessions")?.Object("conditions")?.String("name"))
-                .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ??
-            round.Object("conditions")?.String("name");
+        return finalCondition
+            ?? weekendResults
+                .Select(result => result.Object("sessions")?.Object("conditions")?.String("name"))
+                .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name))
+            ?? round.Object("conditions")?.String("name");
     }
 
     private static JsonObject? FindLatestIdentity(
         string riderId,
-        params IReadOnlyList<JsonObject>[] resultSets)
+        params IReadOnlyList<JsonObject>[] resultSets
+    )
     {
         return resultSets
             .SelectMany(results => results)
-            .Where(result => string.Equals(
-                result.String("rider_id"),
-                riderId,
-                StringComparison.OrdinalIgnoreCase))
+            .Where(result =>
+                string.Equals(
+                    result.String("rider_id"),
+                    riderId,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             .OrderByDescending(ResultDate)
             .ThenByDescending(result => result.String("id"), StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
     }
 
-    private static RiderMetricsContext SeasonContext(
-        int season,
-        string categoryCode) =>
-        new(
-            season,
-            categoryCode,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null)
+    private static RiderMetricsContext SeasonContext(int season, string categoryCode) =>
+        new(season, categoryCode, null, null, null, null, null, null, null, null, null)
         {
             SeasonYears = [season],
-            CategoryCodes = [categoryCode]
+            CategoryCodes = [categoryCode],
         };
 
     private static string? ResultRoundId(JsonObject result)
     {
         var session = result.Object("sessions");
-        return session?.String("round_id") ??
-            session?.Object("rounds")?.String("id") ??
-            session?.Object("round_categories")?.String("round_id") ??
-            session?.Object("round_categories")?.Object("rounds")?.String("id");
+        return session?.String("round_id")
+            ?? session?.Object("rounds")?.String("id")
+            ?? session?.Object("round_categories")?.String("round_id")
+            ?? session?.Object("round_categories")?.Object("rounds")?.String("id");
     }
 
     private static string? ResultSessionId(JsonObject result) =>
@@ -543,13 +577,14 @@ public sealed class PodiumPredictorService
     {
         var session = result.Object("sessions");
         return PublicDtoMapping.Date(
-            session?.String("session_date") ??
-            session?.Object("rounds")?.String("start_date") ??
-            session?.Object("round_categories")?.Object("rounds")?.String("start_date"));
+            session?.String("session_date")
+                ?? session?.Object("rounds")?.String("start_date")
+                ?? session?.Object("round_categories")?.Object("rounds")?.String("start_date")
+        );
     }
 
     private sealed record MetricDataset(
         IReadOnlyList<JsonObject> Results,
-        IReadOnlyDictionary<string, RiderPerformanceMetricValues> Metrics);
-
+        IReadOnlyDictionary<string, RiderPerformanceMetricValues> Metrics
+    );
 }

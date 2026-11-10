@@ -9,16 +9,12 @@ internal sealed class TestPointAwardService(bool pointSystemApplied = true) : IP
 
     public Task<PointAwardCalculationResult> RecalculateSessionAsync(
         string sessionId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         RecalculatedSessionIds.Add(sessionId);
-        return Task.FromResult(new PointAwardCalculationResult(
-            sessionId,
-            pointSystemApplied,
-            0,
-            0,
-            0,
-            null,
-            null));
+        return Task.FromResult(
+            new PointAwardCalculationResult(sessionId, pointSystemApplied, 0, 0, 0, null, null)
+        );
     }
 }

@@ -20,7 +20,10 @@ public sealed class ReadPathResponsibilityTests
         var firstSource = Source("1", [older, unrelated, latest]);
         var secondSource = Source("2", [second]);
 
-        var selected = CompareSessionSelection.SelectSessionResults([firstSource, secondSource], "100");
+        var selected = CompareSessionSelection.SelectSessionResults(
+            [firstSource, secondSource],
+            "100"
+        );
 
         Assert.Equal(["1", "2"], selected.Select(item => item.Source.RiderId));
         Assert.Same(latest, selected[0].Result);
@@ -71,7 +74,11 @@ public sealed class ReadPathResponsibilityTests
         var splits = new Dictionary<string, IReadOnlyList<JsonObject>> { ["12"] = [latest, older] };
 
         var run = PaceRunMapper.BuildRun(result, splits, new PaceRunMapper.SessionSplitLayout(1));
-        var typedRun = PaceRunMapper.BuildRun(RankingReadResult.FromLegacy(result), splits, new PaceRunMapper.SessionSplitLayout(1));
+        var typedRun = PaceRunMapper.BuildRun(
+            RankingReadResult.FromLegacy(result),
+            splits,
+            new PaceRunMapper.SessionSplitLayout(1)
+        );
 
         Assert.Equal([35d, 55d], run.SectorTimes);
         Assert.Equal(run.SectorTimes, typedRun.SectorTimes);
@@ -81,16 +88,24 @@ public sealed class ReadPathResponsibilityTests
         Assert.Equal("DNF", run.Status);
     }
 
-    private static JsonObject Result(string id, string riderId, string sessionId) => new()
-    {
-        ["id"] = id, ["rider_id"] = riderId, ["session_id"] = sessionId,
-        ["status"] = "Finished", ["is_classified"] = true
-    };
+    private static JsonObject Result(string id, string riderId, string sessionId) =>
+        new()
+        {
+            ["id"] = id,
+            ["rider_id"] = riderId,
+            ["session_id"] = sessionId,
+            ["status"] = "Finished",
+            ["is_classified"] = true,
+        };
 
-    private static JsonObject Split(string resultId, int time) => new()
-    {
-        ["id"] = resultId, ["result_id"] = resultId, ["split_index"] = 1, ["race_time"] = time
-    };
+    private static JsonObject Split(string resultId, int time) =>
+        new()
+        {
+            ["id"] = resultId,
+            ["result_id"] = resultId,
+            ["split_index"] = 1,
+            ["race_time"] = time,
+        };
 
     private static CompareRiderSource Source(string riderId, JsonObject[] results) =>
         new(riderId, new JsonObject(), null, new RankingSnapshot([], results, results, [], []));

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 
@@ -9,11 +10,13 @@ public sealed class TeamsService
     private const int PageSize = 1000;
     private const int FilterBatchSize = 100;
 
-    private static readonly Dictionary<string, string> TeamSorts = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> TeamSorts = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
         ["id"] = "id",
         ["name"] = "name",
-        ["code"] = "code"
+        ["code"] = "code",
     };
 
     private readonly ISupabaseRestClient _supabase;
@@ -25,7 +28,8 @@ public sealed class TeamsService
         ISupabaseRestClient supabase,
         QueryValidationService validator,
         DomainQueryService domainQueries,
-        MetricsService metrics)
+        MetricsService metrics
+    )
     {
         _supabase = supabase;
         _validator = validator;
@@ -33,7 +37,10 @@ public sealed class TeamsService
         _metrics = metrics;
     }
 
-    public async Task<ListResponse<JsonObject>> ListTeamsAsync(IQueryCollection queryString, CancellationToken cancellationToken)
+    public async Task<ListResponse<JsonObject>> ListTeamsAsync(
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         var page = _validator.Page(queryString);
         var sort = _validator.Sort(queryString, TeamSorts, "name", "asc");
@@ -52,24 +59,46 @@ public sealed class TeamsService
             query.Or($"name.ilike.*{safe}*,code.ilike.*{safe}*");
         }
 
-        var response = await _supabase.GetAsync(query, count: true, cancellationToken: cancellationToken);
+        var response = await _supabase.GetAsync(
+            query,
+            count: true,
+            cancellationToken: cancellationToken
+        );
         await DecorateTeamsAsync(response.Data, cancellationToken);
-        return ResponseFactory.Page(response.Data, page.Page, page.Limit, response.Total, sort.Sort, sort.Order);
+        return ResponseFactory.Page(
+            response.Data,
+            page.Page,
+            page.Limit,
+            response.Total,
+            sort.Sort,
+            sort.Order
+        );
     }
 
     public async Task<JsonObject> GetTeamAsync(string teamId, CancellationToken cancellationToken)
     {
-        var team = await _domainQueries.FindByIdAsync("teams", teamId, cancellationToken: cancellationToken);
+        var team = await _domainQueries.FindByIdAsync(
+            "teams",
+            teamId,
+            cancellationToken: cancellationToken
+        );
         if (team is null)
         {
-            throw new ApiException(StatusCodes.Status404NotFound, "TEAM_NOT_FOUND", "Team was not found.");
+            throw new ApiException(
+                StatusCodes.Status404NotFound,
+                "TEAM_NOT_FOUND",
+                "Team was not found."
+            );
         }
 
         await DecorateTeamsAsync([team], cancellationToken);
         return team;
     }
 
-    private async Task DecorateTeamsAsync(IReadOnlyList<JsonObject> teams, CancellationToken cancellationToken)
+    private async Task DecorateTeamsAsync(
+        IReadOnlyList<JsonObject> teams,
+        CancellationToken cancellationToken
+    )
     {
         var teamIds = teams
             .Select(team => team.String("id"))
@@ -82,9 +111,7 @@ public sealed class TeamsService
             return;
         }
 
-        var currentAssignments = await FetchCurrentAssignmentsAsync(
-            teamIds,
-            cancellationToken);
+        var currentAssignments = await FetchCurrentAssignmentsAsync(teamIds, cancellationToken);
         var riderIds = currentAssignments
             .Select(assignment => assignment.String("rider_id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -92,21 +119,34 @@ public sealed class TeamsService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var allRiderResults = await FetchResultsAsync("rider_id", riderIds, cancellationToken);
-        var context = new RiderMetricsContext(null, null, null, null, null, null, null, null, null, null, null);
-        var performanceByRiderId = await _metrics.CalculatePerformanceByRiderAsync(allRiderResults, context, cancellationToken);
-
-        DecorateTeamsFromHistory(
-            teams,
-            currentAssignments,
+        var context = new RiderMetricsContext(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+        var performanceByRiderId = await _metrics.CalculatePerformanceByRiderAsync(
             allRiderResults,
-            performanceByRiderId);
+            context,
+            cancellationToken
+        );
+
+        DecorateTeamsFromHistory(teams, currentAssignments, allRiderResults, performanceByRiderId);
     }
 
     internal static void DecorateTeamsFromHistory(
         IReadOnlyList<JsonObject> teams,
         IReadOnlyList<JsonObject> currentAssignments,
         IReadOnlyList<JsonObject> allRiderResults,
-        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId)
+        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId
+    )
     {
         var resultsByRiderId = allRiderResults
             .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")))
@@ -114,19 +154,23 @@ public sealed class TeamsService
             .ToDictionary(
                 group => group.Key,
                 group => (IReadOnlyList<JsonObject>)group.ToArray(),
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase
+            );
         var riderIdsByTeamId = currentAssignments
             .Where(assignment =>
-                !string.IsNullOrWhiteSpace(assignment.String("team_id")) &&
-                !string.IsNullOrWhiteSpace(assignment.String("rider_id")))
+                !string.IsNullOrWhiteSpace(assignment.String("team_id"))
+                && !string.IsNullOrWhiteSpace(assignment.String("rider_id"))
+            )
             .GroupBy(assignment => assignment.String("team_id")!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 group => group.Key,
-                group => group
-                    .Select(assignment => assignment.String("rider_id")!)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                StringComparer.OrdinalIgnoreCase);
+                group =>
+                    group
+                        .Select(assignment => assignment.String("rider_id")!)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray(),
+                StringComparer.OrdinalIgnoreCase
+            );
 
         foreach (var team in teams)
         {
@@ -134,10 +178,9 @@ public sealed class TeamsService
             var riderIds = riderIdsByTeamId.GetValueOrDefault(teamId) ?? [];
             var riders = riderIds
                 .Where(resultsByRiderId.ContainsKey)
-                .Select(riderId => BuildTeamRider(
-                    riderId,
-                    resultsByRiderId[riderId],
-                    performanceByRiderId))
+                .Select(riderId =>
+                    BuildTeamRider(riderId, resultsByRiderId[riderId], performanceByRiderId)
+                )
                 .OrderBy(rider => rider.String("last_name"), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(rider => rider.String("first_name"), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -149,21 +192,27 @@ public sealed class TeamsService
 
             team["riders"] = new JsonArray(riders.Select(rider => (JsonNode)rider).ToArray());
             team["riders_count"] = riders.Length;
-            team["average_rating"] = ratings.Length == 0
-                ? null
-                : Math.Round(ratings.Average(), 2);
+            team["average_rating"] = ratings.Length == 0 ? null : Math.Round(ratings.Average(), 2);
         }
     }
 
     internal static void DecorateTeams(
         IReadOnlyList<JsonObject> teams,
         IReadOnlyList<JsonObject> teamResults,
-        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId)
+        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId
+    )
     {
         var resultsByTeamId = teamResults
-            .GroupBy(result => result.String("team_id") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(
+                result => result.String("team_id") ?? string.Empty,
+                StringComparer.OrdinalIgnoreCase
+            )
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-            .ToDictionary(group => group.Key, group => (IReadOnlyList<JsonObject>)group.ToArray(), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<JsonObject>)group.ToArray(),
+                StringComparer.OrdinalIgnoreCase
+            );
 
         foreach (var team in teams)
         {
@@ -172,7 +221,10 @@ public sealed class TeamsService
                 ? matchingResults
                 : [];
             var riders = results
-                .Where(result => !string.IsNullOrWhiteSpace(result.String("rider_id")) && result.Object("riders") is not null)
+                .Where(result =>
+                    !string.IsNullOrWhiteSpace(result.String("rider_id"))
+                    && result.Object("riders") is not null
+                )
                 .GroupBy(result => result.String("rider_id")!, StringComparer.OrdinalIgnoreCase)
                 .Select(group => BuildTeamRider(group.Key, group.ToArray(), performanceByRiderId))
                 .OrderBy(rider => rider.String("last_name"), StringComparer.OrdinalIgnoreCase)
@@ -186,34 +238,39 @@ public sealed class TeamsService
 
             team["riders"] = new JsonArray(riders.Select(rider => (JsonNode)rider).ToArray());
             team["riders_count"] = riders.Length;
-            team["average_rating"] = ratings.Length == 0
-                ? null
-                : Math.Round(ratings.Average(), 2);
+            team["average_rating"] = ratings.Length == 0 ? null : Math.Round(ratings.Average(), 2);
         }
     }
 
     private static JsonObject BuildTeamRider(
         string riderId,
         IReadOnlyList<JsonObject> results,
-        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId)
+        IReadOnlyDictionary<string, RiderPerformanceMetricValues> performanceByRiderId
+    )
     {
-        var rider = results.Select(result => result.Object("riders")).First(rider => rider is not null)!;
+        var rider = results
+            .Select(result => result.Object("riders"))
+            .First(rider => rider is not null)!;
         var categories = results
             .Select(result => result.Object("sessions")?.Object("categories"))
             .Where(category => category is not null)
             .Select(category => category!)
             .GroupBy(
                 category => category.String("id") ?? category.String("code") ?? string.Empty,
-                StringComparer.OrdinalIgnoreCase)
+                StringComparer.OrdinalIgnoreCase
+            )
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
             .Select(group => group.First())
             .OrderBy(category => category.String("code"), StringComparer.OrdinalIgnoreCase)
-            .Select(category => (JsonNode)new JsonObject
-            {
-                ["id"] = category.String("id"),
-                ["code"] = category.String("code"),
-                ["name"] = category.String("name")
-            })
+            .Select(category =>
+                (JsonNode)
+                    new JsonObject
+                    {
+                        ["id"] = category.String("id"),
+                        ["code"] = category.String("code"),
+                        ["name"] = category.String("name"),
+                    }
+            )
             .ToArray();
         var rating = performanceByRiderId.TryGetValue(riderId, out var performance)
             ? performance.Rating
@@ -232,14 +289,15 @@ public sealed class TeamsService
             ["raw_pace"] = performance?.RawPace,
             ["consistency"] = performance?.Consistency,
             ["result_score"] = performance?.ResultScore,
-            ["categories"] = new JsonArray(categories)
+            ["categories"] = new JsonArray(categories),
         };
     }
 
     private async Task<IReadOnlyList<JsonObject>> FetchResultsAsync(
         string filterColumn,
         string[] ids,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (ids.Length == 0)
         {
@@ -260,13 +318,19 @@ public sealed class TeamsService
                         .Limit(PageSize)
                         .Offset(offset),
                     count: true,
-                    cancellationToken: cancellationToken);
-                DomainQueryService.NormalizeResultEmbeds(response.Data);
+                    cancellationToken: cancellationToken
+                );
+                ResultEmbedMapping.NormalizeResultEmbeds(response.Data);
                 rows.AddRange(response.Data);
 
-                if (response.Data.Count == 0 ||
-                    response.Data.Count < PageSize ||
-                    (response.Total.HasValue && offset + response.Data.Count >= response.Total.Value))
+                if (
+                    response.Data.Count == 0
+                    || response.Data.Count < PageSize
+                    || (
+                        response.Total.HasValue
+                        && offset + response.Data.Count >= response.Total.Value
+                    )
+                )
                 {
                     break;
                 }
@@ -280,7 +344,8 @@ public sealed class TeamsService
 
     private async Task<IReadOnlyList<JsonObject>> FetchCurrentAssignmentsAsync(
         IReadOnlyList<string> teamIds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var rows = new List<JsonObject>();
         foreach (var batch in teamIds.Chunk(FilterBatchSize))
@@ -296,7 +361,8 @@ public sealed class TeamsService
                         .Order("valid_from", descending: true)
                         .Limit(PageSize)
                         .Offset(offset),
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 rows.AddRange(response.Data);
                 if (response.Data.Count < PageSize)
                 {

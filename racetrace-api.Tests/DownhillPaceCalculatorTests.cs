@@ -14,36 +14,40 @@ public sealed class DownhillPaceCalculatorTests
             Run("rider-1", [40, 50], topSpeed: 60, finishRank: 1, finishTimeSeconds: 90),
             Run("rider-2", [41, 51], topSpeed: 59, finishRank: 2, finishTimeSeconds: 92),
             Run("rider-3", [43, 53], topSpeed: 57, finishRank: 4, finishTimeSeconds: 96),
-            Run("rider-4", [44, 54], topSpeed: 56, finishRank: 5, finishTimeSeconds: 98)
+            Run("rider-4", [44, 54], topSpeed: 56, finishRank: 5, finishTimeSeconds: 98),
         };
-        var raw = Find(calculator.CalculateSession(new PaceSessionData(
-            PaceSessionType.Final,
-            runs)), "target");
-        var precomputed = calculator.CalculatePrecomputedSession(new PacePrecomputedSessionData(
-            SessionId: "10",
-            CourseKey: "round:1:category:1",
-            CategoryId: "1",
-            SessionType: PaceSessionType.Final,
-            Run: runs[0],
-            ClassifiedFieldSize: 5,
-            Sectors:
-            [
-                new PacePrecomputedSector(0, 42, 3, Summary(40, 41, 42, 43, 44)),
-                new PacePrecomputedSector(1, 52, 3, Summary(50, 51, 52, 53, 54))
-            ],
-            SpeedStatistics: Summary(56, 57, 58, 59, 60),
-            SpeedRank: 3,
-            FinishStatistics: Summary(90, 92, 94, 96, 98),
-            CumulativeStatistics:
-            [
-                Summary(40, 41, 42, 43, 44),
-                Summary(90, 92, 94, 96, 98)
-            ]));
+        var raw = Find(
+            calculator.CalculateSession(new PaceSessionData(PaceSessionType.Final, runs)),
+            "target"
+        );
+        var precomputed = calculator.CalculatePrecomputedSession(
+            new PacePrecomputedSessionData(
+                SessionId: "10",
+                CourseKey: "round:1:category:1",
+                CategoryId: "1",
+                SessionType: PaceSessionType.Final,
+                Run: runs[0],
+                ClassifiedFieldSize: 5,
+                Sectors:
+                [
+                    new PacePrecomputedSector(0, 42, 3, Summary(40, 41, 42, 43, 44)),
+                    new PacePrecomputedSector(1, 52, 3, Summary(50, 51, 52, 53, 54)),
+                ],
+                SpeedStatistics: Summary(56, 57, 58, 59, 60),
+                SpeedRank: 3,
+                FinishStatistics: Summary(90, 92, 94, 96, 98),
+                CumulativeStatistics: [Summary(40, 41, 42, 43, 44), Summary(90, 92, 94, 96, 98)]
+            )
+        );
 
         Assert.Equal(raw.Pace!.Value, precomputed.Pace!.Value, precision: 10);
         Assert.Equal(raw.SectorPace!.Value, precomputed.SectorPace!.Value, precision: 10);
         Assert.Equal(raw.SpeedScore!.Value, precomputed.SpeedScore!.Value, precision: 10);
-        Assert.Equal(raw.FullRunTimeScore!.Value, precomputed.FullRunTimeScore!.Value, precision: 10);
+        Assert.Equal(
+            raw.FullRunTimeScore!.Value,
+            precomputed.FullRunTimeScore!.Value,
+            precision: 10
+        );
         Assert.Equal(raw.Confidence, precomputed.Confidence, precision: 10);
         Assert.Equal(raw.Sectors, precomputed.Sectors);
     }
@@ -64,8 +68,7 @@ public sealed class DownhillPaceCalculatorTests
     [InlineData(75)]
     public void SectorScoresAtOrBelowSeventyFiveAreNotRaised(double rawScore)
     {
-        var calibrated = new DownhillPaceCalculator()
-            .ApplyPositiveSectorCalibration(rawScore);
+        var calibrated = new DownhillPaceCalculator().ApplyPositiveSectorCalibration(rawScore);
 
         Assert.Equal(rawScore, calibrated, precision: 10);
     }
@@ -80,25 +83,36 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [40, 50], finishRank: 2),
                 Run("rider-3", [41, 51], finishRank: 3),
                 Run("rider-4", [42, 52], finishRank: 4),
-                Run("rider-5", [44, 54], finishRank: 5)
-            ]);
-        var withoutBonus = Find(new DownhillPaceCalculator(new PaceOptions
-        {
-            FinalWinBonus = 0
-        }).CalculateSession(session), "target");
-        var withConfiguredBonus = Find(new DownhillPaceCalculator(new PaceOptions
-        {
-            FinalWinBonus = 100
-        }).CalculateSession(session), "target");
-        var changedFinishRank = Find(new DownhillPaceCalculator().CalculateSession(new PaceSessionData(
-            PaceSessionType.Final,
-            [
-                Run("target", [43, 53], finishRank: 5),
-                Run("rider-2", [40, 50], finishRank: 1),
-                Run("rider-3", [41, 51], finishRank: 2),
-                Run("rider-4", [42, 52], finishRank: 3),
-                Run("rider-5", [44, 54], finishRank: 4)
-            ])), "target");
+                Run("rider-5", [44, 54], finishRank: 5),
+            ]
+        );
+        var withoutBonus = Find(
+            new DownhillPaceCalculator(new PaceOptions { FinalWinBonus = 0 }).CalculateSession(
+                session
+            ),
+            "target"
+        );
+        var withConfiguredBonus = Find(
+            new DownhillPaceCalculator(new PaceOptions { FinalWinBonus = 100 }).CalculateSession(
+                session
+            ),
+            "target"
+        );
+        var changedFinishRank = Find(
+            new DownhillPaceCalculator().CalculateSession(
+                new PaceSessionData(
+                    PaceSessionType.Final,
+                    [
+                        Run("target", [43, 53], finishRank: 5),
+                        Run("rider-2", [40, 50], finishRank: 1),
+                        Run("rider-3", [41, 51], finishRank: 2),
+                        Run("rider-4", [42, 52], finishRank: 3),
+                        Run("rider-5", [44, 54], finishRank: 4),
+                    ]
+                )
+            ),
+            "target"
+        );
 
         Assert.Equal(withoutBonus.Pace, withConfiguredBonus.Pace);
         Assert.Equal(withoutBonus.Pace, changedFinishRank.Pace);
@@ -115,8 +129,9 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [40, 50], finishRank: 2, finishTimeSeconds: 243.7),
                 Run("rider-3", [41, 51], finishRank: 3, finishTimeSeconds: 245.0),
                 Run("rider-4", [43, 53], finishRank: 4, finishTimeSeconds: 246.0),
-                Run("rider-5", [44, 54], finishRank: 1, finishTimeSeconds: 247.0)
-            ]);
+                Run("rider-5", [44, 54], finishRank: 1, finishTimeSeconds: 247.0),
+            ]
+        );
 
         var result = Find(calculator.CalculateSession(session), "target");
 
@@ -125,9 +140,11 @@ public sealed class DownhillPaceCalculatorTests
             DownhillPaceCalculator.CombineSectorAndFullRunPace(
                 PaceSessionType.Final,
                 result.EvidenceAdjustedSectorPace!.Value,
-                result.FullRunTimeScore) + result.DominanceBonus,
+                result.FullRunTimeScore
+            ) + result.DominanceBonus,
             result.Pace!.Value,
-            precision: 10);
+            precision: 10
+        );
         Assert.InRange(result.DominanceBonus, 0.01, 3.0);
     }
 
@@ -155,13 +172,12 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [40, 50], finishRank: 2, finishTimeSeconds: 246.5),
                 Run("rider-3", [41, 51], finishRank: 3, finishTimeSeconds: 247.0),
                 Run("rider-4", [43, 53], finishRank: 4, finishTimeSeconds: 248.0),
-                Run("rider-5", [44, 54], finishRank: 5, finishTimeSeconds: 249.0)
-            ]);
+                Run("rider-5", [44, 54], finishRank: 5, finishTimeSeconds: 249.0),
+            ]
+        );
         var changedRanks = first with
         {
-            Runs = first.Runs
-                .Select((run, index) => run with { FinishRank = 5 - index })
-                .ToArray()
+            Runs = first.Runs.Select((run, index) => run with { FinishRank = 5 - index }).ToArray(),
         };
 
         var original = Find(calculator.CalculateSession(first), "target");
@@ -194,8 +210,9 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [41, 51, 61, 71], finishRank: 1),
                 Run("rider-3", [42, 52, 62, 72], finishRank: 2),
                 Run("rider-4", [43, 53, 63, 73], finishRank: 3),
-                Run("rider-5", [44, 54, 64, 74], finishRank: 4)
-            ]);
+                Run("rider-5", [44, 54, 64, 74], finishRank: 4),
+            ]
+        );
         var result = Find(new DownhillPaceCalculator().CalculateSession(session), "target");
 
         Assert.Equal(2, result.IncidentSectorIndex);
@@ -216,12 +233,12 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [41, 51, 61, 71], finishRank: 1),
                 Run("rider-3", [42, 52, 62, 72], finishRank: 2),
                 Run("rider-4", [43, 53, 63, 73], finishRank: 3),
-                Run("rider-5", [44, 54, 64, 74], finishRank: 4)
-            ]);
-        var calculator = new DownhillPaceCalculator(new PaceOptions
-        {
-            CountPositiveSectorsAfterIncident = false
-        });
+                Run("rider-5", [44, 54, 64, 74], finishRank: 4),
+            ]
+        );
+        var calculator = new DownhillPaceCalculator(
+            new PaceOptions { CountPositiveSectorsAfterIncident = false }
+        );
 
         var result = Find(calculator.CalculateSession(session), "target");
 
@@ -241,8 +258,9 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [41, 51, 61, 71, 81], finishRank: 1),
                 Run("rider-3", [42, 52, 62, 72, 82], finishRank: 2),
                 Run("rider-4", [43, 53, 63, 73, 83], finishRank: 3),
-                Run("rider-5", [44, 54, 64, 74, 84], finishRank: 4)
-            ]);
+                Run("rider-5", [44, 54, 64, 74, 84], finishRank: 4),
+            ]
+        );
         var result = Find(new DownhillPaceCalculator().CalculateSession(session), "target");
 
         Assert.Equal(2, result.IncidentSectorIndex);
@@ -263,15 +281,18 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [41, 51, 61, 71, 81], finishRank: 1, finishTimeSeconds: 205),
                 Run("rider-3", [42, 52, 63, 73, 83], finishRank: 2, finishTimeSeconds: 210),
                 Run("rider-4", [43, 53, 64, 74, 84], finishRank: 3, finishTimeSeconds: 215),
-                Run("rider-5", [44, 54, 65, 75, 85], finishRank: 4, finishTimeSeconds: 220)
-            ]);
+                Run("rider-5", [44, 54, 65, 75, 85], finishRank: 4, finishTimeSeconds: 220),
+            ]
+        );
 
         var result = Find(new DownhillPaceCalculator().CalculateSession(session), "target");
 
         Assert.Equal(1, result.IncidentSectorIndex);
         Assert.Equal(PaceSectorStatus.Incident, result.Sectors[1].Status);
-        Assert.All(result.Sectors.Skip(2), sector =>
-            Assert.Equal(PaceSectorStatus.RecoveredAfterIncident, sector.Status));
+        Assert.All(
+            result.Sectors.Skip(2),
+            sector => Assert.Equal(PaceSectorStatus.RecoveredAfterIncident, sector.Status)
+        );
         Assert.NotNull(result.Pace);
         Assert.Null(result.FullRunTimeScore);
         Assert.Equal(0.80, result.SectorCoverage, precision: 10);
@@ -288,17 +309,21 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [41, 51, 61, 71], finishTimeSeconds: 224),
                 Run("rider-3", [42, 52, 62, 72], finishTimeSeconds: 228),
                 Run("rider-4", [43, 53, 63, 73], finishTimeSeconds: 232),
-                Run("rider-5", [44, 54, 64, 74], finishTimeSeconds: 236)
-            ]);
+                Run("rider-5", [44, 54, 64, 74], finishTimeSeconds: 236),
+            ]
+        );
 
         var result = Find(calculator.CalculateSession(session), "target");
         // Median relative pace from clean sectors is 50/52; field S4 median is 73.
         var correctedFinish = 150 + 73 * (50.0 / 52);
         var correctedScore = calculator.CalculateFullRunTimeScore(
-            correctedFinish, [correctedFinish, 224, 228, 232, 236]);
+            correctedFinish,
+            [correctedFinish, 224, 228, 232, 236]
+        );
         var damagedFinishScore = calculator.CalculateFullRunTimeScore(
             320,
-            [320, 224, 228, 232, 236]);
+            [320, 224, 228, 232, 236]
+        );
 
         Assert.Equal(3, result.IncidentSectorIndex);
         Assert.Equal(PaceSectorStatus.Incident, result.Sectors[3].Status);
@@ -314,17 +339,23 @@ public sealed class DownhillPaceCalculatorTests
         {
             Find(calculator.CalculateSession(EliteField(PaceSessionType.Final, -0.30)), "target"),
             Find(calculator.CalculateSession(EliteField(PaceSessionType.Final, -0.10)), "target"),
-            Find(calculator.CalculateSession(EliteField(PaceSessionType.Qualifying, -0.10)), "target"),
-            Find(calculator.CalculateSession(EliteField(
-                PaceSessionType.Qualifying,
-                targetOffset: 0.7,
-                targetFinishRank: 5)), "target")
+            Find(
+                calculator.CalculateSession(EliteField(PaceSessionType.Qualifying, -0.10)),
+                "target"
+            ),
+            Find(
+                calculator.CalculateSession(
+                    EliteField(PaceSessionType.Qualifying, targetOffset: 0.7, targetFinishRank: 5)
+                ),
+                "target"
+            ),
         };
         var result = calculator.CalculatePace("target", sessions);
 
         Assert.True(
             result.Pace is >= 97 and <= 100,
-            $"Combined Pace: {result.Pace}; session Pace: {string.Join(", ", sessions.Select(session => session.Pace))}");
+            $"Combined Pace: {result.Pace}; session Pace: {string.Join(", ", sessions.Select(session => session.Pace))}"
+        );
     }
 
     [Fact]
@@ -397,21 +428,16 @@ public sealed class DownhillPaceCalculatorTests
     public void SectorWeightsAboveNinetyFivePercentAreRejected()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new DownhillPaceCalculator(new PaceOptions
-            {
-                RankWeight = 0.50,
-                TimeWeight = 0.50
-            }));
+            new DownhillPaceCalculator(new PaceOptions { RankWeight = 0.50, TimeWeight = 0.50 })
+        );
     }
 
     [Fact]
     public void SectorWinBonusAboveFivePointsIsRejected()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new DownhillPaceCalculator(new PaceOptions
-            {
-                MaximumWinBonus = 5.01
-            }));
+            new DownhillPaceCalculator(new PaceOptions { MaximumWinBonus = 5.01 })
+        );
     }
 
     [Fact]
@@ -420,7 +446,8 @@ public sealed class DownhillPaceCalculatorTests
         Assert.Equal(
             100.0 / (1.0 + Math.Exp(-0.05)),
             new DownhillPaceCalculator().CalculateSectorTimeScore(performanceZ: 0),
-            precision: 10);
+            precision: 10
+        );
     }
 
     [Fact]
@@ -428,8 +455,10 @@ public sealed class DownhillPaceCalculatorTests
     {
         var calculator = new DownhillPaceCalculator();
         var baseline = calculator.CalculateRawSectorScore(rankScore: 50, timeScore: 50);
-        var rankImprovement = calculator.CalculateRawSectorScore(rankScore: 60, timeScore: 50) - baseline;
-        var timeImprovement = calculator.CalculateRawSectorScore(rankScore: 50, timeScore: 60) - baseline;
+        var rankImprovement =
+            calculator.CalculateRawSectorScore(rankScore: 60, timeScore: 50) - baseline;
+        var timeImprovement =
+            calculator.CalculateRawSectorScore(rankScore: 50, timeScore: 60) - baseline;
 
         Assert.Equal(2.0, rankImprovement, precision: 10);
         Assert.Equal(7.5, timeImprovement, precision: 10);
@@ -445,7 +474,7 @@ public sealed class DownhillPaceCalculatorTests
             new WeightedScore(100, 1),
             new WeightedScore(80, 1),
             new WeightedScore(60, 1),
-            new WeightedScore(40, 1)
+            new WeightedScore(40, 1),
         };
 
         var sectorPace = calculator.CalculateSectorPace(scores);
@@ -474,7 +503,8 @@ public sealed class DownhillPaceCalculatorTests
     public void FinalPaceCalibrationIsStrictlyMonotonic()
     {
         var calculator = new DownhillPaceCalculator();
-        var values = Enumerable.Range(0, 101)
+        var values = Enumerable
+            .Range(0, 101)
             .Select(value => calculator.ApplyFinalPaceCalibration(value))
             .ToArray();
 
@@ -493,12 +523,9 @@ public sealed class DownhillPaceCalculatorTests
     [InlineData(95.0, 96.5)]
     [InlineData(97.5, 98.25)]
     [InlineData(100.0, 100.0)]
-    public void UpperPaceCalibrationAppliesSmoothOnePointFiveBoost(
-        double pace,
-        double expected)
+    public void UpperPaceCalibrationAppliesSmoothOnePointFiveBoost(double pace, double expected)
     {
-        var calibrated = new DownhillPaceCalculator()
-            .ApplyUpperPaceCalibration(pace);
+        var calibrated = new DownhillPaceCalculator().ApplyUpperPaceCalibration(pace);
 
         Assert.Equal(expected, calibrated, precision: 10);
     }
@@ -507,7 +534,8 @@ public sealed class DownhillPaceCalculatorTests
     public void UpperPaceCalibrationIsStrictlyMonotonicBelowOneHundred()
     {
         var calculator = new DownhillPaceCalculator();
-        var values = Enumerable.Range(0, 1000)
+        var values = Enumerable
+            .Range(0, 1000)
             .Select(index => calculator.ApplyUpperPaceCalibration(index / 10.0))
             .ToArray();
 
@@ -526,9 +554,7 @@ public sealed class DownhillPaceCalculatorTests
     [InlineData(nameof(PaceSessionType.Seeding), 0.6)]
     [InlineData(nameof(PaceSessionType.TimedTraining), 0.00)]
     [InlineData(nameof(PaceSessionType.Training), 0.00)]
-    public void SessionTypeHasExactConfiguredWeight(
-        string sessionTypeName,
-        double expectedWeight)
+    public void SessionTypeHasExactConfiguredWeight(string sessionTypeName, double expectedWeight)
     {
         var sessionType = Enum.Parse<PaceSessionType>(sessionTypeName);
 
@@ -542,18 +568,19 @@ public sealed class DownhillPaceCalculatorTests
     {
         var parser = typeof(PaceService).GetMethod(
             "ParseSessionType",
-            System.Reflection.BindingFlags.NonPublic |
-            System.Reflection.BindingFlags.Static);
-        var sessionType = Assert.IsType<PaceSessionType>(
-            parser!.Invoke(null, [sourceType, null]));
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+        );
+        var sessionType = Assert.IsType<PaceSessionType>(parser!.Invoke(null, [sourceType, null]));
 
         Assert.Equal(
             sourceType == "Q1" ? PaceSessionType.Qualifying1 : PaceSessionType.Qualifying2,
-            sessionType);
+            sessionType
+        );
         Assert.Equal(
             SessionWeightFor(PaceSessionType.Qualifying),
             SessionWeightFor(sessionType),
-            precision: 10);
+            precision: 10
+        );
     }
 
     [Fact]
@@ -583,16 +610,29 @@ public sealed class DownhillPaceCalculatorTests
     public void QualifyingSessionsAreAggregatedIntoOneStageBeforeFinalWeighting()
     {
         var calculator = new DownhillPaceCalculator();
-        var q1 = SessionResult(92, 1, SessionWeightFor(PaceSessionType.Qualifying1), sessionType: PaceSessionType.Qualifying1);
-        var q2 = SessionResult(82, 1, SessionWeightFor(PaceSessionType.Qualifying2), sessionType: PaceSessionType.Qualifying2);
-        var final = SessionResult(88, 1, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final);
+        var q1 = SessionResult(
+            92,
+            1,
+            SessionWeightFor(PaceSessionType.Qualifying1),
+            sessionType: PaceSessionType.Qualifying1
+        );
+        var q2 = SessionResult(
+            82,
+            1,
+            SessionWeightFor(PaceSessionType.Qualifying2),
+            sessionType: PaceSessionType.Qualifying2
+        );
+        var final = SessionResult(
+            88,
+            1,
+            SessionWeightFor(PaceSessionType.Final),
+            sessionType: PaceSessionType.Final
+        );
         var qualifyingStage = calculator.CalculateStagePace([q1, q2])!;
 
         var result = calculator.CalculatePace("target", [q1, q2, final]);
         var finalStage = calculator.CalculateStagePace([final])!;
-        var expected = calculator.CalculatePaceWithTargetFinalImpact(
-            finalStage,
-            [qualifyingStage]);
+        var expected = calculator.CalculatePaceWithTargetFinalImpact(finalStage, [qualifyingStage]);
 
         Assert.Equal(2, qualifyingStage.UsedSessions);
         Assert.Equal(expected, result.RawPace!.Value, precision: 10);
@@ -607,8 +647,14 @@ public sealed class DownhillPaceCalculatorTests
             96,
             1,
             SessionWeightFor(PaceSessionType.Qualifying),
-            sessionType: PaceSessionType.Qualifying);
-        var final = SessionResult(80, 1, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final);
+            sessionType: PaceSessionType.Qualifying
+        );
+        var final = SessionResult(
+            80,
+            1,
+            SessionWeightFor(PaceSessionType.Final),
+            sessionType: PaceSessionType.Final
+        );
 
         var oneQualifying = calculator.CalculatePace("target", [qualifying, final]);
         var twoQualifying = calculator.CalculatePace("target", [qualifying, qualifying, final]);
@@ -624,23 +670,26 @@ public sealed class DownhillPaceCalculatorTests
             Stage(100, weights.Final),
             Stage(50, weights.SemiFinal),
             Stage(25, weights.Qualifying),
-            Stage(0, weights.Seeding));
+            Stage(0, weights.Seeding)
+        );
         var onlyFinal = DownhillPaceCalculator.CalculateCombinedStagePace(Stage(90, weights.Final));
         var finalAndQualifying = DownhillPaceCalculator.CalculateCombinedStagePace(
             Stage(90, weights.Final),
-            Stage(60, weights.Qualifying));
+            Stage(60, weights.Qualifying)
+        );
 
         Assert.Equal(
-            (weights.Final * 100 + weights.SemiFinal * 50 + weights.Qualifying * 25) /
-            (weights.Final + weights.SemiFinal + weights.Qualifying + weights.Seeding),
+            (weights.Final * 100 + weights.SemiFinal * 50 + weights.Qualifying * 25)
+                / (weights.Final + weights.SemiFinal + weights.Qualifying + weights.Seeding),
             allStages,
-            precision: 10);
+            precision: 10
+        );
         Assert.Equal(90, onlyFinal, precision: 10);
         Assert.Equal(
-            (weights.Final * 90 + weights.Qualifying * 60) /
-            (weights.Final + weights.Qualifying),
+            (weights.Final * 90 + weights.Qualifying * 60) / (weights.Final + weights.Qualifying),
             finalAndQualifying,
-            precision: 10);
+            precision: 10
+        );
     }
 
     [Fact]
@@ -649,21 +698,24 @@ public sealed class DownhillPaceCalculatorTests
         var weights = new SessionWeightOptions();
         var semiFinalAndQualifying = DownhillPaceCalculator.CalculateCombinedStagePace(
             Stage(100, weights.SemiFinal),
-            Stage(50, weights.Qualifying));
+            Stage(50, weights.Qualifying)
+        );
         var semiFinalAndSeeding = DownhillPaceCalculator.CalculateCombinedStagePace(
             Stage(90, weights.SemiFinal),
-            Stage(50, weights.Seeding));
+            Stage(50, weights.Seeding)
+        );
 
         Assert.Equal(
-            (weights.SemiFinal * 100 + weights.Qualifying * 50) /
-            (weights.SemiFinal + weights.Qualifying),
+            (weights.SemiFinal * 100 + weights.Qualifying * 50)
+                / (weights.SemiFinal + weights.Qualifying),
             semiFinalAndQualifying,
-            precision: 10);
+            precision: 10
+        );
         Assert.Equal(
-            (weights.SemiFinal * 90 + weights.Seeding * 50) /
-            (weights.SemiFinal + weights.Seeding),
+            (weights.SemiFinal * 90 + weights.Seeding * 50) / (weights.SemiFinal + weights.Seeding),
             semiFinalAndSeeding,
-            precision: 10);
+            precision: 10
+        );
     }
 
     [Fact]
@@ -676,17 +728,13 @@ public sealed class DownhillPaceCalculatorTests
             [PaceSessionType.Seeding, PaceSessionType.Final],
             [PaceSessionType.Qualifying, PaceSessionType.SemiFinal, PaceSessionType.Final],
             [PaceSessionType.Qualifying, PaceSessionType.Final],
-            [PaceSessionType.Final]
+            [PaceSessionType.Final],
         };
 
         foreach (var format in formats)
         {
             var sessions = format
-                .Select(type => SessionResult(
-                    85,
-                    1,
-                    SessionWeightFor(type),
-                    sessionType: type))
+                .Select(type => SessionResult(85, 1, SessionWeightFor(type), sessionType: type))
                 .ToArray();
 
             var result = calculator.CalculatePace("target", sessions);
@@ -704,17 +752,19 @@ public sealed class DownhillPaceCalculatorTests
         {
             Run("target", [40, 50], finishRank: 1),
             Run("rider-2", [42, 52], finishRank: 2),
-            Run("rider-3", [44, 54], finishRank: 3)
+            Run("rider-3", [44, 54], finishRank: 3),
         };
-        var withDisqualified = validRuns.Append(
-            Run("dsq", [1, 1], finishRank: 1, status: "DSQ")).ToArray();
+        var withDisqualified = validRuns
+            .Append(Run("dsq", [1, 1], finishRank: 1, status: "DSQ"))
+            .ToArray();
 
-        var baseline = Find(calculator.CalculateSession(new PaceSessionData(
-            PaceSessionType.Final,
-            validRuns)), "target");
-        var filtered = calculator.CalculateSession(new PaceSessionData(
-            PaceSessionType.Final,
-            withDisqualified));
+        var baseline = Find(
+            calculator.CalculateSession(new PaceSessionData(PaceSessionType.Final, validRuns)),
+            "target"
+        );
+        var filtered = calculator.CalculateSession(
+            new PaceSessionData(PaceSessionType.Final, withDisqualified)
+        );
 
         Assert.DoesNotContain(filtered, result => result.RiderId == "dsq");
         Assert.Equal(baseline.Pace, Find(filtered, "target").Pace);
@@ -724,10 +774,7 @@ public sealed class DownhillPaceCalculatorTests
     [Fact]
     public void NonFinalistCapIsConfigurableAndDoesNotAffectQualifiedRider()
     {
-        var calculator = new DownhillPaceCalculator(new PaceOptions
-        {
-            NonFinalistMaxScore = 80
-        });
+        var calculator = new DownhillPaceCalculator(new PaceOptions { NonFinalistMaxScore = 80 });
 
         Assert.Equal(80, calculator.ApplyNonFinalistScoreCap(95, isNonFinalist: true));
         Assert.Equal(95, calculator.ApplyNonFinalistScoreCap(95, isNonFinalist: false));
@@ -742,13 +789,16 @@ public sealed class DownhillPaceCalculatorTests
 
         var q1Q2Final = calculator.CalculatePaceWithTargetFinalImpact(
             final,
-            [Stage(0, weights.Qualifying1 + weights.Qualifying2)]);
+            [Stage(0, weights.Qualifying1 + weights.Qualifying2)]
+        );
         var qualifyingFinal = calculator.CalculatePaceWithTargetFinalImpact(
             final,
-            [Stage(0, weights.Qualifying)]);
+            [Stage(0, weights.Qualifying)]
+        );
         var qualifyingSemiFinal = calculator.CalculatePaceWithTargetFinalImpact(
             final,
-            [Stage(0, weights.Qualifying), Stage(0, weights.SemiFinal)]);
+            [Stage(0, weights.Qualifying), Stage(0, weights.SemiFinal)]
+        );
 
         Assert.Equal(85, q1Q2Final, precision: 10);
         Assert.Equal(85, qualifyingFinal, precision: 10);
@@ -756,13 +806,16 @@ public sealed class DownhillPaceCalculatorTests
 
         var q1Q2Weights = weights.ApplyFinalTargetImpact(
             [PaceSessionType.Qualifying1, PaceSessionType.Qualifying2, PaceSessionType.Final],
-            [weights.Qualifying1, weights.Qualifying2, weights.Final]);
+            [weights.Qualifying1, weights.Qualifying2, weights.Final]
+        );
         var qualifyingFinalWeights = weights.ApplyFinalTargetImpact(
             [PaceSessionType.Qualifying, PaceSessionType.Final],
-            [weights.Qualifying, weights.Final]);
+            [weights.Qualifying, weights.Final]
+        );
         var qualifyingSemiFinalWeights = weights.ApplyFinalTargetImpact(
             [PaceSessionType.Qualifying, PaceSessionType.SemiFinal, PaceSessionType.Final],
-            [weights.Qualifying, weights.SemiFinal, weights.Final]);
+            [weights.Qualifying, weights.SemiFinal, weights.Final]
+        );
 
         Assert.Equal(0.075, q1Q2Weights[0], precision: 10);
         Assert.Equal(0.075, q1Q2Weights[1], precision: 10);
@@ -782,7 +835,8 @@ public sealed class DownhillPaceCalculatorTests
     public void HighestStageEvidenceLimitsOnlyScoreAboveFifty(
         string stageName,
         double pace,
-        double expected)
+        double expected
+    )
     {
         var calculator = new DownhillPaceCalculator();
         var stage = Enum.Parse<PaceSessionType>(stageName);
@@ -810,13 +864,32 @@ public sealed class DownhillPaceCalculatorTests
         var calculator = new DownhillPaceCalculator();
         var qualifyingOnly = calculator.CalculatePace(
             "target",
-            [SessionResult(91, 1, SessionWeightFor(PaceSessionType.Qualifying), sessionType: PaceSessionType.Qualifying)]);
+            [
+                SessionResult(
+                    91,
+                    1,
+                    SessionWeightFor(PaceSessionType.Qualifying),
+                    sessionType: PaceSessionType.Qualifying
+                ),
+            ]
+        );
         var dominantFinal = calculator.CalculatePace(
             "target",
             [
-                SessionResult(80, 1, SessionWeightFor(PaceSessionType.Qualifying), sessionType: PaceSessionType.Qualifying),
-                SessionResult(94, 1, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final)
-            ]);
+                SessionResult(
+                    80,
+                    1,
+                    SessionWeightFor(PaceSessionType.Qualifying),
+                    sessionType: PaceSessionType.Qualifying
+                ),
+                SessionResult(
+                    94,
+                    1,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                ),
+            ]
+        );
 
         Assert.Equal(86.9, qualifyingOnly.RawPace!.Value, precision: 10);
         Assert.Equal(82.0, qualifyingOnly.Pace!.Value, precision: 10);
@@ -829,7 +902,15 @@ public sealed class DownhillPaceCalculatorTests
     {
         var result = new DownhillPaceCalculator().CalculatePace(
             "target",
-            [SessionResult(100, 1, SessionWeightFor(PaceSessionType.Qualifying), sessionType: PaceSessionType.Qualifying)]);
+            [
+                SessionResult(
+                    100,
+                    1,
+                    SessionWeightFor(PaceSessionType.Qualifying),
+                    sessionType: PaceSessionType.Qualifying
+                ),
+            ]
+        );
 
         Assert.Equal(95, result.RawPace!.Value, precision: 10);
         Assert.Equal(82, result.Pace!.Value, precision: 10);
@@ -841,12 +922,14 @@ public sealed class DownhillPaceCalculatorTests
     [InlineData(nameof(PaceSessionType.Seeding), 68.0)]
     public void FourSectorsWithoutFinalReceiveStrongSparseEvidenceCap(
         string stageName,
-        double expectedCap)
+        double expectedCap
+    )
     {
         var stage = Enum.Parse<PaceSessionType>(stageName);
         var result = new DownhillPaceCalculator().CalculatePace(
             "target",
-            [SessionResult(100, 1, 1, sessionType: stage, usedSectorCount: 4)]);
+            [SessionResult(100, 1, 1, sessionType: stage, usedSectorCount: 4)]
+        );
 
         Assert.Equal(expectedCap, result.Pace!.Value, precision: 10);
     }
@@ -856,12 +939,16 @@ public sealed class DownhillPaceCalculatorTests
     {
         var result = new DownhillPaceCalculator().CalculatePace(
             "target",
-            [SessionResult(
-                100,
-                1,
-                SessionWeightFor(PaceSessionType.Qualifying),
-                sessionType: PaceSessionType.Qualifying,
-                usedSectorCount: 5)]);
+            [
+                SessionResult(
+                    100,
+                    1,
+                    SessionWeightFor(PaceSessionType.Qualifying),
+                    sessionType: PaceSessionType.Qualifying,
+                    usedSectorCount: 5
+                ),
+            ]
+        );
 
         Assert.Equal(82, result.Pace!.Value, precision: 10);
     }
@@ -872,18 +959,22 @@ public sealed class DownhillPaceCalculatorTests
         var calculator = new DownhillPaceCalculator();
         var result = calculator.CalculatePace(
             "target",
-            [SessionResult(
-                95,
-                1,
-                SessionWeightFor(PaceSessionType.Final),
-                sessionType: PaceSessionType.Final,
-                usedSectorCount: 3)]);
+            [
+                SessionResult(
+                    95,
+                    1,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final,
+                    usedSectorCount: 3
+                ),
+            ]
+        );
 
         Assert.Equal(
-            calculator.ApplyUpperPaceCalibration(
-                calculator.ApplyFinalPaceCalibration(95)),
+            calculator.ApplyUpperPaceCalibration(calculator.ApplyFinalPaceCalibration(95)),
             result.Pace!.Value,
-            precision: 10);
+            precision: 10
+        );
         Assert.True(result.Pace > 90);
     }
 
@@ -894,12 +985,22 @@ public sealed class DownhillPaceCalculatorTests
         var result = calculator.CalculatePace(
             "target",
             [
-                SessionResult(100, 1, SessionWeightFor(PaceSessionType.Qualifying), sessionType: PaceSessionType.Qualifying),
-                SessionResult(70, 1, SessionWeightFor(PaceSessionType.SemiFinal), sessionType: PaceSessionType.SemiFinal)
-            ]);
+                SessionResult(
+                    100,
+                    1,
+                    SessionWeightFor(PaceSessionType.Qualifying),
+                    sessionType: PaceSessionType.Qualifying
+                ),
+                SessionResult(
+                    70,
+                    1,
+                    SessionWeightFor(PaceSessionType.SemiFinal),
+                    sessionType: PaceSessionType.SemiFinal
+                ),
+            ]
+        );
         var maximumRawBeforeEvidence = 70 + 3;
-        var expectedEvidenceAdjustedMaximum =
-            50 + (maximumRawBeforeEvidence - 50) * 0.96;
+        var expectedEvidenceAdjustedMaximum = 50 + (maximumRawBeforeEvidence - 50) * 0.96;
 
         Assert.Equal(expectedEvidenceAdjustedMaximum, result.RawPace!.Value, precision: 10);
         Assert.True(result.Pace < 86);
@@ -909,10 +1010,7 @@ public sealed class DownhillPaceCalculatorTests
     public void NewCalibrationIsGloballyMorePositiveAboveThreshold()
     {
         var current = new DownhillPaceCalculator();
-        var previous = new DownhillPaceCalculator(new PaceOptions
-        {
-            PaceCalibrationPower = 0.65
-        });
+        var previous = new DownhillPaceCalculator(new PaceOptions { PaceCalibrationPower = 0.65 });
 
         Assert.True(current.ApplyFinalPaceCalibration(80) > previous.ApplyFinalPaceCalibration(80));
         Assert.Equal(50, current.ApplyFinalPaceCalibration(50), precision: 10);
@@ -926,22 +1024,26 @@ public sealed class DownhillPaceCalculatorTests
             pace: 80,
             confidence: 0.8,
             sessionWeight: SessionWeightFor(PaceSessionType.Final),
-            sessionType: PaceSessionType.Final);
+            sessionType: PaceSessionType.Final
+        );
         var timedTraining = SessionResult(
             pace: 100,
             confidence: 1.0,
             sessionWeight: 0.0,
-            sessionType: PaceSessionType.TimedTraining);
+            sessionType: PaceSessionType.TimedTraining
+        );
         var training = SessionResult(
             pace: 100,
             confidence: 1.0,
             sessionWeight: 0.0,
-            sessionType: PaceSessionType.Training);
+            sessionType: PaceSessionType.Training
+        );
 
         var finalOnly = calculator.CalculatePace("target", [final]);
         var withZeroWeightSessions = calculator.CalculatePace(
             "target",
-            [final, timedTraining, training]);
+            [final, timedTraining, training]
+        );
 
         Assert.Equal(finalOnly.Pace, withZeroWeightSessions.Pace);
         Assert.Equal(finalOnly.RawPace, withZeroWeightSessions.RawPace);
@@ -960,14 +1062,16 @@ public sealed class DownhillPaceCalculatorTests
             "target",
             [
                 SessionResult(96, 1, finalWeight, sessionType: PaceSessionType.Final),
-                SessionResult(88, 1, qualifyingWeight, sessionType: PaceSessionType.Qualifying)
-            ]);
+                SessionResult(88, 1, qualifyingWeight, sessionType: PaceSessionType.Qualifying),
+            ]
+        );
         var strongQualifying = calculator.CalculatePace(
             "target",
             [
                 SessionResult(88, 1, finalWeight, sessionType: PaceSessionType.Final),
-                SessionResult(96, 1, qualifyingWeight, sessionType: PaceSessionType.Qualifying)
-            ]);
+                SessionResult(96, 1, qualifyingWeight, sessionType: PaceSessionType.Qualifying),
+            ]
+        );
 
         Assert.True(strongFinal.RawPace > strongQualifying.RawPace);
         Assert.Equal(2, strongFinal.UsedSessions);
@@ -981,14 +1085,20 @@ public sealed class DownhillPaceCalculatorTests
         var source = SingleSectorField();
         var final = Find(
             calculator.CalculateSession(source with { SessionType = PaceSessionType.Final }),
-            "rider-0");
+            "rider-0"
+        );
         var qualifying = Find(
             calculator.CalculateSession(source with { SessionType = PaceSessionType.Qualifying }),
-            "rider-0");
+            "rider-0"
+        );
 
         Assert.Equal(qualifying.Pace, final.Pace);
         Assert.Equal(4.0, final.SessionWeight, precision: 10);
-        Assert.Equal(new SessionWeightOptions().Qualifying, qualifying.SessionWeight, precision: 10);
+        Assert.Equal(
+            new SessionWeightOptions().Qualifying,
+            qualifying.SessionWeight,
+            precision: 10
+        );
     }
 
     [Fact]
@@ -998,7 +1108,8 @@ public sealed class DownhillPaceCalculatorTests
             pace: 100,
             confidence: 1.0,
             sessionWeight: 0.0,
-            sessionType: PaceSessionType.Training);
+            sessionType: PaceSessionType.Training
+        );
 
         var result = new DownhillPaceCalculator().CalculatePace("target", [training]);
 
@@ -1015,14 +1126,15 @@ public sealed class DownhillPaceCalculatorTests
 
         var result = calculator.CalculatePace(
             "target",
-            [SessionResult(88, 1, 1, sessionType: PaceSessionType.Final)]);
+            [SessionResult(88, 1, 1, sessionType: PaceSessionType.Final)]
+        );
 
         Assert.Equal(88, result.RawPace!.Value, precision: 10);
         Assert.Equal(
-            calculator.ApplyUpperPaceCalibration(
-                calculator.ApplyFinalPaceCalibration(88)),
+            calculator.ApplyUpperPaceCalibration(calculator.ApplyFinalPaceCalibration(88)),
             result.Pace!.Value,
-            precision: 10);
+            precision: 10
+        );
         Assert.True(result.Pace > result.RawPace);
     }
 
@@ -1032,11 +1144,13 @@ public sealed class DownhillPaceCalculatorTests
         var positiveBoost = DownhillPaceCalculator.CalculatePositiveBoost(
             score: 98,
             sectorPace: 88,
-            gain: 0.02);
+            gain: 0.02
+        );
         var negativeDifference = DownhillPaceCalculator.CalculatePositiveBoost(
             score: 78,
             sectorPace: 88,
-            gain: 0.02);
+            gain: 0.02
+        );
 
         Assert.Equal(0.2, positiveBoost, precision: 10);
         Assert.Equal(0, negativeDifference);
@@ -1047,8 +1161,7 @@ public sealed class DownhillPaceCalculatorTests
     {
         var percentile = (100.0 - 30.0) / 99.0;
 
-        var rankScore = new DownhillPaceCalculator()
-            .CalculateSectorRankScore(percentile);
+        var rankScore = new DownhillPaceCalculator().CalculateSectorRankScore(percentile);
 
         Assert.True(rankScore < 60);
     }
@@ -1058,7 +1171,8 @@ public sealed class DownhillPaceCalculatorTests
     {
         var result = Find(
             new DownhillPaceCalculator().CalculateSession(SingleSectorField()),
-            "rider-0");
+            "rider-0"
+        );
 
         Assert.Null(result.Pace);
         Assert.False(result.IsRepresentative);
@@ -1070,17 +1184,14 @@ public sealed class DownhillPaceCalculatorTests
     {
         var result = Find(
             new DownhillPaceCalculator().CalculateSession(PartialFiveSectorField()),
-            "target");
+            "target"
+        );
         var expectedFactor = Math.Sqrt(0.4) * 0.5;
-        var expectedAdjustedPace = 50.0 +
-            (result.SectorPace!.Value - 50.0) * expectedFactor;
+        var expectedAdjustedPace = 50.0 + (result.SectorPace!.Value - 50.0) * expectedFactor;
 
         Assert.Equal(0.4, result.SectorCoverage, precision: 10);
         Assert.True(result.SectorPace > 50);
-        Assert.Equal(
-            expectedAdjustedPace,
-            result.EvidenceAdjustedSectorPace!.Value,
-            precision: 10);
+        Assert.Equal(expectedAdjustedPace, result.EvidenceAdjustedSectorPace!.Value, precision: 10);
         Assert.True(result.EvidenceAdjustedSectorPace < result.SectorPace);
     }
 
@@ -1088,16 +1199,18 @@ public sealed class DownhillPaceCalculatorTests
     public void FewerThanFourSectorsUseAllSectorMeanOnly()
     {
         var session = ThreeSectorField();
-        var fastOnly = Find(new DownhillPaceCalculator(new PaceOptions
-        {
-            FastSectorWeight = 1,
-            AllSectorWeight = 0
-        }).CalculateSession(session), "target");
-        var allOnly = Find(new DownhillPaceCalculator(new PaceOptions
-        {
-            FastSectorWeight = 0,
-            AllSectorWeight = 1
-        }).CalculateSession(session), "target");
+        var fastOnly = Find(
+            new DownhillPaceCalculator(
+                new PaceOptions { FastSectorWeight = 1, AllSectorWeight = 0 }
+            ).CalculateSession(session),
+            "target"
+        );
+        var allOnly = Find(
+            new DownhillPaceCalculator(
+                new PaceOptions { FastSectorWeight = 0, AllSectorWeight = 1 }
+            ).CalculateSession(session),
+            "target"
+        );
 
         Assert.Equal(fastOnly.SectorPace, allOnly.SectorPace);
     }
@@ -1106,10 +1219,12 @@ public sealed class DownhillPaceCalculatorTests
     public void FortyPercentCoverageIsSquaredInEffectivePaceWeight()
     {
         var calculator = new DownhillPaceCalculator();
-        var full = calculator.CalculateStagePace(
-            [SessionResult(80, 1, 1, sectorCoverage: 1, sessionType: PaceSessionType.Final)]);
-        var partial = calculator.CalculateStagePace(
-            [SessionResult(80, 1, 1, sectorCoverage: 0.4, sessionType: PaceSessionType.Final)]);
+        var full = calculator.CalculateStagePace([
+            SessionResult(80, 1, 1, sectorCoverage: 1, sessionType: PaceSessionType.Final),
+        ]);
+        var partial = calculator.CalculateStagePace([
+            SessionResult(80, 1, 1, sectorCoverage: 0.4, sessionType: PaceSessionType.Final),
+        ]);
 
         Assert.Equal(1, full!.EvidenceWeight, precision: 10);
         Assert.Equal(0.16, partial!.EvidenceWeight, precision: 10);
@@ -1126,19 +1241,22 @@ public sealed class DownhillPaceCalculatorTests
                 1,
                 SessionWeightFor(PaceSessionType.Final),
                 sessionType: PaceSessionType.Final,
-                competitionClassPriority: 1),
+                competitionClassPriority: 1
+            ),
             SessionResult(
                 75,
                 1,
                 SessionWeightFor(PaceSessionType.Final),
                 sessionType: PaceSessionType.Final,
-                competitionClassPriority: 2)
+                competitionClassPriority: 2
+            ),
         };
 
         var unweighted = calculator.CalculateStagePace(sessions);
         var weighted = calculator.CalculateStagePace(
             sessions,
-            CompetitionClassWeighting.FromPriorities([1, 2]));
+            CompetitionClassWeighting.FromPriorities([1, 2])
+        );
 
         Assert.True(weighted!.Pace > unweighted!.Pace);
         Assert.Equal(3, weighted.EvidenceWeight, precision: 10);
@@ -1157,19 +1275,22 @@ public sealed class DownhillPaceCalculatorTests
                 1,
                 SessionWeightFor(PaceSessionType.Final),
                 sessionType: PaceSessionType.Final,
-                competitionClassPriority: priority),
+                competitionClassPriority: priority
+            ),
             SessionResult(
                 75,
                 1,
                 SessionWeightFor(PaceSessionType.Final),
                 sessionType: PaceSessionType.Final,
-                competitionClassPriority: priority)
+                competitionClassPriority: priority
+            ),
         };
 
         var unweighted = calculator.CalculateStagePace(sessions);
         var weighted = calculator.CalculateStagePace(
             sessions,
-            CompetitionClassWeighting.FromPriorities([priority]));
+            CompetitionClassWeighting.FromPriorities([priority])
+        );
 
         Assert.Equal(unweighted, weighted);
     }
@@ -1178,11 +1299,11 @@ public sealed class DownhillPaceCalculatorTests
     public void SessionConfidenceUsesZeroToOneHundredScaleAndConfiguredFormula()
     {
         var result = Find(
-            new DownhillPaceCalculator().CalculateSession(ConfidenceField(
-                PaceSessionType.Final,
-                sectorCount: 4,
-                fieldSize: 30)),
-            "target");
+            new DownhillPaceCalculator().CalculateSession(
+                ConfidenceField(PaceSessionType.Final, sectorCount: 4, fieldSize: 30)
+            ),
+            "target"
+        );
         var expected = 100.0 * (1.0 - Math.Exp(-1.0));
 
         Assert.Equal(expected, result.Confidence, precision: 10);
@@ -1193,33 +1314,48 @@ public sealed class DownhillPaceCalculatorTests
     public void MoreValidSectorsAndCoverageIncreaseSessionConfidence()
     {
         var calculator = new DownhillPaceCalculator();
-        var partial = Find(calculator.CalculateSession(ConfidenceField(
-            PaceSessionType.Final,
-            sectorCount: 4,
-            fieldSize: 30,
-            targetValidSectorCount: 2)), "target");
-        var complete = Find(calculator.CalculateSession(ConfidenceField(
-            PaceSessionType.Final,
-            sectorCount: 4,
-            fieldSize: 30)), "target");
+        var partial = Find(
+            calculator.CalculateSession(
+                ConfidenceField(
+                    PaceSessionType.Final,
+                    sectorCount: 4,
+                    fieldSize: 30,
+                    targetValidSectorCount: 2
+                )
+            ),
+            "target"
+        );
+        var complete = Find(
+            calculator.CalculateSession(
+                ConfidenceField(PaceSessionType.Final, sectorCount: 4, fieldSize: 30)
+            ),
+            "target"
+        );
 
         Assert.True(complete.Confidence > partial.Confidence);
-        Assert.Equal(100.0 * (1.0 - Math.Exp(-0.5)) * Math.Sqrt(0.5),
-            partial.Confidence, precision: 10);
+        Assert.Equal(
+            100.0 * (1.0 - Math.Exp(-0.5)) * Math.Sqrt(0.5),
+            partial.Confidence,
+            precision: 10
+        );
     }
 
     [Fact]
     public void LargerFieldIncreasesSessionConfidence()
     {
         var calculator = new DownhillPaceCalculator();
-        var smallField = Find(calculator.CalculateSession(ConfidenceField(
-            PaceSessionType.Final,
-            sectorCount: 4,
-            fieldSize: 10)), "target");
-        var fullField = Find(calculator.CalculateSession(ConfidenceField(
-            PaceSessionType.Final,
-            sectorCount: 4,
-            fieldSize: 30)), "target");
+        var smallField = Find(
+            calculator.CalculateSession(
+                ConfidenceField(PaceSessionType.Final, sectorCount: 4, fieldSize: 10)
+            ),
+            "target"
+        );
+        var fullField = Find(
+            calculator.CalculateSession(
+                ConfidenceField(PaceSessionType.Final, sectorCount: 4, fieldSize: 30)
+            ),
+            "target"
+        );
 
         Assert.True(fullField.Confidence > smallField.Confidence);
     }
@@ -1231,12 +1367,14 @@ public sealed class DownhillPaceCalculatorTests
         runs[0] = new PaceRiderRun(
             "target",
             [100, 110, 120, 130],
-            HistoricalExpectedPercentile: 1.0);
+            HistoricalExpectedPercentile: 1.0
+        );
         var result = Find(
-            new DownhillPaceCalculator().CalculateSession(new PaceSessionData(
-                PaceSessionType.Final,
-                runs)),
-            "target");
+            new DownhillPaceCalculator().CalculateSession(
+                new PaceSessionData(PaceSessionType.Final, runs)
+            ),
+            "target"
+        );
 
         Assert.False(result.IsRepresentative);
         Assert.Equal(0, result.Confidence);
@@ -1246,24 +1384,36 @@ public sealed class DownhillPaceCalculatorTests
     public void IncidentAndRecoveredSectorsDoNotCountAsConfidenceEvidence()
     {
         var calculator = new DownhillPaceCalculator();
-        var complete = Find(calculator.CalculateSession(new PaceSessionData(
-            PaceSessionType.Final,
-            [
-                Run("target", [40, 50, 60, 70]),
-                Run("rider-2", [41, 51, 61, 71]),
-                Run("rider-3", [42, 52, 62, 72]),
-                Run("rider-4", [43, 53, 63, 73]),
-                Run("rider-5", [44, 54, 64, 74])
-            ])), "target");
-        var incident = Find(calculator.CalculateSession(new PaceSessionData(
-            PaceSessionType.Final,
-            [
-                Run("target", [40, 50, 120, 70]),
-                Run("rider-2", [41, 51, 61, 71]),
-                Run("rider-3", [42, 52, 62, 72]),
-                Run("rider-4", [43, 53, 63, 73]),
-                Run("rider-5", [44, 54, 64, 74])
-            ])), "target");
+        var complete = Find(
+            calculator.CalculateSession(
+                new PaceSessionData(
+                    PaceSessionType.Final,
+                    [
+                        Run("target", [40, 50, 60, 70]),
+                        Run("rider-2", [41, 51, 61, 71]),
+                        Run("rider-3", [42, 52, 62, 72]),
+                        Run("rider-4", [43, 53, 63, 73]),
+                        Run("rider-5", [44, 54, 64, 74]),
+                    ]
+                )
+            ),
+            "target"
+        );
+        var incident = Find(
+            calculator.CalculateSession(
+                new PaceSessionData(
+                    PaceSessionType.Final,
+                    [
+                        Run("target", [40, 50, 120, 70]),
+                        Run("rider-2", [41, 51, 61, 71]),
+                        Run("rider-3", [42, 52, 62, 72]),
+                        Run("rider-4", [43, 53, 63, 73]),
+                        Run("rider-5", [44, 54, 64, 74]),
+                    ]
+                )
+            ),
+            "target"
+        );
 
         Assert.Equal(PaceSectorStatus.RecoveredAfterIncident, incident.Sectors[3].Status);
         Assert.True(incident.Confidence < complete.Confidence);
@@ -1273,15 +1423,39 @@ public sealed class DownhillPaceCalculatorTests
     public void SessionTypeWeightsOrderOverallConfidenceEvidence()
     {
         var calculator = new DownhillPaceCalculator();
-        var qualifying = calculator.CalculatePace("target", [SessionResult(
-            80, 1, SessionWeightFor(PaceSessionType.Qualifying),
-            sessionType: PaceSessionType.Qualifying)]);
-        var semiFinal = calculator.CalculatePace("target", [SessionResult(
-            80, 1, SessionWeightFor(PaceSessionType.SemiFinal),
-            sessionType: PaceSessionType.SemiFinal)]);
-        var final = calculator.CalculatePace("target", [SessionResult(
-            80, 1, SessionWeightFor(PaceSessionType.Final),
-            sessionType: PaceSessionType.Final)]);
+        var qualifying = calculator.CalculatePace(
+            "target",
+            [
+                SessionResult(
+                    80,
+                    1,
+                    SessionWeightFor(PaceSessionType.Qualifying),
+                    sessionType: PaceSessionType.Qualifying
+                ),
+            ]
+        );
+        var semiFinal = calculator.CalculatePace(
+            "target",
+            [
+                SessionResult(
+                    80,
+                    1,
+                    SessionWeightFor(PaceSessionType.SemiFinal),
+                    sessionType: PaceSessionType.SemiFinal
+                ),
+            ]
+        );
+        var final = calculator.CalculatePace(
+            "target",
+            [
+                SessionResult(
+                    80,
+                    1,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                ),
+            ]
+        );
 
         Assert.True(final.Confidence > semiFinal.Confidence);
         Assert.True(semiFinal.Confidence > qualifying.Confidence);
@@ -1290,12 +1464,16 @@ public sealed class DownhillPaceCalculatorTests
     [Fact]
     public void ManyQualifyingSessionsCannotExceedNoFinalCap()
     {
-        var qualifying = Enumerable.Range(0, 100)
-            .Select(_ => SessionResult(
-                80,
-                1,
-                SessionWeightFor(PaceSessionType.Qualifying),
-                sessionType: PaceSessionType.Qualifying))
+        var qualifying = Enumerable
+            .Range(0, 100)
+            .Select(_ =>
+                SessionResult(
+                    80,
+                    1,
+                    SessionWeightFor(PaceSessionType.Qualifying),
+                    sessionType: PaceSessionType.Qualifying
+                )
+            )
             .ToArray();
 
         var result = new DownhillPaceCalculator().CalculatePace("target", qualifying);
@@ -1328,12 +1506,10 @@ public sealed class DownhillPaceCalculatorTests
             90,
             confidence: 0.60,
             SessionWeightFor(PaceSessionType.Final),
-            sessionType: PaceSessionType.Final);
+            sessionType: PaceSessionType.Final
+        );
 
-        var result = calculator.CalculatePace(
-            "target",
-            [final],
-            availableFinalSessions: 6);
+        var result = calculator.CalculatePace("target", [final], availableFinalSessions: 6);
         var expectedCap = 100.0 * Math.Pow(0.60 / (6 * 0.50), 0.75);
 
         Assert.Equal(expectedCap, result.Confidence, precision: 10);
@@ -1355,18 +1531,19 @@ public sealed class DownhillPaceCalculatorTests
     public void SixCompleteFinalsProduceHighConfidenceWithCurrentFinalWeight()
     {
         var calculator = new DownhillPaceCalculator();
-        var finals = Enumerable.Range(0, 6)
-            .Select(_ => SessionResult(
-                80,
-                confidence: 0.60,
-                SessionWeightFor(PaceSessionType.Final),
-                sessionType: PaceSessionType.Final))
+        var finals = Enumerable
+            .Range(0, 6)
+            .Select(_ =>
+                SessionResult(
+                    80,
+                    confidence: 0.60,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                )
+            )
             .ToArray();
 
-        var result = calculator.CalculatePace(
-            "target",
-            finals,
-            availableFinalSessions: 6);
+        var result = calculator.CalculatePace("target", finals, availableFinalSessions: 6);
 
         Assert.InRange(result.Confidence, 97, 98);
         Assert.Equal("High", result.ConfidenceStatus);
@@ -1382,22 +1559,18 @@ public sealed class DownhillPaceCalculatorTests
                 90,
                 confidence: 0.60,
                 SessionWeightFor(PaceSessionType.Final),
-                sessionType: PaceSessionType.Final),
+                sessionType: PaceSessionType.Final
+            ),
             SessionResult(
                 85,
                 confidence: 0.60,
                 SessionWeightFor(PaceSessionType.Qualifying),
-                sessionType: PaceSessionType.Qualifying)
+                sessionType: PaceSessionType.Qualifying
+            ),
         };
 
-        var oneAvailable = calculator.CalculatePace(
-            "target",
-            sessions,
-            availableFinalSessions: 1);
-        var sixAvailable = calculator.CalculatePace(
-            "target",
-            sessions,
-            availableFinalSessions: 6);
+        var oneAvailable = calculator.CalculatePace("target", sessions, availableFinalSessions: 1);
+        var sixAvailable = calculator.CalculatePace("target", sessions, availableFinalSessions: 6);
 
         Assert.Equal(oneAvailable.Pace, sixAvailable.Pace);
         Assert.Equal(oneAvailable.RawPace, sixAvailable.RawPace);
@@ -1411,15 +1584,37 @@ public sealed class DownhillPaceCalculatorTests
         var highConfidence = calculator.CalculatePace(
             "target",
             [
-                SessionResult(94, 1.0, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final),
-                SessionResult(72, 1.0, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final)
-            ]);
+                SessionResult(
+                    94,
+                    1.0,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                ),
+                SessionResult(
+                    72,
+                    1.0,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                ),
+            ]
+        );
         var lowConfidence = calculator.CalculatePace(
             "target",
             [
-                SessionResult(94, 0.10, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final),
-                SessionResult(72, 1.0, SessionWeightFor(PaceSessionType.Final), sessionType: PaceSessionType.Final)
-            ]);
+                SessionResult(
+                    94,
+                    0.10,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                ),
+                SessionResult(
+                    72,
+                    1.0,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                ),
+            ]
+        );
 
         Assert.True(highConfidence.Pace.HasValue);
         Assert.True(lowConfidence.Pace.HasValue);
@@ -1434,15 +1629,23 @@ public sealed class DownhillPaceCalculatorTests
     public void PartialFinalAddsLessFinalEvidenceThanCompleteFinal()
     {
         var calculator = new DownhillPaceCalculator();
-        var partialSession = Find(calculator.CalculateSession(ConfidenceField(
-            PaceSessionType.Final,
-            sectorCount: 4,
-            fieldSize: 30,
-            targetValidSectorCount: 2)), "target");
-        var completeSession = Find(calculator.CalculateSession(ConfidenceField(
-            PaceSessionType.Final,
-            sectorCount: 4,
-            fieldSize: 30)), "target");
+        var partialSession = Find(
+            calculator.CalculateSession(
+                ConfidenceField(
+                    PaceSessionType.Final,
+                    sectorCount: 4,
+                    fieldSize: 30,
+                    targetValidSectorCount: 2
+                )
+            ),
+            "target"
+        );
+        var completeSession = Find(
+            calculator.CalculateSession(
+                ConfidenceField(PaceSessionType.Final, sectorCount: 4, fieldSize: 30)
+            ),
+            "target"
+        );
         var partial = calculator.CalculatePace("target", [partialSession]);
         var complete = calculator.CalculatePace("target", [completeSession]);
 
@@ -1454,12 +1657,28 @@ public sealed class DownhillPaceCalculatorTests
     public void PaceValueDoesNotChangeConfidenceForIdenticalEvidence()
     {
         var calculator = new DownhillPaceCalculator();
-        var slow = calculator.CalculatePace("target", [SessionResult(
-            30, 1, SessionWeightFor(PaceSessionType.Final),
-            sessionType: PaceSessionType.Final)]);
-        var fast = calculator.CalculatePace("target", [SessionResult(
-            99, 1, SessionWeightFor(PaceSessionType.Final),
-            sessionType: PaceSessionType.Final)]);
+        var slow = calculator.CalculatePace(
+            "target",
+            [
+                SessionResult(
+                    30,
+                    1,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                ),
+            ]
+        );
+        var fast = calculator.CalculatePace(
+            "target",
+            [
+                SessionResult(
+                    99,
+                    1,
+                    SessionWeightFor(PaceSessionType.Final),
+                    sessionType: PaceSessionType.Final
+                ),
+            ]
+        );
 
         Assert.Equal(slow.Confidence, fast.Confidence);
         Assert.Equal(slow.TotalEvidence, fast.TotalEvidence);
@@ -1472,13 +1691,28 @@ public sealed class DownhillPaceCalculatorTests
         var calculator = new DownhillPaceCalculator();
         var manySlowFinals = calculator.CalculatePace(
             "target",
-            Enumerable.Range(0, 6)
-                .Select(_ => SessionResult(
-                    30, 1, SessionWeightFor(PaceSessionType.Final),
-                    sessionType: PaceSessionType.Final)));
-        var oneFastQualifying = calculator.CalculatePace("target", [SessionResult(
-            99, 1, SessionWeightFor(PaceSessionType.Qualifying),
-            sessionType: PaceSessionType.Qualifying)]);
+            Enumerable
+                .Range(0, 6)
+                .Select(_ =>
+                    SessionResult(
+                        30,
+                        1,
+                        SessionWeightFor(PaceSessionType.Final),
+                        sessionType: PaceSessionType.Final
+                    )
+                )
+        );
+        var oneFastQualifying = calculator.CalculatePace(
+            "target",
+            [
+                SessionResult(
+                    99,
+                    1,
+                    SessionWeightFor(PaceSessionType.Qualifying),
+                    sessionType: PaceSessionType.Qualifying
+                ),
+            ]
+        );
 
         Assert.Equal("High", manySlowFinals.ConfidenceStatus);
         Assert.Equal("Low", oneFastQualifying.ConfidenceStatus);
@@ -1502,13 +1736,9 @@ public sealed class DownhillPaceCalculatorTests
     {
         var session = new PaceSessionData(
             PaceSessionType.Qualifying,
-            [
-                Run("target", [40, 50]),
-                Run("rider-2", [41, 51])
-            ]);
-        var result = Find(
-            new DownhillPaceCalculator().CalculateSession(session),
-            "target");
+            [Run("target", [40, 50]), Run("rider-2", [41, 51])]
+        );
+        var result = Find(new DownhillPaceCalculator().CalculateSession(session), "target");
 
         Assert.All(result.Sectors, sector => Assert.Null(sector.Score));
         Assert.Null(result.Pace);
@@ -1522,14 +1752,12 @@ public sealed class DownhillPaceCalculatorTests
             PaceSessionType.Qualifying,
             ranks: [80, 100, 90, 85, 80],
             targetTimes: [50, 60, 70, 80, 90],
-            targetFinishRank: 95);
-        var result = Find(
-            new DownhillPaceCalculator().CalculateSession(session),
-            "target");
+            targetFinishRank: 95
+        );
+        var result = Find(new DownhillPaceCalculator().CalculateSession(session), "target");
 
         Assert.Null(result.IncidentSectorIndex);
-        Assert.All(result.Sectors, sector =>
-            Assert.Equal(PaceSectorStatus.Valid, sector.Status));
+        Assert.All(result.Sectors, sector => Assert.Equal(PaceSectorStatus.Valid, sector.Status));
     }
 
     [Fact]
@@ -1548,12 +1776,18 @@ public sealed class DownhillPaceCalculatorTests
     public void WeakRiderWithPartialDnfSessionStaysBelowSixtyFive()
     {
         var calculator = new DownhillPaceCalculator();
-        var partialDnf = Find(calculator.CalculateSession(RankedTargetField(
-            PaceSessionType.Qualifying,
-            ranks: [21, 37, 1, 1, 1],
-            targetTimes: [40, 50, null, null, null],
-            targetFinishRank: null,
-            targetIsClassified: false)), "target");
+        var partialDnf = Find(
+            calculator.CalculateSession(
+                RankedTargetField(
+                    PaceSessionType.Qualifying,
+                    ranks: [21, 37, 1, 1, 1],
+                    targetTimes: [40, 50, null, null, null],
+                    targetFinishRank: null,
+                    targetIsClassified: false
+                )
+            ),
+            "target"
+        );
         var weakComplete = CalculateWeakCompleteSession(calculator);
 
         var result = calculator.CalculatePace("target", [partialDnf, weakComplete]);
@@ -1572,11 +1806,10 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [40, 50, 60, 70, 80]),
                 Run("rider-3", [41, 51, 61, 71, 81]),
                 Run("rider-4", [42, 52, 62, 72, 82]),
-                Run("rider-5", [43, 53, 63, 73, 83])
-            ]);
-        var result = Find(
-            new DownhillPaceCalculator().CalculateSession(session),
-            "target");
+                Run("rider-5", [43, 53, 63, 73, 83]),
+            ]
+        );
+        var result = Find(new DownhillPaceCalculator().CalculateSession(session), "target");
 
         Assert.True(result.SectorPace <= 50);
         Assert.Equal(result.SectorPace, result.EvidenceAdjustedSectorPace);
@@ -1586,16 +1819,18 @@ public sealed class DownhillPaceCalculatorTests
     public void ConfiguredSessionWinBonusDoesNotAffectPartialDnf()
     {
         var session = PartialFiveSectorField(targetFinishRank: 1);
-        var withoutBonus = Find(new DownhillPaceCalculator(new PaceOptions
-        {
-            FinalWinBonus = 0
-        }).CalculateSession(session), "target");
+        var withoutBonus = Find(
+            new DownhillPaceCalculator(new PaceOptions { FinalWinBonus = 0 }).CalculateSession(
+                session
+            ),
+            "target"
+        );
         var withBonus = Find(
-            new DownhillPaceCalculator(new PaceOptions
-            {
-                FinalWinBonus = 100
-            }).CalculateSession(session),
-            "target");
+            new DownhillPaceCalculator(new PaceOptions { FinalWinBonus = 100 }).CalculateSession(
+                session
+            ),
+            "target"
+        );
 
         Assert.Equal(withoutBonus.Pace, withBonus.Pace);
     }
@@ -1604,16 +1839,18 @@ public sealed class DownhillPaceCalculatorTests
     public void ConfiguredSessionWinBonusDoesNotAffectLowCoverageRun()
     {
         var session = LowCoverageClassifiedField();
-        var withoutBonus = Find(new DownhillPaceCalculator(new PaceOptions
-        {
-            FinalWinBonus = 0
-        }).CalculateSession(session), "target");
+        var withoutBonus = Find(
+            new DownhillPaceCalculator(new PaceOptions { FinalWinBonus = 0 }).CalculateSession(
+                session
+            ),
+            "target"
+        );
         var withBonus = Find(
-            new DownhillPaceCalculator(new PaceOptions
-            {
-                FinalWinBonus = 100
-            }).CalculateSession(session),
-            "target");
+            new DownhillPaceCalculator(new PaceOptions { FinalWinBonus = 100 }).CalculateSession(
+                session
+            ),
+            "target"
+        );
 
         Assert.Equal(0.6, withBonus.SectorCoverage, precision: 10);
         Assert.Equal(withoutBonus.Pace, withBonus.Pace);
@@ -1625,7 +1862,8 @@ public sealed class DownhillPaceCalculatorTests
         var calculator = new DownhillPaceCalculator();
         var session = Find(
             calculator.CalculateSession(EliteField(PaceSessionType.Final)),
-            "target");
+            "target"
+        );
         var combined = calculator.CalculatePace("target", [session]);
 
         Assert.InRange(session.Pace!.Value, 0, 100);
@@ -1636,39 +1874,43 @@ public sealed class DownhillPaceCalculatorTests
     {
         return new PaceSessionData(
             PaceSessionType.Final,
-            Enumerable.Range(0, 10)
-                .Select(index => Run(
-                    $"rider-{index}",
-                    [40 + index],
-                    finishRank: index + 1))
-                .ToArray());
+            Enumerable
+                .Range(0, 10)
+                .Select(index => Run($"rider-{index}", [40 + index], finishRank: index + 1))
+                .ToArray()
+        );
     }
 
     private static PaceSessionData ConfidenceField(
         PaceSessionType sessionType,
         int sectorCount,
         int fieldSize,
-        int? targetValidSectorCount = null)
+        int? targetValidSectorCount = null
+    )
     {
         var validTargetSectors = targetValidSectorCount ?? sectorCount;
         var runs = new List<PaceRiderRun>
         {
             Run(
                 "target",
-                Enumerable.Range(0, sectorCount)
-                    .Select(index => index < validTargetSectors
-                        ? (double?)(40 + index * 10)
-                        : null)
-                    .ToArray())
+                Enumerable
+                    .Range(0, sectorCount)
+                    .Select(index => index < validTargetSectors ? (double?)(40 + index * 10) : null)
+                    .ToArray()
+            ),
         };
 
         for (var rider = 1; rider < fieldSize; rider++)
         {
-            runs.Add(Run(
-                $"rider-{rider}",
-                Enumerable.Range(0, sectorCount)
-                    .Select(index => (double?)(40 + index * 10 + rider * 0.1))
-                    .ToArray()));
+            runs.Add(
+                Run(
+                    $"rider-{rider}",
+                    Enumerable
+                        .Range(0, sectorCount)
+                        .Select(index => (double?)(40 + index * 10 + rider * 0.1))
+                        .ToArray()
+                )
+            );
         }
 
         return new PaceSessionData(sessionType, runs);
@@ -1676,16 +1918,22 @@ public sealed class DownhillPaceCalculatorTests
 
     private static RiderPaceResult OverallConfidenceForFinalCount(
         DownhillPaceCalculator calculator,
-        int finalCount)
+        int finalCount
+    )
     {
         return calculator.CalculatePace(
             "target",
-            Enumerable.Range(0, finalCount)
-                .Select(_ => SessionResult(
-                    80,
-                    1,
-                    SessionWeightFor(PaceSessionType.Final),
-                    sessionType: PaceSessionType.Final)));
+            Enumerable
+                .Range(0, finalCount)
+                .Select(_ =>
+                    SessionResult(
+                        80,
+                        1,
+                        SessionWeightFor(PaceSessionType.Final),
+                        sessionType: PaceSessionType.Final
+                    )
+                )
+        );
     }
 
     private static PaceSessionData MultiSectorField(IReadOnlyList<double?> targetTimes)
@@ -1697,8 +1945,9 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [42, 52, 62, 72, 82], finishRank: 2),
                 Run("rider-3", [44, 54, 64, 74, 84], finishRank: 3),
                 Run("rider-4", [46, 56, 66, 76, 86], finishRank: 4),
-                Run("rider-5", [48, 58, 68, 78, 88], finishRank: 5)
-            ]);
+                Run("rider-5", [48, 58, 68, 78, 88], finishRank: 5),
+            ]
+        );
     }
 
     private static PaceSessionData PartialFiveSectorField(int? targetFinishRank = null)
@@ -1710,12 +1959,14 @@ public sealed class DownhillPaceCalculatorTests
                     "target",
                     [40, 50, null, null, null],
                     finishRank: targetFinishRank,
-                    isClassified: false),
+                    isClassified: false
+                ),
                 Run("rider-2", [42, 52, 62, 72, 82], finishRank: 1),
                 Run("rider-3", [44, 54, 64, 74, 84], finishRank: 2),
                 Run("rider-4", [46, 56, 66, 76, 86], finishRank: 3),
-                Run("rider-5", [48, 58, 68, 78, 88], finishRank: 4)
-            ]);
+                Run("rider-5", [48, 58, 68, 78, 88], finishRank: 4),
+            ]
+        );
     }
 
     private static PaceSessionData ThreeSectorField()
@@ -1727,8 +1978,9 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [42, 52, 62], finishRank: 1),
                 Run("rider-3", [44, 56, 64], finishRank: 3),
                 Run("rider-4", [46, 58, 70], finishRank: 4),
-                Run("rider-5", [48, 60, 72], finishRank: 5)
-            ]);
+                Run("rider-5", [48, 60, 72], finishRank: 5),
+            ]
+        );
     }
 
     private static PaceSessionData LowCoverageClassifiedField()
@@ -1740,14 +1992,16 @@ public sealed class DownhillPaceCalculatorTests
                 Run("rider-2", [42, 52, 62, null, null], finishRank: 2),
                 Run("rider-3", [44, 54, 64, null, null], finishRank: 3),
                 Run("rider-4", [46, 56, 66, null, null], finishRank: 4),
-                Run("rider-5", [48, 58, 68, null, null], finishRank: 5)
-            ]);
+                Run("rider-5", [48, 58, 68, null, null], finishRank: 5),
+            ]
+        );
     }
 
     private static PaceSessionData EliteField(
         PaceSessionType sessionType,
         double targetOffset = 0,
-        int targetFinishRank = 1)
+        int targetFinishRank = 1
+    )
     {
         return new PaceSessionData(
             sessionType,
@@ -1759,15 +2013,17 @@ public sealed class DownhillPaceCalculatorTests
                         50 + targetOffset,
                         60 + targetOffset,
                         70 + targetOffset,
-                        80 + targetOffset
+                        80 + targetOffset,
                     ],
                     topSpeed: 65 - targetOffset,
-                    finishRank: targetFinishRank),
+                    finishRank: targetFinishRank
+                ),
                 Run("rider-2", [40.2, 50.2, 60.2, 70.2, 80.2], topSpeed: 64.8, finishRank: 2),
                 Run("rider-3", [40.4, 50.4, 60.4, 70.4, 80.4], topSpeed: 64.6, finishRank: 3),
                 Run("rider-4", [40.6, 50.6, 60.6, 70.6, 80.6], topSpeed: 64.4, finishRank: 4),
-                Run("rider-5", [40.8, 50.8, 60.8, 70.8, 80.8], topSpeed: 64.2, finishRank: 5)
-            ]);
+                Run("rider-5", [40.8, 50.8, 60.8, 70.8, 80.8], topSpeed: 64.2, finishRank: 5),
+            ]
+        );
     }
 
     private static PaceSessionData RankedTargetField(
@@ -1775,7 +2031,8 @@ public sealed class DownhillPaceCalculatorTests
         IReadOnlyList<int> ranks,
         IReadOnlyList<double?> targetTimes,
         int? targetFinishRank,
-        bool targetIsClassified = true)
+        bool targetIsClassified = true
+    )
     {
         if (ranks.Count != targetTimes.Count)
         {
@@ -1788,48 +2045,49 @@ public sealed class DownhillPaceCalculatorTests
                 "target",
                 targetTimes,
                 finishRank: targetFinishRank,
-                isClassified: targetIsClassified)
+                isClassified: targetIsClassified
+            ),
         };
 
         for (var competitor = 1; competitor < 110; competitor++)
         {
             var sectorTimes = targetTimes
-                .Select((targetTime, sectorIndex) =>
-                {
-                    if (!targetTime.HasValue)
+                .Select(
+                    (targetTime, sectorIndex) =>
                     {
-                        return (double?)(35 + sectorIndex * 10 + competitor * 0.02);
-                    }
+                        if (!targetTime.HasValue)
+                        {
+                            return (double?)(35 + sectorIndex * 10 + competitor * 0.02);
+                        }
 
-                    var rank = ranks[sectorIndex];
-                    if (competitor < rank)
-                    {
-                        var fraction = (double)competitor / rank;
-                        return targetTime.Value * (0.70 + 0.29 * fraction);
-                    }
+                        var rank = ranks[sectorIndex];
+                        if (competitor < rank)
+                        {
+                            var fraction = (double)competitor / rank;
+                            return targetTime.Value * (0.70 + 0.29 * fraction);
+                        }
 
-                    return targetTime.Value *
-                        (1.0 + 0.002 * (competitor - rank + 1));
-                })
+                        return targetTime.Value * (1.0 + 0.002 * (competitor - rank + 1));
+                    }
+                )
                 .ToArray();
-            runs.Add(Run(
-                $"rider-{competitor}",
-                sectorTimes,
-                finishRank: competitor + 1));
+            runs.Add(Run($"rider-{competitor}", sectorTimes, finishRank: competitor + 1));
         }
 
         return new PaceSessionData(sessionType, runs);
     }
 
     private static RiderSessionPaceResult CalculateWeakCompleteSession(
-        DownhillPaceCalculator? calculator = null)
+        DownhillPaceCalculator? calculator = null
+    )
     {
         calculator ??= new DownhillPaceCalculator();
         var session = RankedTargetField(
             PaceSessionType.Qualifying,
             ranks: [31, 103, 88, 65, 80],
             targetTimes: [40, 135, 45, 46, 45.335],
-            targetFinishRank: 100);
+            targetFinishRank: 100
+        );
         return Find(calculator.CalculateSession(session), "target");
     }
 
@@ -1838,7 +2096,8 @@ public sealed class DownhillPaceCalculatorTests
         var session = SingleSectorField() with { SessionType = sessionType };
         return Find(
             new DownhillPaceCalculator().CalculateSession(session),
-            "rider-0").SessionWeight;
+            "rider-0"
+        ).SessionWeight;
     }
 
     private static RiderSessionPaceResult SessionResult(
@@ -1848,9 +2107,11 @@ public sealed class DownhillPaceCalculatorTests
         double sectorCoverage = 1,
         PaceSessionType sessionType = PaceSessionType.Qualifying,
         int usedSectorCount = 5,
-        int? competitionClassPriority = null)
+        int? competitionClassPriority = null
+    )
     {
-        var sectors = Enumerable.Range(0, usedSectorCount)
+        var sectors = Enumerable
+            .Range(0, usedSectorCount)
             .Select(index => new PaceSectorResult(
                 SectorIndex: index,
                 Status: PaceSectorStatus.Valid,
@@ -1858,7 +2119,8 @@ public sealed class DownhillPaceCalculatorTests
                 Rank: 1,
                 Percentile: 1,
                 PerformanceZ: 1,
-                Score: pace))
+                Score: pace
+            ))
             .ToArray();
 
         return new RiderSessionPaceResult(
@@ -1875,7 +2137,8 @@ public sealed class DownhillPaceCalculatorTests
             Sectors: sectors,
             SectorCoverage: sectorCoverage,
             EvidenceAdjustedSectorPace: pace,
-            CompetitionClassPriority: competitionClassPriority);
+            CompetitionClassPriority: competitionClassPriority
+        );
     }
 
     private static StagePaceResult Stage(double pace, double weight) =>
@@ -1888,7 +2151,8 @@ public sealed class DownhillPaceCalculatorTests
         int? finishRank = null,
         double? finishTimeSeconds = null,
         bool isClassified = true,
-        string? status = null)
+        string? status = null
+    )
     {
         return new PaceRiderRun(
             RiderId: riderId,
@@ -1897,7 +2161,8 @@ public sealed class DownhillPaceCalculatorTests
             FinishRank: finishRank,
             FinishTimeSeconds: finishTimeSeconds,
             IsClassified: isClassified,
-            Status: status);
+            Status: status
+        );
     }
 
     private static PaceFieldSummary Summary(params double[] input)
@@ -1915,7 +2180,8 @@ public sealed class DownhillPaceCalculatorTests
             Math.Max(1.4826 * logMad, 0.003),
             Math.Max(1.4826 * linearMad, Math.Max(median * 0.003, 0.01)),
             values[0],
-            values.Length > 1 ? values[1] : null);
+            values.Length > 1 ? values[1] : null
+        );
     }
 
     private static double Median(double[] values)
@@ -1928,7 +2194,8 @@ public sealed class DownhillPaceCalculatorTests
 
     private static RiderSessionPaceResult Find(
         IReadOnlyList<RiderSessionPaceResult> results,
-        string riderId)
+        string riderId
+    )
     {
         return results.Single(result => result.RiderId == riderId);
     }

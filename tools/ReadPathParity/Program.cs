@@ -12,9 +12,24 @@ using RaceTrace.Api.Configuration;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Services;
 
-var api = args.Contains("--api-path") ? args[Array.IndexOf(args,"--api-path")+1] : Path.GetFullPath("racetrace-api");
-var config = new ConfigurationBuilder().SetBasePath(api).AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", true)
-    .AddJsonFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Microsoft","UserSecrets","racetrace-api-2026","secrets.json"), true).Build();
+var api = args.Contains("--api-path")
+    ? args[Array.IndexOf(args, "--api-path") + 1]
+    : Path.GetFullPath("racetrace-api");
+var config = new ConfigurationBuilder()
+    .SetBasePath(api)
+    .AddJsonFile("appsettings.json")
+    .AddJsonFile("appsettings.Development.json", true)
+    .AddJsonFile(
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Microsoft",
+            "UserSecrets",
+            "racetrace-api-2026",
+            "secrets.json"
+        ),
+        true
+    )
+    .Build();
 var options = config.GetSection("Supabase").Get<SupabaseOptions>()!;
 if (args.Contains("--filter-benchmark"))
 {
@@ -31,32 +46,85 @@ if (args.Contains("--parser-benchmark"))
     using var http = new HttpClient();
     var client = new SupabaseRestClient(http, Options.Create(options));
     var domain = new DomainQueryService(client);
-    var context = new RaceTrace.Api.Models.RiderMetricsContext(null, "EM", null, null, null, null, null, null, null, null, null);
+    var context = new RaceTrace.Api.Models.RiderMetricsContext(
+        null,
+        "EM",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+    );
     var sessions = await domain.GetMatchingSessionsAsync(context);
-    var response = await client.RpcAsync("get_ranking_input_packages", new JsonObject
-    {
-        ["p_session_ids"] = new JsonArray(sessions.Select(s => (JsonNode?)JsonValue.Create(long.Parse(s.String("id")!))).ToArray()),
-        ["p_include_splits"] = false
-    }, SupabaseRole.Anon, default);
-    var packages = ((JsonArray)response!).OfType<JsonObject>().Select(row => (JsonObject)row["payload"]!).ToArray();
+    var response = await client.RpcAsync(
+        "get_ranking_input_packages",
+        new JsonObject
+        {
+            ["p_session_ids"] = new JsonArray(
+                sessions
+                    .Select(s => (JsonNode?)JsonValue.Create(long.Parse(s.String("id")!)))
+                    .ToArray()
+            ),
+            ["p_include_splits"] = false,
+        },
+        SupabaseRole.Anon,
+        default
+    );
+    var packages = ((JsonArray)response!)
+        .OfType<JsonObject>()
+        .Select(row => (JsonObject)row["payload"]!)
+        .ToArray();
     var metrics = new MetricsService(domain, new PaceService(client));
     string? expected = null;
     foreach (var batched in new[] { false, true })
-    for (var sample = 0; sample < 6; sample++)
-    {
-        var startBytes = GC.GetAllocatedBytesForCurrentThread();
-        var watch = Stopwatch.StartNew();
-        var read = RaceTrace.Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParseRankingReadData(packages);
-        var pace = batched
-            ? RaceTrace.Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParsePreparedRankingRead(packages, read).PaceSessions
-            : packages.SelectMany(p => RaceTrace.Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParsePreparedRankingRead([p]).PaceSessions).ToArray();
-        watch.Stop();
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - startBytes;
-        var result = JsonSerializer.Serialize(metrics.CalculatePrecomputedPerformanceByRider(read, pace, sessions));
-        expected ??= result;
-        if (result != expected) throw new InvalidOperationException("Batched input preparation changed metrics.");
-        Console.WriteLine(JsonSerializer.Serialize(new { batched, sample, milliseconds = watch.Elapsed.TotalMilliseconds, allocated }));
-    }
+        for (var sample = 0; sample < 6; sample++)
+        {
+            var startBytes = GC.GetAllocatedBytesForCurrentThread();
+            var watch = Stopwatch.StartNew();
+            var read =
+                RaceTrace.Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParseRankingReadData(
+                    packages
+                );
+            var pace = batched
+                ? RaceTrace
+                    .Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParsePreparedRankingRead(
+                        packages,
+                        read
+                    )
+                    .PaceSessions
+                : packages
+                    .SelectMany(p =>
+                        RaceTrace
+                            .Api.Infrastructure.Supabase.CompactMetricsPackageParser.ParsePreparedRankingRead([
+                                p,
+                            ])
+                            .PaceSessions
+                    )
+                    .ToArray();
+            watch.Stop();
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - startBytes;
+            var result = JsonSerializer.Serialize(
+                metrics.CalculatePrecomputedPerformanceByRider(read, pace, sessions)
+            );
+            expected ??= result;
+            if (result != expected)
+                throw new InvalidOperationException("Batched input preparation changed metrics.");
+            Console.WriteLine(
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        batched,
+                        sample,
+                        milliseconds = watch.Elapsed.TotalMilliseconds,
+                        allocated,
+                    }
+                )
+            );
+        }
     return;
 }
 if (args.Contains("--round-list-benchmark"))
@@ -64,21 +132,50 @@ if (args.Contains("--round-list-benchmark"))
     using var http = new HttpClient();
     var client = new SupabaseRestClient(http, Options.Create(options));
     var validator = new QueryValidationService();
-    var rounds = new RoundsService(client, validator, new DomainQueryService(client), new RoundImageStorageService(http, Options.Create(options)));
+    var rounds = new RoundsService(
+        client,
+        validator,
+        new DomainQueryService(client),
+        new RoundImageStorageService(http, Options.Create(options))
+    );
     for (var i = 0; i < 5; i++)
     {
         var timer = Stopwatch.StartNew();
-        var old = await client.GetAsync(new SupabaseQuery("rounds")
-            .Select("*,tracks(*),competition_levels(*),conditions(*),round_categories(*,categories(*))")
-            .Filter("season_year", "eq", 2026).Limit(100), count: true);
+        var old = await client.GetAsync(
+            new SupabaseQuery("rounds")
+                .Select(
+                    "*,tracks(*),competition_levels(*),conditions(*),round_categories(*,categories(*))"
+                )
+                .Filter("season_year", "eq", 2026)
+                .Limit(100),
+            count: true
+        );
         var ids = old.Data.Select(row => row.String("id")!).ToArray();
-        await client.GetAsync(new SupabaseQuery("sessions").Select("round_id,status").In("round_id", ids));
-        await client.GetAsync(new SupabaseQuery("round_images").Select("round_id").In("round_id", ids));
+        await client.GetAsync(
+            new SupabaseQuery("sessions").Select("round_id,status").In("round_id", ids)
+        );
+        await client.GetAsync(
+            new SupabaseQuery("round_images").Select("round_id").In("round_id", ids)
+        );
         var oldMs = timer.Elapsed.TotalMilliseconds;
         timer.Restart();
-        var result = await rounds.ListRoundsAsync(new QueryCollection(QueryHelpers.ParseQuery("?season=2026&pageSize=100")), default);
-        if (result.TotalItems != old.Total) throw new InvalidOperationException("Round count changed.");
-        Console.WriteLine(JsonSerializer.Serialize(new { oldMs, milliseconds = timer.Elapsed.TotalMilliseconds, result.Items.Count, images = result.Items.Count(r => r.ImageUrl?.StartsWith("https://") == true) }));
+        var result = await rounds.ListRoundsAsync(
+            new QueryCollection(QueryHelpers.ParseQuery("?season=2026&pageSize=100")),
+            default
+        );
+        if (result.TotalItems != old.Total)
+            throw new InvalidOperationException("Round count changed.");
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                new
+                {
+                    oldMs,
+                    milliseconds = timer.Elapsed.TotalMilliseconds,
+                    result.Items.Count,
+                    images = result.Items.Count(r => r.ImageUrl?.StartsWith("https://") == true),
+                }
+            )
+        );
     }
     return;
 }
@@ -88,31 +185,61 @@ if (args.Contains("--incident-cache-benchmark") || args.Contains("--prepare-inci
     return;
 }
 #if !BASELINE
-if(args.Contains("--prepare")) {
- using var preparationHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(110) };
- var preparationClient = new SupabaseRestClient(preparationHttp,Options.Create(options));
- var rows=await preparationClient.GetAsync(new SupabaseQuery("ranking_session_preaggregates").Select("session_id,prepared_version"),role:SupabaseRole.Service);
- var service=new RankingPreaggregationService(preparationClient);
- foreach(var row in rows.Data.Where(r=>r.String("prepared_version")!=RankingPreaggregationService.AlgorithmVersion))
-  Console.WriteLine($"Prepared {row.String("session_id")}: {await service.PrepareAsync(row.String("session_id")!,default)}");
- return;
+if (args.Contains("--prepare"))
+{
+    using var preparationHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(110) };
+    var preparationClient = new SupabaseRestClient(preparationHttp, Options.Create(options));
+    var rows = await preparationClient.GetAsync(
+        new SupabaseQuery("ranking_session_preaggregates").Select("session_id,prepared_version"),
+        role: SupabaseRole.Service
+    );
+    var service = new RankingPreaggregationService(preparationClient);
+    foreach (
+        var row in rows.Data.Where(r =>
+            r.String("prepared_version") != RankingPreaggregationService.AlgorithmVersion
+        )
+    )
+        Console.WriteLine(
+            $"Prepared {row.String("session_id")}: {await service.PrepareAsync(row.String("session_id")!, default)}"
+        );
+    return;
 }
 #endif
-if(args.Contains("--parity")) { await Parity.Run(options,args); return; }
-if(args.Contains("--stages")) { await Stages.Run(options); return; }
+if (args.Contains("--parity"))
+{
+    await Parity.Run(options, args);
+    return;
+}
+if (args.Contains("--stages"))
+{
+    await Stages.Run(options);
+    return;
+}
 var output = new List<object>();
 var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-var cases = args.Contains("--extra") ? new[] {
- ("asa-2026", "/api/v1/riders/183/overview", "?season=2026&category=elite_men"),
- ("jordan-all", "/api/v1/riders/60/overview", "?category=elite_men")
-} : new[] {
- ("ranking-2026", "/api/v1/ranking", "?season=2026&category=elite_men&sort=rating&order=desc&pageSize=30&comparison=previousRound"),
- ("rider-2026", "/api/v1/riders/18/overview", "?season=2026&category=elite_men"),
- ("ranking-all", "/api/v1/ranking", "?category=elite_men&sort=rating&order=desc&pageSize=30&comparison=previousRound"),
- ("rider-all", "/api/v1/riders/18/overview", "?category=elite_men")
-};
-foreach (var (name,path,qs) in cases)
-foreach (var raw in args.Contains("--extra") ? new[] {false} : new[] {false,true})
+var cases = args.Contains("--extra")
+    ? new[]
+    {
+        ("asa-2026", "/api/v1/riders/183/overview", "?season=2026&category=elite_men"),
+        ("jordan-all", "/api/v1/riders/60/overview", "?category=elite_men"),
+    }
+    : new[]
+    {
+        (
+            "ranking-2026",
+            "/api/v1/ranking",
+            "?season=2026&category=elite_men&sort=rating&order=desc&pageSize=30&comparison=previousRound"
+        ),
+        ("rider-2026", "/api/v1/riders/18/overview", "?season=2026&category=elite_men"),
+        (
+            "ranking-all",
+            "/api/v1/ranking",
+            "?category=elite_men&sort=rating&order=desc&pageSize=30&comparison=previousRound"
+        ),
+        ("rider-all", "/api/v1/riders/18/overview", "?category=elite_men"),
+    };
+foreach (var (name, path, qs) in cases)
+foreach (var raw in args.Contains("--extra") ? new[] { false } : new[] { false, true })
 {
     using var handler = new ProbeHandler(raw);
     using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(100) };
@@ -123,81 +250,171 @@ foreach (var raw in args.Contains("--extra") ? new[] {false} : new[] {false,true
         var domain = new DomainQueryService(client, packageCache: memory);
         var validator = new QueryValidationService();
         var pace = new PaceService(client);
-        var metrics = new MetricsService(domain,pace);
-        var ranking = new RankingService(validator, domain, metrics,new RankingSingleFlight(),memory);
-        var rider = new RidersService(client,validator,domain,metrics,ranking,new AnalyticsService(validator,domain,pace,TimeProvider.System));
+        var metrics = new MetricsService(domain, pace);
+        var ranking = new RankingService(
+            validator,
+            domain,
+            metrics,
+            new RankingSingleFlight(),
+            memory
+        );
+        var rider = new RidersService(
+            client,
+            validator,
+            domain,
+            metrics,
+            ranking,
+            new AnalyticsService(validator, domain, pace, TimeProvider.System)
+        );
         var query = new QueryCollection(QueryHelpers.ParseQuery(qs));
-        async Task<object> Request() => path.Contains("/riders/")
-            ? await rider.GetOverviewAsync(path.Split('/')[4],query,CancellationToken.None)
-            : await ranking.ListRankingAsync(query,CancellationToken.None);
+        async Task<object> Request() =>
+            path.Contains("/riders/")
+                ? await rider.GetOverviewAsync(path.Split('/')[4], query, CancellationToken.None)
+                : await ranking.ListRankingAsync(query, CancellationToken.None);
         async Task Measure(string mode)
         {
             handler.Calls.Clear();
-            var watch=Stopwatch.StartNew();
-            try {
-                var response=await Request();
-                var serviceMs=watch.Elapsed.TotalMilliseconds;
-                var serialize=Stopwatch.StartNew();
-                var bytes=JsonSerializer.SerializeToUtf8Bytes(response,jsonOptions);
+            var watch = Stopwatch.StartNew();
+            try
+            {
+                var response = await Request();
+                var serviceMs = watch.Elapsed.TotalMilliseconds;
+                var serialize = Stopwatch.StartNew();
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(response, jsonOptions);
                 serialize.Stop();
-                var row=new { name, raw, iteration, mode, serviceMs, serializeMs=serialize.Elapsed.TotalMilliseconds,
-                    responseBytes=bytes.Length, hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)),
-                    calls=handler.Calls.ToArray() };
+                var row = new
+                {
+                    name,
+                    raw,
+                    iteration,
+                    mode,
+                    serviceMs,
+                    serializeMs = serialize.Elapsed.TotalMilliseconds,
+                    responseBytes = bytes.Length,
+                    hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)),
+                    calls = handler.Calls.ToArray(),
+                };
                 output.Add(row);
                 Console.WriteLine(JsonSerializer.Serialize(row));
-            } catch(Exception e) {
-                var row=new {name,raw,iteration,mode,error=e.GetType().Name,message=e.Message,ms=watch.Elapsed.TotalMilliseconds,calls=handler.Calls.ToArray()};
-                output.Add(row);Console.WriteLine(JsonSerializer.Serialize(row));
             }
-            await File.WriteAllTextAsync(Path.Combine(AppContext.BaseDirectory,"measurements.json"),JsonSerializer.Serialize(output,new JsonSerializerOptions{WriteIndented=true}));
+            catch (Exception e)
+            {
+                var row = new
+                {
+                    name,
+                    raw,
+                    iteration,
+                    mode,
+                    error = e.GetType().Name,
+                    message = e.Message,
+                    ms = watch.Elapsed.TotalMilliseconds,
+                    calls = handler.Calls.ToArray(),
+                };
+                output.Add(row);
+                Console.WriteLine(JsonSerializer.Serialize(row));
+            }
+            await File.WriteAllTextAsync(
+                Path.Combine(AppContext.BaseDirectory, "measurements.json"),
+                JsonSerializer.Serialize(output, new JsonSerializerOptions { WriteIndented = true })
+            );
         }
-        handler.Replay=false;
+        handler.Replay = false;
         await Measure("cold-api");
         await Measure("warm-api");
         memory.Compact(1);
-        handler.Replay=true;
+        handler.Replay = true;
         await Measure("db-replay");
     }
 }
+
 // Actual local HTTP response path including output cache; no cache invalidation.
-if (args.Contains("--service-only")) return;
-using var web=new HttpClient(){Timeout=TimeSpan.FromSeconds(110)};
-web.DefaultRequestHeaders.Authorization=new("Bearer",config["ApiAccess:ReadSecret"]);
-foreach(var (name,path,qs) in cases)
+if (args.Contains("--service-only"))
+    return;
+using var web = new HttpClient() { Timeout = TimeSpan.FromSeconds(110) };
+web.DefaultRequestHeaders.Authorization = new("Bearer", config["ApiAccess:ReadSecret"]);
+foreach (var (name, path, qs) in cases)
 {
-    var url="http://127.0.0.1:5017"+path+qs+"&probe="+Guid.NewGuid().ToString("N");
-    for(var run=1;run<=3;run++){
-        var watch=Stopwatch.StartNew();
-        using var response=await web.GetAsync(url,HttpCompletionOption.ResponseHeadersRead);
-        var headersMs=watch.Elapsed.TotalMilliseconds;
-        var bytes=await response.Content.ReadAsByteArrayAsync();
-        Console.WriteLine(JsonSerializer.Serialize(new{http=name,run,status=(int)response.StatusCode,headersMs,totalMs=watch.Elapsed.TotalMilliseconds,bytes=bytes.Length}));
+    var url = "http://127.0.0.1:5017" + path + qs + "&probe=" + Guid.NewGuid().ToString("N");
+    for (var run = 1; run <= 3; run++)
+    {
+        var watch = Stopwatch.StartNew();
+        using var response = await web.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        var headersMs = watch.Elapsed.TotalMilliseconds;
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                new
+                {
+                    http = name,
+                    run,
+                    status = (int)response.StatusCode,
+                    headersMs,
+                    totalMs = watch.Elapsed.TotalMilliseconds,
+                    bytes = bytes.Length,
+                }
+            )
+        );
     }
 }
 
-sealed class ProbeHandler(bool raw) : DelegatingHandler(new SocketsHttpHandler{
-    AutomaticDecompression=DecompressionMethods.GZip|DecompressionMethods.Deflate|DecompressionMethods.Brotli})
+sealed class ProbeHandler(bool raw)
+    : DelegatingHandler(
+        new SocketsHttpHandler
+        {
+            AutomaticDecompression =
+                DecompressionMethods.GZip
+                | DecompressionMethods.Deflate
+                | DecompressionMethods.Brotli,
+        }
+    )
 {
-    public bool Replay {get;set;}
+    public bool Replay { get; set; }
     public string? FixtureDirectory { get; init; }
-    public List<object> Calls {get;}=[];
-    readonly Dictionary<string,(byte[] body,HttpStatusCode status,string? range)> recordings=[];
-    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)
+    public List<object> Calls { get; } = [];
+    readonly Dictionary<string, (byte[] body, HttpStatusCode status, string? range)> recordings =
+    [];
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken ct
+    )
     {
-        var uri=request.RequestUri!;
-        var endpoint=uri.AbsolutePath.Split('/').Last();
+        var uri = request.RequestUri!;
+        var endpoint = uri.AbsolutePath.Split('/').Last();
         // Only allow GET or known read-only RPC calls.
-        if(request.Method!=HttpMethod.Get && !uri.AbsolutePath.Contains("/rpc/get_"))
-            throw new InvalidOperationException("Blocked non-read request: "+uri.AbsolutePath);
-        var payload=request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
-        var key=uri.PathAndQuery+"|"+payload;
-        var fixture = FixtureDirectory is null ? null : Path.Combine(FixtureDirectory,
-            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(key)))+".json");
-        var watch=Stopwatch.StartNew();
-        if(raw && endpoint is "get_ranking_input_packages" or "get_ranking_metric_packages" or "get_ranking_preaggregate_packages" or "get_ranking_points_summary" or "get_prepared_rider_detail_data"){
-            var content=endpoint is "get_ranking_points_summary" or "get_prepared_rider_detail_data" ? "{\"complete\":false,\"rows\":[]}" : "[]";
-            Calls.Add(new{endpoint,simulatedCacheMiss=true});
-            return new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(content,Encoding.UTF8,"application/json")};
+        if (request.Method != HttpMethod.Get && !uri.AbsolutePath.Contains("/rpc/get_"))
+            throw new InvalidOperationException("Blocked non-read request: " + uri.AbsolutePath);
+        var payload = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
+        var key = uri.PathAndQuery + "|" + payload;
+        var fixture = FixtureDirectory is null
+            ? null
+            : Path.Combine(
+                FixtureDirectory,
+                Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(key))
+                ) + ".json"
+            );
+        var watch = Stopwatch.StartNew();
+        if (
+            raw
+            && endpoint
+                is "get_ranking_input_packages"
+                    or "get_ranking_metric_packages"
+                    or "get_ranking_preaggregate_packages"
+                    or "get_ranking_points_summary"
+                    or "get_prepared_rider_detail_data"
+        )
+        {
+            var content = endpoint
+                is "get_ranking_points_summary"
+                    or "get_prepared_rider_detail_data"
+                ? "{\"complete\":false,\"rows\":[]}"
+                : "[]";
+            Calls.Add(new { endpoint, simulatedCacheMiss = true });
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(content, Encoding.UTF8, "application/json"),
+            };
         }
         if (raw && endpoint == "get_rider_input_data")
         {
@@ -207,46 +424,109 @@ sealed class ProbeHandler(bool raw) : DelegatingHandler(new SocketsHttpHandler{
             request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
             key = uri.PathAndQuery + "|" + payload;
         }
-        if(Replay) {
-            if (fixture is not null) {
-                var stored = JsonNode.Parse(await File.ReadAllTextAsync(fixture,ct))!.AsObject();
-                recordings[key] = (Convert.FromBase64String(stored["body"]!.GetValue<string>()),
-                    (HttpStatusCode)stored["status"]!.GetValue<int>(),stored["range"]?.GetValue<string>());
+        if (Replay)
+        {
+            if (fixture is not null)
+            {
+                var stored = JsonNode.Parse(await File.ReadAllTextAsync(fixture, ct))!.AsObject();
+                recordings[key] = (
+                    Convert.FromBase64String(stored["body"]!.GetValue<string>()),
+                    (HttpStatusCode)stored["status"]!.GetValue<int>(),
+                    stored["range"]?.GetValue<string>()
+                );
             }
-            if(!recordings.TryGetValue(key,out var cached))throw new InvalidOperationException("Replay miss "+uri.PathAndQuery);
-            var copy=new HttpResponseMessage(cached.status){Content=new ByteArrayContent(cached.body)};
-            if(cached.range is not null)copy.Content.Headers.TryAddWithoutValidation("Content-Range",cached.range);
-            Calls.Add(new{endpoint,replay=true,bytes=cached.body.Length});
+            if (!recordings.TryGetValue(key, out var cached))
+                throw new InvalidOperationException("Replay miss " + uri.PathAndQuery);
+            var copy = new HttpResponseMessage(cached.status)
+            {
+                Content = new ByteArrayContent(cached.body),
+            };
+            if (cached.range is not null)
+                copy.Content.Headers.TryAddWithoutValidation("Content-Range", cached.range);
+            Calls.Add(
+                new
+                {
+                    endpoint,
+                    replay = true,
+                    bytes = cached.body.Length,
+                }
+            );
             return copy;
         }
-        using var response=await base.SendAsync(request,ct);
-        var headersMs=watch.Elapsed.TotalMilliseconds;
-        var bytes=await response.Content.ReadAsByteArrayAsync(ct);
-        var totalMs=watch.Elapsed.TotalMilliseconds;
-        var range=response.Content.Headers.TryGetValues("Content-Range",out var ranges)?ranges.FirstOrDefault():null;
-        recordings[key]=(bytes,response.StatusCode,range);
-        if (fixture is not null && response.IsSuccessStatusCode) {
+        using var response = await base.SendAsync(request, ct);
+        var headersMs = watch.Elapsed.TotalMilliseconds;
+        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+        var totalMs = watch.Elapsed.TotalMilliseconds;
+        var range = response.Content.Headers.TryGetValues("Content-Range", out var ranges)
+            ? ranges.FirstOrDefault()
+            : null;
+        recordings[key] = (bytes, response.StatusCode, range);
+        if (fixture is not null && response.IsSuccessStatusCode)
+        {
             Directory.CreateDirectory(FixtureDirectory!);
-            var stored = new JsonObject { ["body"] = Convert.ToBase64String(bytes), ["status"] = (int)response.StatusCode, ["range"] = range };
-            if (File.Exists(fixture)) {
-                var previous = JsonNode.Parse(await File.ReadAllTextAsync(fixture,ct))!;
-                if (!JsonNode.DeepEquals(JsonNode.Parse(Convert.FromBase64String(previous["body"]!.GetValue<string>())), JsonNode.Parse(bytes)))
-                    throw new InvalidOperationException("Source data changed during capture: "+endpoint);
-            } else await File.WriteAllTextAsync(fixture,stored.ToJsonString(),ct);
-        }
-        var counts=new Dictionary<string,int>();
-        try {
-            var root=JsonNode.Parse(bytes);
-            if(root is JsonObject obj)foreach(var prop in obj)if(prop.Value is JsonArray a)counts[prop.Key]=a.Count;
-            if(root is JsonArray rows){
-                counts["rows"]=rows.Count;
-                foreach(var row in rows.OfType<JsonObject>())
-                    if(row["payload"] is JsonObject p)foreach(var prop in p)if(prop.Value is JsonArray a)counts[prop.Key]=counts.GetValueOrDefault(prop.Key)+a.Count;
+            var stored = new JsonObject
+            {
+                ["body"] = Convert.ToBase64String(bytes),
+                ["status"] = (int)response.StatusCode,
+                ["range"] = range,
+            };
+            if (File.Exists(fixture))
+            {
+                var previous = JsonNode.Parse(await File.ReadAllTextAsync(fixture, ct))!;
+                if (
+                    !JsonNode.DeepEquals(
+                        JsonNode.Parse(
+                            Convert.FromBase64String(previous["body"]!.GetValue<string>())
+                        ),
+                        JsonNode.Parse(bytes)
+                    )
+                )
+                    throw new InvalidOperationException(
+                        "Source data changed during capture: " + endpoint
+                    );
             }
-        }catch(JsonException){}
-        lock(Calls)Calls.Add(new{endpoint,status=(int)response.StatusCode,headersMs,totalMs,bodyMs=totalMs-headersMs,bytes=bytes.Length,counts,payload});
-        var result=new HttpResponseMessage(response.StatusCode){Content=new ByteArrayContent(bytes)};
-        if(range is not null)result.Content.Headers.TryAddWithoutValidation("Content-Range",range);
+            else
+                await File.WriteAllTextAsync(fixture, stored.ToJsonString(), ct);
+        }
+        var counts = new Dictionary<string, int>();
+        try
+        {
+            var root = JsonNode.Parse(bytes);
+            if (root is JsonObject obj)
+                foreach (var prop in obj)
+                    if (prop.Value is JsonArray a)
+                        counts[prop.Key] = a.Count;
+            if (root is JsonArray rows)
+            {
+                counts["rows"] = rows.Count;
+                foreach (var row in rows.OfType<JsonObject>())
+                    if (row["payload"] is JsonObject p)
+                        foreach (var prop in p)
+                            if (prop.Value is JsonArray a)
+                                counts[prop.Key] = counts.GetValueOrDefault(prop.Key) + a.Count;
+            }
+        }
+        catch (JsonException) { }
+        lock (Calls)
+            Calls.Add(
+                new
+                {
+                    endpoint,
+                    status = (int)response.StatusCode,
+                    headersMs,
+                    totalMs,
+                    bodyMs = totalMs - headersMs,
+                    bytes = bytes.Length,
+                    counts,
+                    payload,
+                }
+            );
+        var result = new HttpResponseMessage(response.StatusCode)
+        {
+            Content = new ByteArrayContent(bytes),
+        };
+        if (range is not null)
+            result.Content.Headers.TryAddWithoutValidation("Content-Range", range);
         return result;
     }
 }

@@ -4,4 +4,5 @@ public sealed record SeasonOverviewResponseDto(
     int Season,
     SeasonSummaryRoundDto? NextRound,
     SeasonSummaryRoundDto? LastCompletedRound,
-    SeasonProgressDto Progress);
+    SeasonProgressDto Progress
+);

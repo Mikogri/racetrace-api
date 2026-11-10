@@ -16,22 +16,32 @@ public sealed partial class TissotTimingJsonFetcher
     {
         _http = http;
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("racetrace-api/1.0");
-        _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        _http.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json")
+        );
     }
 
-    public async Task<TissotTimingJsonFetchResult> FetchAsync(string url, CancellationToken cancellationToken)
+    public async Task<TissotTimingJsonFetchResult> FetchAsync(
+        string url,
+        CancellationToken cancellationToken
+    )
     {
         var apiUrl = ResolveApiUrl(url);
 
         try
         {
-            using var response = await _http.GetAsync(apiUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await _http.GetAsync(
+                apiUrl,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken
+            );
             if (!response.IsSuccessStatusCode)
             {
                 throw new ApiException(
                     StatusCodes.Status400BadRequest,
                     "TISSOT_RESULT_REQUEST_FAILED",
-                    $"Tissot Timing returned {(int)response.StatusCode} for '{apiUrl}'.");
+                    $"Tissot Timing returned {(int)response.StatusCode} for '{apiUrl}'."
+                );
             }
 
             var body = await ExternalJsonResponse.ReadAsync(response, cancellationToken);
@@ -41,7 +51,8 @@ public sealed partial class TissotTimingJsonFetcher
                 throw new ApiException(
                     StatusCodes.Status400BadRequest,
                     "TISSOT_RESULT_JSON_INVALID",
-                    $"'{apiUrl}' did not return a supported World Championship result document.");
+                    $"'{apiUrl}' did not return a supported World Championship result document."
+                );
             }
 
             return new TissotTimingJsonFetchResult(json, apiUrl);
@@ -51,30 +62,36 @@ public sealed partial class TissotTimingJsonFetcher
             throw new ApiException(
                 StatusCodes.Status400BadRequest,
                 "TISSOT_RESULT_JSON_INVALID",
-                $"'{apiUrl}' did not return valid JSON.");
+                $"'{apiUrl}' did not return valid JSON."
+            );
         }
         catch (HttpRequestException exception)
         {
             throw new ApiException(
                 StatusCodes.Status400BadRequest,
                 "TISSOT_RESULT_REQUEST_FAILED",
-                $"Tissot Timing request failed: {exception.Message}");
+                $"Tissot Timing request failed: {exception.Message}"
+            );
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             throw new ApiException(
                 StatusCodes.Status400BadRequest,
                 "TISSOT_RESULT_REQUEST_TIMEOUT",
-                "Tissot Timing request timed out.");
+                "Tissot Timing request timed out."
+            );
         }
     }
 
     public static string ResolveApiUrl(string url)
     {
-        if (string.IsNullOrWhiteSpace(url) ||
-            !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
-            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
-            uri.Port != 443 || uri.UserInfo.Length != 0)
+        if (
+            string.IsNullOrWhiteSpace(url)
+            || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || uri.Port != 443
+            || uri.UserInfo.Length != 0
+        )
         {
             throw InvalidUrl();
         }
@@ -113,16 +130,19 @@ public sealed partial class TissotTimingJsonFetcher
         new(
             StatusCodes.Status400BadRequest,
             "TISSOT_RESULT_URL_INVALID",
-            "result_url must be a Tissot Timing results page or results API URL.");
+            "result_url must be a Tissot Timing results page or results API URL."
+        );
 
     [GeneratedRegex(
         "^/(?<year>\\d{4})/(?<competition>[a-z0-9_-]+)/event-(?<event>\\d+)/phase-(?<phase>\\d+)/results/?$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    )]
     private static partial Regex PagePathPattern();
 
     [GeneratedRegex(
         "^/competitions/[a-z0-9_-]+/events/\\d+/phases/\\d+/results/?$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    )]
     private static partial Regex ApiPathPattern();
 }
 

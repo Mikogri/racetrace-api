@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Mvc;
 using RaceTrace.Api.Services;
 
 namespace RaceTrace.Api.Controllers;
@@ -24,8 +24,11 @@ public sealed class ChronoRaceLiveController : ControllerBase
 
     [HttpGet("results/{context}/{key}")]
     [ProducesResponseType(typeof(System.Text.Json.Nodes.JsonNode), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Results(string context, string key, CancellationToken cancellationToken) =>
-        ProviderPayload(await _chronorace.GetResultsAsync(context, key, cancellationToken));
+    public async Task<IActionResult> Results(
+        string context,
+        string key,
+        CancellationToken cancellationToken
+    ) => ProviderPayload(await _chronorace.GetResultsAsync(context, key, cancellationToken));
 
     // This proxy exposes the provider's document, not a RaceTrace DTO.
     private IActionResult ProviderPayload(JsonNode? payload) =>

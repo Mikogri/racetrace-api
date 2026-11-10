@@ -8,13 +8,19 @@ public sealed class PaceIncidentFieldTests
     [Fact]
     public void PreparedIncidentAnalysisMatchesIndependentPrecomputedCalculation()
     {
-        var session = DomainQueryService.ParseRiderDetailDataBundle(Package())
+        var session = DomainQueryService
+            .ParseRiderDetailDataBundle(Package())
             .PaceSessions.Single(s => s.Run.RiderId == "1");
         var calculator = new DownhillPaceCalculator();
         Assert.NotNull(session.PreparedAnomalies);
 
         var reused = calculator.CalculatePrecomputedSession(session);
-        var independent = calculator.CalculatePrecomputedSession(session with { PreparedAnomalies = null });
+        var independent = calculator.CalculatePrecomputedSession(
+            session with
+            {
+                PreparedAnomalies = null,
+            }
+        );
         Assert.Equal(independent.Pace, reused.Pace);
         Assert.Equal(independent.Confidence, reused.Confidence);
         Assert.Equal(independent.Sectors, reused.Sectors);
@@ -22,13 +28,21 @@ public sealed class PaceIncidentFieldTests
 
         var changed = session with { Sectors = session.Sectors.Reverse().ToArray() };
         Assert.Equal(
-            calculator.CalculatePrecomputedSession(changed with { PreparedAnomalies = null }).Sectors,
-            calculator.CalculatePrecomputedSession(changed).Sectors);
+            calculator
+                .CalculatePrecomputedSession(changed with { PreparedAnomalies = null })
+                .Sectors,
+            calculator.CalculatePrecomputedSession(changed).Sectors
+        );
 
-        var otherCalculator = new DownhillPaceCalculator(new PaceOptions { MinimumFieldSize = 100 });
+        var otherCalculator = new DownhillPaceCalculator(
+            new PaceOptions { MinimumFieldSize = 100 }
+        );
         Assert.Equal(
-            otherCalculator.CalculatePrecomputedSession(session with { PreparedAnomalies = null }).Sectors,
-            otherCalculator.CalculatePrecomputedSession(session).Sectors);
+            otherCalculator
+                .CalculatePrecomputedSession(session with { PreparedAnomalies = null })
+                .Sectors,
+            otherCalculator.CalculatePrecomputedSession(session).Sectors
+        );
     }
 
     [Fact]
@@ -38,12 +52,39 @@ public sealed class PaceIncidentFieldTests
         var ranking = DomainQueryService.ParseRiderDetailDataBundle(full);
         var detail = (JsonObject)full.DeepClone();
         foreach (var key in new[] { "r", "a", "q" })
-            detail[key] = new JsonArray(((JsonArray)full[key]!).OfType<JsonArray>()
-                .Where(r => r[0]!.GetValue<int>() == 1).Select(r => r.DeepClone()).ToArray());
-        detail["i"] = new JsonArray(Enumerable.Range(1, 3).Select(id => (JsonNode)new JsonArray(
-            10, id, id == 1 ? 280 : 250,
-            new JsonArray(Enumerable.Range(0, 5).Select(i => (JsonNode)new JsonArray(
-                i, id == 1 && i == 2 ? 80 : 50, id == 1 && i == 2 ? 3 : 1)).ToArray()))).ToArray());
+            detail[key] = new JsonArray(
+                ((JsonArray)full[key]!)
+                    .OfType<JsonArray>()
+                    .Where(r => r[0]!.GetValue<int>() == 1)
+                    .Select(r => r.DeepClone())
+                    .ToArray()
+            );
+        detail["i"] = new JsonArray(
+            Enumerable
+                .Range(1, 3)
+                .Select(id =>
+                    (JsonNode)
+                        new JsonArray(
+                            10,
+                            id,
+                            id == 1 ? 280 : 250,
+                            new JsonArray(
+                                Enumerable
+                                    .Range(0, 5)
+                                    .Select(i =>
+                                        (JsonNode)
+                                            new JsonArray(
+                                                i,
+                                                id == 1 && i == 2 ? 80 : 50,
+                                                id == 1 && i == 2 ? 3 : 1
+                                            )
+                                    )
+                                    .ToArray()
+                            )
+                        )
+                )
+                .ToArray()
+        );
         var parsed = DomainQueryService.ParseRiderDetailDataBundle(detail);
         var target = Assert.Single(parsed.PaceSessions);
         Assert.Single(parsed.Data.Results);
@@ -54,8 +95,10 @@ public sealed class PaceIncidentFieldTests
         Assert.Equal(30, target.PaceFinish.RemovedLossSeconds);
         Assert.Equal(280, target.Run.FinishTimeSeconds);
         var calculator = new DownhillPaceCalculator();
-        Assert.Equal(calculator.CalculatePrecomputedSession(expected).Pace,
-            calculator.CalculatePrecomputedSession(target).Pace);
+        Assert.Equal(
+            calculator.CalculatePrecomputedSession(expected).Pace,
+            calculator.CalculatePrecomputedSession(target).Pace
+        );
         // Filtering and repeated preparation must not shrink or recalculate the field.
         Assert.Equal(target.PaceFinish, calculator.PrepareField([target]).Single().PaceFinish);
     }
@@ -79,21 +122,61 @@ public sealed class PaceIncidentFieldTests
 
     private static JsonObject Package()
     {
-        var r = new JsonArray(); var a = new JsonArray(); var q = new JsonArray(); var g = new JsonArray();
+        var r = new JsonArray();
+        var a = new JsonArray();
+        var q = new JsonArray();
+        var g = new JsonArray();
         for (var id = 1; id <= 3; id++)
         {
-            r.Add(new JsonArray(id, id, 10, id == 1 ? 280000 : 250000, null, id, true, "Finished", 0));
+            r.Add(
+                new JsonArray(id, id, 10, id == 1 ? 280000 : 250000, null, id, true, "Finished", 0)
+            );
             a.Add(new JsonArray(id, 10, 3, null));
-            for (var i = 0; i < 5; i++) q.Add(new JsonArray(id, i, id == 1 && i == 2 ? 80 : 50, id == 1 && i == 2 ? 3 : 1));
+            for (var i = 0; i < 5; i++)
+                q.Add(new JsonArray(id, i, id == 1 && i == 2 ? 80 : 50, id == 1 && i == 2 ? 3 : 1));
         }
-        for (var i = 0; i < 5; i++) g.Add(new JsonArray(10, i, 3, 50, Math.Log(50), .02, 1, 50, 50));
+        for (var i = 0; i < 5; i++)
+            g.Add(new JsonArray(10, i, 3, 50, Math.Log(50), .02, 1, 50, 50));
         return new JsonObject
         {
-            ["s"] = new JsonArray(new JsonArray(10, 20, 30, "Final", "FINAL", "2026-06-01", 40, 2026,
-                "2026-06-01", 2, "EM")),
-            ["r"] = r, ["a"] = a, ["q"] = q, ["g"] = g,
-            ["h"] = new JsonArray(new JsonArray(10, null, null, null, null, null, null, null,
-                3, 250, Math.Log(250), .02, 1, 250, 250))
+            ["s"] = new JsonArray(
+                new JsonArray(
+                    10,
+                    20,
+                    30,
+                    "Final",
+                    "FINAL",
+                    "2026-06-01",
+                    40,
+                    2026,
+                    "2026-06-01",
+                    2,
+                    "EM"
+                )
+            ),
+            ["r"] = r,
+            ["a"] = a,
+            ["q"] = q,
+            ["g"] = g,
+            ["h"] = new JsonArray(
+                new JsonArray(
+                    10,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    3,
+                    250,
+                    Math.Log(250),
+                    .02,
+                    1,
+                    250,
+                    250
+                )
+            ),
         };
     }
 }

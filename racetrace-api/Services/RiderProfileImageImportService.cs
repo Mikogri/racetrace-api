@@ -20,18 +20,22 @@ public sealed partial class RiderProfileImageImportService
 
     public async Task<RiderProfileImageImportResponse> ImportAsync(
         IReadOnlyList<IFormFile> files,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (files.Count == 0)
         {
             throw new ApiException(
                 StatusCodes.Status400BadRequest,
                 "PROFILE_IMAGE_FILES_REQUIRED",
-                "At least one UCI MTB World Series JSON file is required.");
+                "At least one UCI MTB World Series JSON file is required."
+            );
         }
 
         var warnings = new List<string>();
-        var candidatesByUciId = new Dictionary<string, ImageCandidate>(StringComparer.OrdinalIgnoreCase);
+        var candidatesByUciId = new Dictionary<string, ImageCandidate>(
+            StringComparer.OrdinalIgnoreCase
+        );
         var unmatchedSourceKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var filesProcessed = 0;
         var imagesFound = 0;
@@ -41,7 +45,9 @@ public sealed partial class RiderProfileImageImportService
         {
             if (file.Length <= 0 || file.Length > MaximumFileBytes)
             {
-                warnings.Add($"File '{file.FileName}' was skipped because its size is invalid or exceeds 25 MB.");
+                warnings.Add(
+                    $"File '{file.FileName}' was skipped because its size is invalid or exceeds 25 MB."
+                );
                 continue;
             }
 
@@ -49,12 +55,16 @@ public sealed partial class RiderProfileImageImportService
             try
             {
                 await using var stream = file.OpenReadStream();
-                document = (await JsonNode.ParseAsync(stream, cancellationToken: cancellationToken)) as JsonObject
+                document =
+                    (await JsonNode.ParseAsync(stream, cancellationToken: cancellationToken))
+                        as JsonObject
                     ?? throw new JsonException("The JSON root must be an object.");
             }
             catch (JsonException exception)
             {
-                warnings.Add($"File '{file.FileName}' was skipped because it is not valid JSON: {exception.Message}");
+                warnings.Add(
+                    $"File '{file.FileName}' was skipped because it is not valid JSON: {exception.Message}"
+                );
                 continue;
             }
 
@@ -79,7 +89,9 @@ public sealed partial class RiderProfileImageImportService
                 }
 
                 var imageUrl = rawFrontUrls
-                    .Select(value => TryNormalizeFrontImageUrl(value, out var normalized) ? normalized : null)
+                    .Select(value =>
+                        TryNormalizeFrontImageUrl(value, out var normalized) ? normalized : null
+                    )
                     .FirstOrDefault(value => value is not null);
                 if (imageUrl is null)
                 {
@@ -88,11 +100,17 @@ public sealed partial class RiderProfileImageImportService
                 }
 
                 imagesFound++;
-                var sourceKey = rider.String("id") ?? rider.String("slug") ?? source.String("riderName") ?? $"row-{imagesFound}";
-                var uciId = NormalizeUciId(
-                    rider.String("uciid") ??
-                    rider.String("uciId") ??
-                    source.String("riderUciId")) ?? ExtractUciId(imageUrl);
+                var sourceKey =
+                    rider.String("id")
+                    ?? rider.String("slug")
+                    ?? source.String("riderName")
+                    ?? $"row-{imagesFound}";
+                var uciId =
+                    NormalizeUciId(
+                        rider.String("uciid")
+                            ?? rider.String("uciId")
+                            ?? source.String("riderUciId")
+                    ) ?? ExtractUciId(imageUrl);
                 if (uciId is null)
                 {
                     unmatchedSourceKeys.Add(sourceKey);
@@ -103,7 +121,10 @@ public sealed partial class RiderProfileImageImportService
             }
         }
 
-        var existingByUciId = await FindExistingRidersAsync(candidatesByUciId.Keys, cancellationToken);
+        var existingByUciId = await FindExistingRidersAsync(
+            candidatesByUciId.Keys,
+            cancellationToken
+        );
         var updated = 0;
         var unchanged = 0;
         var updatedAt = DateTimeOffset.UtcNow.ToString("O");
@@ -115,7 +136,13 @@ public sealed partial class RiderProfileImageImportService
                 continue;
             }
 
-            if (string.Equals(rider.String("profile_image_url"), candidate.Url, StringComparison.Ordinal))
+            if (
+                string.Equals(
+                    rider.String("profile_image_url"),
+                    candidate.Url,
+                    StringComparison.Ordinal
+                )
+            )
             {
                 unchanged++;
                 continue;
@@ -126,11 +153,12 @@ public sealed partial class RiderProfileImageImportService
                 new JsonObject
                 {
                     ["profile_image_url"] = candidate.Url,
-                    ["profile_image_updated_at"] = updatedAt
+                    ["profile_image_updated_at"] = updatedAt,
                 },
                 new SupabaseQuery("riders").Filter("id", "eq", rider.String("id")),
                 SupabaseRole.Service,
-                cancellationToken);
+                cancellationToken
+            );
             updated++;
         }
 
@@ -141,22 +169,27 @@ public sealed partial class RiderProfileImageImportService
             unchanged,
             unmatchedSourceKeys.Count,
             invalidUrls,
-            warnings);
+            warnings
+        );
     }
 
     private async Task<IReadOnlyDictionary<string, JsonObject>> FindExistingRidersAsync(
         IEnumerable<string> uciIds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var result = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var batch in uciIds.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(LookupBatchSize))
+        foreach (
+            var batch in uciIds.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(LookupBatchSize)
+        )
         {
             var response = await _supabase.GetAsync(
                 new SupabaseQuery("riders")
                     .Select("id,uci_id,profile_image_url,profile_image_updated_at")
                     .In("uci_id", batch),
                 role: SupabaseRole.Service,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken
+            );
             foreach (var rider in response.Data)
             {
                 var uciId = rider.String("uci_id");
@@ -180,11 +213,13 @@ public sealed partial class RiderProfileImageImportService
     internal static bool TryNormalizeFrontImageUrl(string value, out string normalized)
     {
         normalized = string.Empty;
-        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) ||
-            uri.Scheme != Uri.UriSchemeHttps ||
-            value.Length > 2048 ||
-            !uri.AbsolutePath.Contains("_F_", StringComparison.OrdinalIgnoreCase) ||
-            !uri.AbsolutePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+        if (
+            !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || value.Length > 2048
+            || !uri.AbsolutePath.Contains("_F_", StringComparison.OrdinalIgnoreCase)
+            || !uri.AbsolutePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+        )
         {
             return false;
         }
@@ -195,8 +230,8 @@ public sealed partial class RiderProfileImageImportService
 
     private static bool IsPreferredMediumVariant(string value)
     {
-        return Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) &&
-            uri.AbsolutePath.EndsWith("newMediumThumb.png", StringComparison.OrdinalIgnoreCase);
+        return Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
+            && uri.AbsolutePath.EndsWith("newMediumThumb.png", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static string? ExtractUciId(string value)
@@ -208,9 +243,7 @@ public sealed partial class RiderProfileImageImportService
     private static string? NormalizeUciId(string? value)
     {
         var normalized = value?.Trim();
-        return normalized is not null && UciIdOnlyPattern().IsMatch(normalized)
-            ? normalized
-            : null;
+        return normalized is not null && UciIdOnlyPattern().IsMatch(normalized) ? normalized : null;
     }
 
     [GeneratedRegex(@"(?<!\d)\d{11}(?!\d)", RegexOptions.CultureInvariant)]

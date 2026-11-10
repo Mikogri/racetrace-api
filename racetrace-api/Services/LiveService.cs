@@ -1,5 +1,6 @@
-using RaceTrace.Api.Features.Metrics;
 using System.Text.Json.Nodes;
+using RaceTrace.Api.Features.Metrics;
+using RaceTrace.Api.Features.Results;
 using RaceTrace.Api.Infrastructure;
 using RaceTrace.Api.Models;
 
@@ -12,15 +13,22 @@ public sealed class LiveService
     private readonly DomainQueryService _domainQueries;
     private readonly ResultsService _results;
 
-    private static readonly Dictionary<string, string> SessionSorts = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> SessionSorts = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
         ["session_date"] = "session_date",
         ["category"] = "category_id",
         ["name"] = "name",
-        ["status"] = "status"
+        ["status"] = "status",
     };
 
-    public LiveService(ISupabaseRestClient supabase, QueryValidationService validator, DomainQueryService domainQueries, ResultsService results)
+    public LiveService(
+        ISupabaseRestClient supabase,
+        QueryValidationService validator,
+        DomainQueryService domainQueries,
+        ResultsService results
+    )
     {
         _supabase = supabase;
         _validator = validator;
@@ -28,25 +36,36 @@ public sealed class LiveService
         _results = results;
     }
 
-    public async Task<ListResponse<JsonObject>> ListLiveSessionsAsync(IQueryCollection queryString, CancellationToken cancellationToken)
+    public async Task<ListResponse<JsonObject>> ListLiveSessionsAsync(
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         var sort = _validator.Sort(queryString, SessionSorts, "session_date", "asc");
-        var context = await _domainQueries.ParseMetricsContextAsync(queryString, _validator, cancellationToken);
-        var sessionIds = await _domainQueries.ResolveSessionIdsAsync(context, cancellationToken: cancellationToken);
-        var hasFilters = context.SeasonYears.Count > 0 ||
-            context.SeasonYear is not null ||
-            context.FromDate is not null ||
-            context.ToDate is not null ||
-            !string.IsNullOrWhiteSpace(context.RoundId) ||
-            context.TrackIds.Count > 0 ||
-            !string.IsNullOrWhiteSpace(context.TrackId) ||
-            context.ConditionIds.Count > 0 ||
-            !string.IsNullOrWhiteSpace(context.CountryCode) ||
-            !string.IsNullOrWhiteSpace(context.Venue) ||
-            !string.IsNullOrWhiteSpace(context.TrackName) ||
-            !string.IsNullOrWhiteSpace(context.CompetitionClassCode) ||
-            !string.IsNullOrWhiteSpace(context.CategoryCode) ||
-            !string.IsNullOrWhiteSpace(context.SessionType);
+        var context = await _domainQueries.ParseMetricsContextAsync(
+            queryString,
+            _validator,
+            cancellationToken
+        );
+        var sessionIds = await _domainQueries.ResolveSessionIdsAsync(
+            context,
+            cancellationToken: cancellationToken
+        );
+        var hasFilters =
+            context.SeasonYears.Count > 0
+            || context.SeasonYear is not null
+            || context.FromDate is not null
+            || context.ToDate is not null
+            || !string.IsNullOrWhiteSpace(context.RoundId)
+            || context.TrackIds.Count > 0
+            || !string.IsNullOrWhiteSpace(context.TrackId)
+            || context.ConditionIds.Count > 0
+            || !string.IsNullOrWhiteSpace(context.CountryCode)
+            || !string.IsNullOrWhiteSpace(context.Venue)
+            || !string.IsNullOrWhiteSpace(context.TrackName)
+            || !string.IsNullOrWhiteSpace(context.CompetitionClassCode)
+            || !string.IsNullOrWhiteSpace(context.CategoryCode)
+            || !string.IsNullOrWhiteSpace(context.SessionType);
 
         if (hasFilters && sessionIds.Count == 0)
         {
@@ -74,31 +93,65 @@ public sealed class LiveService
                 query.Filter("status", "eq", requestedStatus);
             }
         }
-        var response = await _supabase.GetAsync(query, count: true, cancellationToken: cancellationToken);
-        DomainQueryService.NormalizeSessionEmbeds(response.Data);
-        return ResponseFactory.Page(response.Data, 1, Math.Max(1, response.Data.Count), response.Total, sort.Sort, sort.Order);
+        var response = await _supabase.GetAsync(
+            query,
+            count: true,
+            cancellationToken: cancellationToken
+        );
+        ResultEmbedMapping.NormalizeSessionEmbeds(response.Data);
+        return ResponseFactory.Page(
+            response.Data,
+            1,
+            Math.Max(1, response.Data.Count),
+            response.Total,
+            sort.Sort,
+            sort.Order
+        );
     }
 
-    public async Task<JsonObject> GetLiveSessionAsync(string sessionId, string[] include, CancellationToken cancellationToken)
+    public async Task<JsonObject> GetLiveSessionAsync(
+        string sessionId,
+        string[] include,
+        CancellationToken cancellationToken
+    )
     {
-        var session = await _domainQueries.FindByIdAsync("sessions", sessionId, DomainQueryService.SessionSelect, cancellationToken: cancellationToken);
+        var session = await _domainQueries.FindByIdAsync(
+            "sessions",
+            sessionId,
+            DomainQueryService.SessionSelect,
+            cancellationToken: cancellationToken
+        );
         if (session is null)
         {
-            throw new ApiException(StatusCodes.Status404NotFound, "SESSION_NOT_FOUND", "Session was not found.");
+            throw new ApiException(
+                StatusCodes.Status404NotFound,
+                "SESSION_NOT_FOUND",
+                "Session was not found."
+            );
         }
 
-        DomainQueryService.NormalizeSessionEmbed(session);
+        ResultEmbedMapping.NormalizeSessionEmbed(session);
 
         if (include.Contains("leaderboard", StringComparer.OrdinalIgnoreCase))
         {
-            var leaderboard = await _results.ListSessionResultsAsync(sessionId, new QueryCollection(), cancellationToken);
-            session["leaderboard"] = new JsonArray(leaderboard.Data.Select(row => row.DeepClone()).ToArray());
+            var leaderboard = await _results.ListSessionResultsAsync(
+                sessionId,
+                new QueryCollection(),
+                cancellationToken
+            );
+            session["leaderboard"] = new JsonArray(
+                leaderboard.Data.Select(row => row.DeepClone()).ToArray()
+            );
         }
 
         return session;
     }
 
-    public Task<ListResponse<JsonObject>> GetLeaderboardAsync(string sessionId, IQueryCollection queryString, CancellationToken cancellationToken)
+    public Task<ListResponse<JsonObject>> GetLeaderboardAsync(
+        string sessionId,
+        IQueryCollection queryString,
+        CancellationToken cancellationToken
+    )
     {
         return _results.ListSessionResultsAsync(sessionId, queryString, cancellationToken);
     }

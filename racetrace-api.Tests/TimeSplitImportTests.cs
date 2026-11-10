@@ -15,7 +15,8 @@ public sealed class TimeSplitImportTests
         var imported = await service.ReplaceTimeSplitsAsync(
             "result-1",
             new JsonArray(),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(0, imported);
         Assert.Equal(0, supabase.DeleteCount);
@@ -30,13 +31,14 @@ public sealed class TimeSplitImportTests
         var times = new JsonArray
         {
             new JsonObject { ["RaceTime"] = 45_000, ["Speed"] = 42.5m },
-            new JsonObject { ["RaceTime"] = 65_000, ["Speed"] = 47.25m }
+            new JsonObject { ["RaceTime"] = 65_000, ["Speed"] = 47.25m },
         };
 
         var imported = await service.ReplaceTimeSplitsAsync(
             "result-1",
             times,
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(2, imported);
         Assert.Equal(1, supabase.DeleteCount);
@@ -61,14 +63,15 @@ public sealed class TimeSplitImportTests
             new JsonObject { ["RaceTime"] = 80_000 },
             new JsonObject { ["RaceTime"] = 120_000 },
             new JsonObject { ["RaceTime"] = 150_000 },
-            new JsonObject { ["RaceTime"] = 180_000 }
+            new JsonObject { ["RaceTime"] = 180_000 },
         };
 
         var imported = await service.ReplaceTimeSplitsAsync(
             "result-1",
             times,
             CancellationToken.None,
-            finishTimeMs: 180_000);
+            finishTimeMs: 180_000
+        );
 
         Assert.Equal(4, imported);
         var rows = Assert.IsType<JsonArray>(supabase.PostedPayload);
@@ -88,19 +91,22 @@ public sealed class TimeSplitImportTests
             SupabaseQuery query,
             bool count = false,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<JsonObject?> GetSingleAsync(
             SupabaseQuery query,
             SupabaseRole role = SupabaseRole.Anon,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<JsonObject>> PostAsync(
             string table,
             JsonNode payload,
             SupabaseRole role,
             string? onConflict = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal("time_splits", table);
             PostCount++;
@@ -113,13 +119,15 @@ public sealed class TimeSplitImportTests
             JsonObject payload,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task DeleteAsync(
             string table,
             SupabaseQuery query,
             SupabaseRole role,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Assert.Equal("time_splits", table);
             DeleteCount++;
@@ -130,6 +138,7 @@ public sealed class TimeSplitImportTests
             string functionName,
             JsonObject payload,
             SupabaseRole role,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 }
